@@ -27,7 +27,7 @@
 <header>
   <span class="wordmark">Relative Luminance Color Wheel</span>
   <div class="header-right">
-    <span class="app-version">v1.0.0</span>
+    <span class="app-version">v1.1.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Appearance">◐</button>
       <div class="settings-panel" id="settings-panel">
@@ -41,7 +41,7 @@
         </div>
         <div class="settings-row">
           <span class="settings-row-label">Saturation</span>
-          <input type="range" id="ui-sat-slider" min="0" max="200" value="100">
+          <input type="range" id="ui-sat-slider" min="0" max="200" value="0">
           <span class="settings-row-val" id="ui-sat-val">100%</span>
         </div>
         <div class="settings-row">
@@ -70,9 +70,9 @@
     <div>
       <div class="lum-row">
         <span class="field-label">Target Relative Luminance</span>
-        <span class="field-value" id="lum-val">0.213</span>
+        <span class="field-value" id="lum-val">0.546</span>
       </div>
-      <input type="range" id="lum-slider" min="0" max="1000" value="213" step="1">
+      <input type="range" id="lum-slider" min="0" max="1000" value="546" step="1">
     </div>
 
     <div class="wheel-wrap">
@@ -87,14 +87,14 @@
           <span class="field-label">Hue</span>
           <span class="field-value" id="hue-val">0°</span>
         </div>
-        <input type="range" id="hue-slider" min="0" max="359" value="0" step="1">
+        <input type="range" id="hue-slider" min="0" max="359" value="312" step="1">
       </div>
       <div>
         <div class="lum-row">
           <span class="field-label">Saturation</span>
           <span class="field-value" id="sat-val">0%</span>
         </div>
-        <input type="range" id="sat-slider" min="0" max="100" value="0" step="1">
+        <input type="range" id="sat-slider" min="0" max="100" value="100" step="1">
       </div>
     </div>
 
@@ -203,7 +203,7 @@
       <div class="custom-wheel-col">
         <canvas id="custom-wheel" class="custom-wheel-canvas"></canvas>
         <div class="custom-mini-swatch" id="custom-swatch-display"></div>
-        <input type="text" id="custom-hex-input" class="custom-hex-input" value="#1A1A4E" maxlength="7" spellcheck="false" placeholder="#000000">
+        <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="7" spellcheck="false" placeholder="#000000">
       </div>
       <!-- Col 2: RGB + HSL sliders + Grayscale (wrapped for responsive stacking) -->
       <div class="custom-sliders-wrap">

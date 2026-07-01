@@ -501,14 +501,14 @@ function updateUI() {
 
 // ─── State & helpers ──────────────────────────────────────────────────────────
 
-let selHue = 0, selSat = 0, targetLum = 0.213;
+let selHue = 312, selSat = 1, targetLum = 0.546;
 let selX = CSS_SZ / 2, selY = CSS_SZ / 2;
 let isDown = false;
 
 // Custom color state (RGB is source of truth; HSL is derived/kept for sliders)
-let customColor = '#1A1A4E';
-let cR = 26, cG = 26, cB = 78;
-let cH = 240, cS = 0.5, cL = 0.204;
+let customColor = '#66001B';
+let cR = 102, cG = 0, cB = 27;
+let cH = 344, cS = 1, cL = 0.2;
 
 // ─── Custom color wheel ───────────────────────────────────────────────────────
 
@@ -605,6 +605,7 @@ function updateCustomSliderTracks() {
 /** Sync all custom controls EXCEPT the hex text input (safe while user is typing). */
 function syncCustomControls() {
   customColor = toHex(cR, cG, cB);
+  try { localStorage.setItem('sel-custom-color', customColor); } catch(e) {}
   /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display')).style.background = customColor;
 
   const grayVal = Math.round(cL * 255);
@@ -695,6 +696,10 @@ function handlePointer(e) {
 
   syncSliders();
   updateUI();
+  try {
+    localStorage.setItem('sel-hue', String(selHue));
+    localStorage.setItem('sel-sat', String(selSat));
+  } catch(e) {}
 }
 
 wheelCanvas.addEventListener('mousedown', e => { isDown = true; handlePointer(e); });
@@ -723,6 +728,7 @@ lumSlider.addEventListener('input', () => {
   lumValEl.textContent = targetLum.toFixed(3);
   drawWheel(targetLum);
   updateUI();
+  try { localStorage.setItem('sel-lum', String(targetLum)); } catch(e) {}
 });
 
 hueSlider.addEventListener('input', () => {
@@ -730,6 +736,7 @@ hueSlider.addEventListener('input', () => {
   setUnitVal(hueValEl, Math.round(selHue), '°');
   updateMarkerPosition();
   updateUI();
+  try { localStorage.setItem('sel-hue', String(selHue)); } catch(e) {}
 });
 
 satSlider.addEventListener('input', () => {
@@ -737,6 +744,7 @@ satSlider.addEventListener('input', () => {
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
   updateMarkerPosition();
   updateUI();
+  try { localStorage.setItem('sel-sat', String(selSat)); } catch(e) {}
 });
 
 // ─── Custom color panel event listeners ──────────────────────────────────────
@@ -838,7 +846,7 @@ document.addEventListener('click', e => {
 
 {
   const DEFAULT_HUE = 240;
-  const DEFAULT_SAT = 100; // 0–200 range; 100 = 1.0× multiplier
+  const DEFAULT_SAT = 0; // achromatic
 
   const uiHueSlider   = /** @type {HTMLInputElement} */  (document.getElementById('ui-hue-slider'));
   const uiSatSlider   = /** @type {HTMLInputElement} */  (document.getElementById('ui-sat-slider'));
@@ -915,8 +923,8 @@ document.addEventListener('click', e => {
   }
 
   // Restore saved values (CSS vars already applied via head script; just sync UI)
-  const savedHue = +(localStorage.getItem('ui-hue') ?? DEFAULT_HUE);
-  const savedSat = +(localStorage.getItem('ui-sat') ?? DEFAULT_SAT);
+  const savedHue = +(localStorage.getItem('ui-hue') ?? 240);
+  const savedSat = +(localStorage.getItem('ui-sat') ?? 0);
   uiHueSlider.value = String(savedHue);
   uiSatSlider.value = String(savedSat);
   setUnitVal(uiHueVal, savedHue, '°');
@@ -967,6 +975,28 @@ document.addEventListener('click', e => {
 
 }
 
+// ─── Restore persisted selection state ────────────────────────────────────────
+
+try {
+  const sh = localStorage.getItem('sel-hue');
+  const ss = localStorage.getItem('sel-sat');
+  const sl = localStorage.getItem('sel-lum');
+  const sc = localStorage.getItem('sel-custom-color');
+  if (sh !== null) selHue = parseFloat(sh);
+  if (ss !== null) selSat = parseFloat(ss);
+  if (sl !== null) {
+    targetLum = parseFloat(sl);
+    lumSlider.value = String(Math.round(targetLum * 1000));
+    lumValEl.textContent = targetLum.toFixed(3);
+  }
+  if (sc !== null && /^#[0-9a-fA-F]{6}$/i.test(sc)) {
+    const [r, g, b] = hexToRgb(sc);
+    cR = r; cG = g; cB = b;
+    [cH, cS, cL] = rgbToHsl(r, g, b);
+    customColor = sc;
+  }
+} catch(e) {}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 try {
@@ -982,6 +1012,7 @@ if (glState) {
   renderWheel2D(targetLum);
 }
 
+updateMarkerPosition();
 syncSliders();
 syncCustomUI();
 updateUI();
