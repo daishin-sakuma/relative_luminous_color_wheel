@@ -6,6 +6,6 @@ Please do **not** open a public GitHub issue for security vulnerabilities.
 
 Instead, contact the maintainer directly:
 
-**Email:** daishin.sakuma@mutex-inc.dev
+**Email:** sakuma.ncr@gmail.com
 
 You can expect a response within 5 business days.
