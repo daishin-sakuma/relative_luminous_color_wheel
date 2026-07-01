@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relative Luminance Color Wheel</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/src/style.css">
+  <script>
+    try {
+      const t = localStorage.getItem('theme');
+      document.documentElement.dataset.theme =
+        t === 'light' || t === 'dark' ? t
+        : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      const h = localStorage.getItem('ui-hue');
+      const s = localStorage.getItem('ui-sat');
+      if (h !== null) document.documentElement.style.setProperty('--ui-hue', h);
+      if (s !== null) document.documentElement.style.setProperty('--ui-sat', (parseFloat(s) / 100).toFixed(4));
+      const gl = localStorage.getItem('ui-ground-l-' + (t === 'light' || t === 'dark' ? t : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')));
+      if (gl !== null) document.documentElement.style.setProperty('--ui-ground-l', gl);
+    } catch(e) { document.documentElement.dataset.theme = 'dark'; }
+  </script>
+</head>
+<body>
+
+<header>
+  <span class="wordmark">Relative Luminance Color Wheel</span>
+  <div class="header-right">
+    <span class="app-version">v1.0.0</span>
+    <div class="settings-wrap">
+      <button class="theme-toggle" id="settings-btn" title="Appearance">◐</button>
+      <div class="settings-panel" id="settings-panel">
+        <div class="settings-panel-label">Appearance</div>
+        <div class="settings-theme-row">
+          <span class="settings-row-label">Theme</span>
+          <div class="settings-theme-btns">
+            <button class="settings-theme-btn" id="theme-btn-dark">Dark</button>
+            <button class="settings-theme-btn" id="theme-btn-light">Light</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Saturation</span>
+          <input type="range" id="ui-sat-slider" min="0" max="200" value="100">
+          <span class="settings-row-val" id="ui-sat-val">100%</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Hue</span>
+          <input type="range" id="ui-hue-slider" min="0" max="359" value="240">
+          <span class="settings-row-val" id="ui-hue-val">240°</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Brightness</span>
+          <input type="range" id="ui-brightness-slider" min="0" max="50" value="7">
+          <span class="settings-row-val" id="ui-brightness-val">7%</span>
+        </div>
+        <div class="settings-btns">
+          <button class="settings-reset-btn" id="settings-neutralize">Neutralize</button>
+          <button class="settings-reset-btn" id="settings-recommend">Recommend</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="app-body">
+
+  <!-- ── Left: Wheel + Color info ──────────────────────────────────────────────── -->
+  <div class="col-left">
+    <div>
+      <div class="lum-row">
+        <span class="field-label">Target Relative Luminance</span>
+        <span class="field-value" id="lum-val">0.213</span>
+      </div>
+      <input type="range" id="lum-slider" min="0" max="1000" value="213" step="1">
+    </div>
+
+    <div class="wheel-wrap">
+      <div class="wheel-halo"></div>
+      <canvas id="wheel"></canvas>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div class="slider-group">
+      <div>
+        <div class="lum-row">
+          <span class="field-label">Hue</span>
+          <span class="field-value" id="hue-val">0°</span>
+        </div>
+        <input type="range" id="hue-slider" min="0" max="359" value="0" step="1">
+      </div>
+      <div>
+        <div class="lum-row">
+          <span class="field-label">Saturation</span>
+          <span class="field-value" id="sat-val">0%</span>
+        </div>
+        <input type="range" id="sat-slider" min="0" max="100" value="0" step="1">
+      </div>
+    </div>
+
+    <div class="swatch-data-row">
+      <div class="swatch" id="swatch">
+        <span class="swatch-hex copyable" id="swatch-hex">#808080</span>
+      </div>
+      <div class="data-grid">
+        <div class="data-cell">
+          <div class="cell-label">Hex</div>
+          <div class="cell-value copyable" id="v-hex">#808080</div>
+        </div>
+        <div class="data-cell">
+          <div class="cell-label">Luminance</div>
+          <div class="cell-value copyable" id="v-lum">0.2158</div>
+        </div>
+        <div class="data-cell full">
+          <div class="cell-label">HSL</div>
+          <div class="cell-value copyable" id="v-hsl"><span class="cv cv-hue" id="vh-h">0°</span><span class="cv cv-pct" id="vh-s">0%</span><span class="cv cv-pct" id="vh-l">50%</span></div>
+        </div>
+        <div class="data-cell full">
+          <div class="cell-label">RGB</div>
+          <div class="cell-value copyable" id="v-rgb"><span class="cv cv-byte" id="vr-r">128</span><span class="cv cv-byte" id="vr-g">128</span><span class="cv cv-byte" id="vr-b">128</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: Contrast previews + Custom picker ───────────────────────────────── -->
+  <div class="col-right">
+
+    <div class="contrast-section">
+      <span class="section-label">vs White &amp; Black</span>
+      <div class="preview-tiles">
+        <!-- vs White -->
+        <div class="preview-tile" id="preview-white">
+          <div class="preview-meta">
+            <div class="preview-pair">
+              <span class="preview-role">TEXT</span>
+              <div class="preview-pair-dot" id="pvw-text-dot"></div>
+              <span class="preview-role">BG</span>
+              <div class="preview-pair-dot" style="background:#fff;border-color:rgba(0,0,0,0.15);"></div>
+            </div>
+            <div class="preview-wcag" id="pvw-wcag"></div>
+          </div>
+          <div class="preview-display" id="pvw-display">Ag</div>
+          <div class="preview-body" id="pvw-body">The quick brown fox jumps over the lazy dog.</div>
+          <div class="preview-small" id="pvw-small">小さいサイズでの視認性 · Small text legibility — 14 px equivalent</div>
+        </div>
+        <!-- vs Black -->
+        <div class="preview-tile" id="preview-black">
+          <div class="preview-meta">
+            <div class="preview-pair">
+              <span class="preview-role">TEXT</span>
+              <div class="preview-pair-dot" id="pvb-text-dot"></div>
+              <span class="preview-role">BG</span>
+              <div class="preview-pair-dot" style="background:#000;border-color:rgba(255,255,255,0.2);"></div>
+            </div>
+            <div class="preview-wcag" id="pvb-wcag"></div>
+          </div>
+          <div class="preview-display" id="pvb-display">Ag</div>
+          <div class="preview-body" id="pvb-body">The quick brown fox jumps over the lazy dog.</div>
+          <div class="preview-small" id="pvb-small">小さいサイズでの視認性 · Small text legibility — 14 px equivalent</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="contrast-section">
+      <span class="section-label">vs Custom</span>
+      <div class="preview-tiles">
+        <!-- Custom: selected text on custom bg -->
+        <div class="preview-tile" id="preview-a">
+          <div class="preview-meta">
+            <div class="preview-pair">
+              <span class="preview-role">TEXT</span>
+              <div class="preview-pair-dot" id="pa-text-dot"></div>
+              <span class="preview-role">BG</span>
+              <div class="preview-pair-dot" id="pa-bg-dot"></div>
+            </div>
+            <div class="preview-wcag" id="pa-wcag"></div>
+          </div>
+          <div class="preview-display" id="pa-display">Ag</div>
+          <div class="preview-body" id="pa-body">The quick brown fox jumps over the lazy dog.</div>
+          <div class="preview-small" id="pa-small">小さいサイズでの視認性 · Small text legibility — 14 px equivalent</div>
+        </div>
+        <!-- Custom: custom text on selected bg -->
+        <div class="preview-tile" id="preview-b">
+          <div class="preview-meta">
+            <div class="preview-pair">
+              <span class="preview-role">TEXT</span>
+              <div class="preview-pair-dot" id="pb-text-dot"></div>
+              <span class="preview-role">BG</span>
+              <div class="preview-pair-dot" id="pb-bg-dot"></div>
+            </div>
+            <div class="preview-wcag" id="pb-wcag"></div>
+          </div>
+          <div class="preview-display" id="pb-display">Ag</div>
+          <div class="preview-body" id="pb-body">The quick brown fox jumps over the lazy dog.</div>
+          <div class="preview-small" id="pb-small">小さいサイズでの視認性 · Small text legibility — 14 px equivalent</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="custom-panel">
+      <!-- Col 1: small color wheel + hex input -->
+      <div class="custom-wheel-col">
+        <canvas id="custom-wheel" class="custom-wheel-canvas"></canvas>
+        <div class="custom-mini-swatch" id="custom-swatch-display"></div>
+        <input type="text" id="custom-hex-input" class="custom-hex-input" value="#1A1A4E" maxlength="7" spellcheck="false" placeholder="#000000">
+      </div>
+      <!-- Col 2: RGB + HSL sliders + Grayscale (wrapped for responsive stacking) -->
+      <div class="custom-sliders-wrap">
+        <div class="custom-slider-group">
+          <div class="custom-group-label">RGB</div>
+          <div class="custom-slider-row">
+            <span class="custom-ch" style="color:#d07070">R</span>
+            <input type="range" id="c-r-slider" min="0" max="255" value="26">
+            <span class="custom-val" id="c-r-val">26</span>
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch" style="color:#70b070">G</span>
+            <input type="range" id="c-g-slider" min="0" max="255" value="26">
+            <span class="custom-val" id="c-g-val">26</span>
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch" style="color:#7090d0">B</span>
+            <input type="range" id="c-b-slider" min="0" max="255" value="78">
+            <span class="custom-val" id="c-b-val">78</span>
+          </div>
+        </div>
+        <div class="custom-slider-group">
+          <div class="custom-group-label">HSL</div>
+          <div class="custom-slider-row">
+            <span class="custom-ch">H</span>
+            <input type="range" id="c-h-slider" min="0" max="359" value="240">
+            <span class="custom-val" id="c-h-val">240°</span>
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch">S</span>
+            <input type="range" id="c-s-slider" min="0" max="100" value="50">
+            <span class="custom-val" id="c-s-val">50%</span>
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch">L</span>
+            <input type="range" id="c-l-slider" min="0" max="100" value="20">
+            <span class="custom-val" id="c-l-val">20%</span>
+          </div>
+        </div>
+        <div class="custom-slider-group custom-gray-group">
+          <div class="custom-group-label">Gray</div>
+          <div class="custom-slider-row">
+            <span class="custom-ch"></span>
+            <input type="range" id="c-gray-slider" min="0" max="255" value="26" class="custom-gray-slider">
+            <span class="custom-val" id="c-gray-val">26</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<span class="copyright">Copyright © Daishin Sakuma.</span>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
