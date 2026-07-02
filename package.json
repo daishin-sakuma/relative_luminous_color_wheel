@@ -16,6 +16,7 @@
   "build": {
     "appId": "dev.mutex.relative-luminance-color-wheel",
     "productName": "Relative Luminous Color Wheel",
+    "copyright": "Copyright © Daishin Sakuma.",
     "directories": {
       "output": "release"
     },
