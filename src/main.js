@@ -593,8 +593,71 @@ const customWheelCanvas = /** @type {HTMLCanvasElement} */ (document.getElementB
 customWheelCanvas.width = customWheelCanvas.height = CW_BUF;
 const cwCtx = /** @type {CanvasRenderingContext2D} */ (customWheelCanvas.getContext('2d'));
 
+// Cache for lum-mode wheel background (expensive to render; invalidated only when cuLum changes)
+let _cwLumCache = null; // { lum: number, imageData: ImageData }
+
 function renderCustomWheel() {
   const radius = CW_BUF / 2;
+
+  // ── Gray mode: solid circle ────────────────────────────────────────────────
+  if (customMode === 'gray') {
+    const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
+    const data = img.data;
+    for (let py = 0; py < CW_BUF; py++) {
+      for (let px = 0; px < CW_BUF; px++) {
+        const dx = px - radius, dy = py - radius;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius + 1) continue;
+        const alpha = dist > radius - 0.5
+          ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
+        const idx = (py * CW_BUF + px) * 4;
+        data[idx] = cR; data[idx+1] = cG; data[idx+2] = cB; data[idx+3] = alpha;
+      }
+    }
+    cwCtx.putImageData(img, 0, 0);
+    return;
+  }
+
+  // ── Lum mode: luminance-locked wheel (same as main, using cuLum) ───────────
+  if (customMode === 'lum') {
+    if (!_cwLumCache || _cwLumCache.lum !== cuLum) {
+      const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
+      const data = img.data;
+      for (let py = 0; py < CW_BUF; py++) {
+        for (let px = 0; px < CW_BUF; px++) {
+          const dx = px - radius, dy = py - radius;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > radius + 1) continue;
+          const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
+          const sat = Math.min(dist / radius, 1);
+          const l   = findLightness(hue, sat, cuLum);
+          const [rr, gg, bb] = hslToRgb(hue, sat, l);
+          const alpha = dist > radius - 0.5
+            ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
+          const idx = (py * CW_BUF + px) * 4;
+          data[idx] = rr; data[idx+1] = gg; data[idx+2] = bb; data[idx+3] = alpha;
+        }
+      }
+      _cwLumCache = { lum: cuLum, imageData: img };
+    }
+    cwCtx.putImageData(_cwLumCache.imageData, 0, 0);
+    // Marker at cuHue / cuSat
+    const mAngle = cuHue * Math.PI / 180;
+    const mDist  = cuSat * radius;
+    const mx = radius + Math.cos(mAngle) * mDist;
+    const my = radius + Math.sin(mAngle) * mDist;
+    cwCtx.save();
+    cwCtx.strokeStyle = relativeLuminance(cR, cG, cB) > 0.179
+      ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)';
+    cwCtx.lineWidth = 1.5 * CW_DPR;
+    cwCtx.beginPath();
+    cwCtx.arc(mx, my, 4.5 * CW_DPR, 0, Math.PI * 2);
+    cwCtx.stroke();
+    cwCtx.restore();
+    return;
+  }
+
+  // ── Color mode: HSL wheel at current lightness (original behavior) ──────────
   const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
   const data = img.data;
   for (let py = 0; py < CW_BUF; py++) {
@@ -612,8 +675,6 @@ function renderCustomWheel() {
     }
   }
   cwCtx.putImageData(img, 0, 0);
-
-  // Marker
   const mAngle = cH * Math.PI / 180;
   const mDist  = cS * radius;
   const mx = radius + Math.cos(mAngle) * mDist;
@@ -630,6 +691,7 @@ function renderCustomWheel() {
 let cwIsDown = false;
 
 function handleCustomWheelPointer(e) {
+  if (customMode === 'gray') return; // wheel is non-interactive in gray mode
   const rect = customWheelCanvas.getBoundingClientRect();
   const cx = e.touches ? e.touches[0].clientX : e.clientX;
   const cy = e.touches ? e.touches[0].clientY : e.clientY;
@@ -638,7 +700,11 @@ function handleCustomWheelPointer(e) {
   const r   = rect.width / 2;
   const sat = Math.min(Math.sqrt(dx * dx + dy * dy) / r, 1);
   const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
-  setCustomFromHsl(hue, sat, cL);
+  if (customMode === 'lum') {
+    setCustomFromLumHueSat(cuLum, hue, sat);
+  } else {
+    setCustomFromHsl(hue, sat, cL);
+  }
 }
 
 customWheelCanvas.addEventListener('mousedown', e => { cwIsDown = true; handleCustomWheelPointer(e); });
