@@ -580,6 +580,7 @@ let customLumSaved = null;
 
 // Preferences
 let stripHash = false;
+let shareState = true;
 /** Format a #rrggbb hex string according to the current stripHash preference. */
 function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
 
@@ -1229,6 +1230,20 @@ document.addEventListener('click', e => {
 }
 
 {
+  const shareStateCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('share-state-checkbox'));
+  try {
+    if (localStorage.getItem('pref-share-state') === '0') {
+      shareState = false;
+      shareStateCheckbox.checked = false;
+    }
+  } catch(e) {}
+  shareStateCheckbox.addEventListener('change', () => {
+    shareState = shareStateCheckbox.checked;
+    try { localStorage.setItem('pref-share-state', shareState ? '1' : '0'); } catch(e) {}
+  });
+}
+
+{
   const DEFAULT_HUE = 240;
   const DEFAULT_SAT = 0; // achromatic
 
@@ -1414,6 +1429,41 @@ if (customMode === 'gray') {
 [cH, cS, cL] = rgbToHsl(cR, cG, cB);
 customColor = toHex(cR, cG, cB);
 
+// ─── URL state restore (overrides localStorage if state params present) ───────
+try {
+  const sp = new URLSearchParams(location.search);
+  if (sp.has('l') || sp.has('c')) {
+    const ph = sp.get('h'), ps = sp.get('s'), pl = sp.get('l');
+    const pc = sp.get('c'), pm = sp.get('m');
+    if (pl !== null) {
+      targetLum = Math.max(0, Math.min(1, parseFloat(pl) / 1000));
+      lumSlider.value = String(Math.round(targetLum * 1000));
+      lumValEl.value  = targetLum.toFixed(3);
+    }
+    if (ph !== null) selHue = Math.max(0, Math.min(359, parseFloat(ph)));
+    if (ps !== null) selSat = Math.max(0, Math.min(1,   parseFloat(ps) / 100));
+    if (pm === 'color' || pm === 'lum' || pm === 'gray') customMode = pm;
+    if (pc !== null && /^[0-9a-fA-F]{6}$/.test(pc)) {
+      [cR, cG, cB] = hexToRgb('#' + pc);
+    }
+    if (customMode === 'lum') {
+      const pcl = sp.get('cl'), pch = sp.get('ch'), pcs = sp.get('cs');
+      if (pcl !== null) cuLum = Math.max(0.001, Math.min(1, parseFloat(pcl) / 1000));
+      if (pch !== null) cuHue = Math.max(0, Math.min(359, parseFloat(pch)));
+      if (pcs !== null) cuSat = Math.max(0, Math.min(1,   parseFloat(pcs) / 100));
+      const _l = findLightness(cuHue, cuSat, cuLum);
+      [cR, cG, cB] = hslToRgb(cuHue, cuSat, _l);
+    }
+    [cH, cS, cL] = rgbToHsl(cR, cG, cB);
+    customColor = toHex(cR, cG, cB);
+    if (customMode === 'gray') {
+      customGraySaved = cR;
+    } else {
+      customColorSaved = { r: cR, g: cG, b: cB };
+    }
+  }
+} catch(e) {}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 try {
@@ -1485,14 +1535,31 @@ document.querySelectorAll('input[type="range"]').forEach(addSliderTouchFix);
 const SHARE_URL   = 'https://relative-luminous-color-wheel.vercel.app/';
 const SHARE_TITLE = 'Relative Luminous Color Wheel';
 
+function buildShareUrl() {
+  if (!shareState) return SHARE_URL;
+  const p = new URLSearchParams();
+  p.set('h', String(Math.round(selHue)));
+  p.set('s', String(Math.round(selSat * 100)));
+  p.set('l', String(Math.round(targetLum * 1000)));
+  p.set('c', toHex(cR, cG, cB).slice(1).toLowerCase());
+  p.set('m', customMode);
+  if (customMode === 'lum') {
+    p.set('cl', String(Math.round(cuLum * 1000)));
+    p.set('ch', String(Math.round(cuHue)));
+    p.set('cs', String(Math.round(cuSat * 100)));
+  }
+  return SHARE_URL + '?' + p.toString();
+}
+
 document.querySelectorAll('.preview-share-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     btn.focus();
+    const shareUrl = buildShareUrl();
     try {
       if (navigator.share) {
-        await navigator.share({ title: SHARE_TITLE, url: SHARE_URL });
+        await navigator.share({ title: SHARE_TITLE, url: shareUrl });
       } else {
-        await navigator.clipboard.writeText(SHARE_URL);
+        await navigator.clipboard.writeText(shareUrl);
         const label = btn.querySelector('.preview-share-label');
         const prev  = label.textContent;
         label.textContent = 'Copied!';
@@ -1504,24 +1571,25 @@ document.querySelectorAll('.preview-share-btn').forEach(btn => {
 document.querySelectorAll('.preview-platform-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const platform = btn.dataset.platform;
+    const shareUrl = buildShareUrl();
     if (platform === 'x') {
       window.open(
-        'https://twitter.com/intent/tweet?url=' + encodeURIComponent(SHARE_URL) + '&text=' + encodeURIComponent(SHARE_TITLE),
+        'https://twitter.com/intent/tweet?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(SHARE_TITLE),
         '_blank', 'noopener'
       );
     } else if (platform === 'line') {
       window.open(
-        'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(SHARE_URL),
+        'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(shareUrl),
         '_blank', 'noopener'
       );
     } else if (platform === 'pinterest') {
       window.open(
-        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(SHARE_URL) + '&description=' + encodeURIComponent(SHARE_TITLE),
+        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(shareUrl) + '&description=' + encodeURIComponent(SHARE_TITLE),
         '_blank', 'noopener'
       );
     } else if (platform === 'linkedin') {
       window.open(
-        'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(SHARE_URL),
+        'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl),
         '_blank', 'noopener'
       );
     }
