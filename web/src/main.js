@@ -1264,3 +1264,25 @@ document.querySelectorAll('.preview-share-btn').forEach(btn => {
     } catch (_) { /* cancelled or denied */ }
   });
 });
+document.querySelectorAll('.preview-platform-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const platform = btn.dataset.platform;
+    if (platform === 'x') {
+      window.open(
+        'https://twitter.com/intent/tweet?url=' + encodeURIComponent(SHARE_URL) + '&text=' + encodeURIComponent(SHARE_TITLE),
+        '_blank', 'noopener'
+      );
+    } else if (platform === 'line') {
+      window.open(
+        'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(SHARE_URL),
+        '_blank', 'noopener'
+      );
+    } else if (platform === 'instagram') {
+      try {
+        await navigator.clipboard.writeText(SHARE_URL);
+        btn.classList.add('just-copied');
+        setTimeout(() => btn.classList.remove('just-copied'), 1500);
+      } catch (_) {}
+    }
+  });
+});
