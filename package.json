@@ -1,6 +1,6 @@
 {
   "name": "relative-luminous-color-wheel",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "WCAG 2.2 relative luminance color wheel — every color on the wheel shares the same perceptual luminance",
   "private": true,
   "main": "electron/main.js",
@@ -11,7 +11,7 @@
     "electron:dev": "vite build && electron .",
     "dist:mac":     "vite build && electron-builder --mac",
     "dist:win":     "vite build && electron-builder --win",
-    "dmg:mac":      "hdiutil create -volname \"Relative Luminous Color Wheel\" -srcfolder \"release/mac/Relative Luminous Color Wheel.app\" -ov -format UDZO \"release/Relative Luminous Color Wheel-1.2.3.dmg\" && hdiutil create -volname \"Relative Luminous Color Wheel\" -srcfolder \"release/mac-arm64/Relative Luminous Color Wheel.app\" -ov -format UDZO \"release/Relative Luminous Color Wheel-1.2.3-arm64.dmg\""
+    "dmg:mac":      "hdiutil create -volname \"Relative Luminous Color Wheel\" -srcfolder \"release/mac/Relative Luminous Color Wheel.app\" -ov -format UDZO \"release/Relative Luminous Color Wheel-1.2.4.dmg\" && hdiutil create -volname \"Relative Luminous Color Wheel\" -srcfolder \"release/mac-arm64/Relative Luminous Color Wheel.app\" -ov -format UDZO \"release/Relative Luminous Color Wheel-1.2.4-arm64.dmg\""
   },
   "build": {
     "appId": "dev.mutex.relative-luminance-color-wheel",
