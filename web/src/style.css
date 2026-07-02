@@ -628,15 +628,27 @@ input.custom-val:focus {
   gap: 0.55rem;
   flex-wrap: wrap;
 }
-.preview-btn-ex {
-  border: 1.5px solid currentColor;
+.preview-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  background: currentColor;
+  border: none;
   border-radius: 4px;
-  padding: 0.2em 0.65em;
-  font-size: 0.875rem;
+  color: inherit;
+  cursor: pointer;
   font-family: system-ui, -apple-system, sans-serif;
-  line-height: 1.4;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 0.32em 0.5em 0.32em 0.62em;
+  transition: opacity 0.12s, transform 0.08s;
   white-space: nowrap;
 }
+.preview-share-btn:hover  { opacity: 0.75; }
+.preview-share-btn:active { opacity: 0.55; transform: scale(0.95); }
+.preview-share-btn .preview-share-label,
+.preview-share-btn .preview-icon { filter: invert(1); }
 .preview-icon {
   width: 1.1rem;
   height: 1.1rem;
