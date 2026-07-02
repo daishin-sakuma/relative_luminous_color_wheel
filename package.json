@@ -1,6 +1,6 @@
 {
   "name": "relative-luminous-color-wheel",
-  "version": "1.3.8",
+  "version": "1.3.9",
   "description": "WCAG 2.2 relative luminance color wheel — every color on the wheel shares the same perceptual luminance",
   "private": true,
   "type": "module",
