@@ -11,7 +11,7 @@
     "electron:dev": "vite build && electron .",
     "dist:mac":     "vite build && electron-builder --mac",
     "dist:win":     "vite build && electron-builder --win",
-    "dmg:mac":      "electron-builder --mac dmg"
+    "dmg:mac":      "bash scripts/create-dmg.sh"
   },
   "build": {
     "appId": "dev.mutex.relative-luminance-color-wheel",
