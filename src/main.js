@@ -1318,6 +1318,16 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
         'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(SHARE_URL),
         '_blank', 'noopener'
       );
+    } else if (platform === 'pinterest') {
+      window.open(
+        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(SHARE_URL) + '&description=' + encodeURIComponent(SHARE_TITLE),
+        '_blank', 'noopener'
+      );
+    } else if (platform === 'linkedin') {
+      window.open(
+        'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(SHARE_URL),
+        '_blank', 'noopener'
+      );
     }
   });
 });
