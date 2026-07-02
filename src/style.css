@@ -899,8 +899,8 @@ input.custom-val:focus {
   transform: translateX(1.0rem);
   background: var(--ground);
 }
-.toggle-switch:hover .toggle-track              { border-color: transparent; }
-.toggle-switch:hover .toggle-thumb              { background: var(--muted); }
+.toggle-switch:hover .toggle-track              { border-color: var(--border); }
+.toggle-switch:hover .toggle-thumb              { background: color-mix(in srgb, var(--text) 65%, var(--ground)); }
 .toggle-switch:hover input:checked + .toggle-track { opacity: 1; }
 .toggle-switch:focus-within .toggle-track       { outline: 2px solid var(--muted); outline-offset: 2px; }
 
