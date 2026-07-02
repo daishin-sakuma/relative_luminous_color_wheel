@@ -410,7 +410,7 @@ input[type="range"]::-moz-range-thumb {
 .custom-hex-input.hex-copied { border-color: var(--pass); }
 .custom-hex-copy-icon {
   position: absolute;
-  right: 0.35em;
+  right: 0.6em;
   top: 50%;
   transform: translateY(-50%);
   font-size: 0.8rem;
