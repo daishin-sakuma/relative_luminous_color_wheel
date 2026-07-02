@@ -43,9 +43,10 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CSS_SZ = 420;
-const DPR    = Math.min(window.devicePixelRatio || 1, 2);
-const BUF_SZ = CSS_SZ * DPR;
+const CSS_SZ   = 420;
+const IS_COARSE = window.matchMedia('(pointer: coarse)').matches;
+const DPR       = Math.min(window.devicePixelRatio || 1, IS_COARSE ? 1.5 : 2);
+const BUF_SZ    = CSS_SZ * DPR;
 const R_CSS  = 200;
 const R_BUF  = R_CSS * DPR;
 

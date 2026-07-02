@@ -1,6 +1,7 @@
 @font-face {
   font-family: 'NATS';
-  src: url('./assets/fonts/NATS-Regular.ttf') format('truetype');
+  src: url('./assets/fonts/NATS-Regular.woff2') format('woff2'),
+       url('./assets/fonts/NATS-Regular.ttf')   format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -13,10 +14,11 @@
 
 @font-face {
   font-family: 'ZenKakuGothicNew';
-  src: url('./assets/fonts/ZenKakuGothicNew-Medium.ttf') format('truetype');
+  src: url('./assets/fonts/ZenKakuGothicNew-Medium.woff2') format('woff2'),
+       url('./assets/fonts/ZenKakuGothicNew-Medium.ttf')   format('truetype');
   font-weight: normal;
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
