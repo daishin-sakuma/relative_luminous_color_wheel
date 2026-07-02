@@ -1318,34 +1318,6 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
         'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(SHARE_URL),
         '_blank', 'noopener'
       );
-    } else if (platform === 'instagram') {
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(SHARE_URL);
-        copied = true;
-      } catch (_) {
-        // fallback: execCommand
-        try {
-          const ta = document.createElement('textarea');
-          ta.value = SHARE_URL;
-          ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
-          document.body.appendChild(ta);
-          ta.focus(); ta.select();
-          copied = document.execCommand('copy');
-          document.body.removeChild(ta);
-        } catch (_2) {}
-      }
-      if (copied) {
-        const origSVG = btn.querySelector('svg').outerHTML;
-        btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" style="stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>';
-        btn.classList.add('just-copied');
-        setTimeout(() => {
-          btn.innerHTML = origSVG;
-          btn.classList.remove('just-copied');
-        }, 1500);
-      } else {
-        window.prompt('URLをコピーしてInstagramに貼り付けてください:', SHARE_URL);
-      }
     }
   });
 });
