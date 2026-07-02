@@ -435,6 +435,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   // vs White (bg lum = 1, isLight = true)
   const tileW = /** @type {HTMLElement} */ (document.getElementById('preview-white'));
   tileW.style.background = '#ffffff';
+  tileW.style.setProperty('--tile-bg', '#ffffff');
   tileW.style.color = 'rgba(0,0,0,0.55)';
   /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.background = selectedHex;
   /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.borderColor = 'rgba(0,0,0,0.2)';
@@ -449,6 +450,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   // vs Black (bg lum = 0, isLight = false)
   const tileB = /** @type {HTMLElement} */ (document.getElementById('preview-black'));
   tileB.style.background = '#000000';
+  tileB.style.setProperty('--tile-bg', '#000000');
   tileB.style.color = 'rgba(255,255,255,0.55)';
   /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.background = selectedHex;
   /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.borderColor = 'rgba(255,255,255,0.25)';
@@ -474,6 +476,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   const fgA    = getForeground(customLum);
   const dotBorderA = customLum > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
   tileA.style.background = customHex;
+  tileA.style.setProperty('--tile-bg', customHex);
   tileA.style.color      = fgA;  // inherited by role labels
 
   for (const id of ['pa-display', 'pa-body', 'pa-ui']) {
@@ -495,6 +498,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   const fgB    = getForeground(selectedLum);
   const dotBorderB = selectedLum > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
   tileB.style.background = selectedHex;
+  tileB.style.setProperty('--tile-bg', selectedHex);
   tileB.style.color      = fgB;
 
   for (const id of ['pb-display', 'pb-body', 'pb-ui']) {
