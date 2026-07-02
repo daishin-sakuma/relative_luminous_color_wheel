@@ -64,7 +64,7 @@
 <header>
   <span class="wordmark">Relative Luminous Color Wheel</span>
   <div class="header-right">
-    <span class="app-version">ver. 1.4.1</span>
+    <span class="app-version">ver. 1.4.2</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -379,6 +379,7 @@
         <div class="custom-mode-tabs">
           <button class="custom-mode-tab" id="custom-tab-color">Color</button>
           <button class="custom-mode-tab" id="custom-tab-gray">Gray</button>
+          <button class="custom-mode-tab" id="custom-tab-lum">Lum</button>
         </div>
         <div class="custom-slider-group" id="custom-group-color">
           <div class="custom-color-subgroups">
@@ -425,6 +426,23 @@
             <span class="custom-ch"></span>
             <input type="range" id="c-gray-slider" min="0" max="255" value="26" class="custom-gray-slider">
             <input type="text" class="custom-val" id="c-gray-val" value="26" inputmode="numeric" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="custom-slider-group" id="custom-group-lum">
+          <div class="custom-slider-row">
+            <span class="custom-ch">L</span>
+            <input type="range" id="cu-lum-slider" min="0" max="1000" value="200" step="1">
+            <input type="text" class="custom-val" id="cu-lum-val" value="0.200" inputmode="decimal" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch">S</span>
+            <input type="range" id="cu-sat-slider" min="0" max="100" value="100">
+            <input type="text" class="custom-val" id="cu-sat-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch">H</span>
+            <input type="range" id="cu-hue-slider" min="0" max="359" value="0">
+            <input type="text" class="custom-val" id="cu-hue-val" value="0°" inputmode="numeric" autocomplete="off" spellcheck="false">
           </div>
         </div>
       </div>

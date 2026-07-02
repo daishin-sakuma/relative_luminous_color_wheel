@@ -570,10 +570,13 @@ let customColor = '#66001B';
 let cR = 102, cG = 0, cB = 27;
 let cH = 344, cS = 1, cL = 0.2;
 
-// Custom panel mode: 'color' retains colorful RGB/HSL state, 'gray' retains grayscale state
+// Custom panel mode: 'color' | 'gray' | 'lum'
 let customMode = 'color';
 let customColorSaved = { r: 102, g: 0, b: 27 };
 let customGraySaved = 128;
+// Lum mode state (authoritative Lum/Sat/Hue — independent of cH/cS/cL rounding)
+let cuLum = 0.2, cuHue = 0, cuSat = 1;
+let customLumSaved = null;
 
 // Preferences
 let stripHash = false;
@@ -672,6 +675,32 @@ function updateCustomSliderTracks() {
   lSl.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(cH,cS,0))},${toHex(...hslToRgb(cH,cS,0.5))},${toHex(...hslToRgb(cH,cS,1))})`;
 }
 
+function updateLumModeSliderTracks() {
+  const lumSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider'));
+  const satSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-slider'));
+  const hueSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-hue-slider'));
+
+  // Luminance track: actual hue/sat colors sampled across lum 0→1
+  const lumStops = [0, 0.04, 0.18, 0.40, 0.65, 1.0].map(lm => {
+    const l = findLightness(cuHue, cuSat, lm);
+    return `${toHex(...hslToRgb(cuHue, cuSat, l))} ${Math.round(lm * 100)}%`;
+  });
+  lumSl.style.backgroundImage = `linear-gradient(to right,${lumStops.join(',')})`;
+
+  // Saturation track: achromatic → vivid at current hue/lum
+  const s0 = toHex(...hslToRgb(cuHue, 0, findLightness(cuHue, 0, cuLum)));
+  const s1 = toHex(...hslToRgb(cuHue, 1, findLightness(cuHue, 1, cuLum)));
+  satSl.style.backgroundImage = `linear-gradient(to right,${s0},${s1})`;
+
+  // Hue track: rotate hue at current sat/lum
+  const hStops = Array.from({ length: 13 }, (_, i) => {
+    const h = i * 30;
+    const l = findLightness(h, cuSat, cuLum);
+    return `${toHex(...hslToRgb(h, cuSat, l))} ${Math.round(i / 12 * 100)}%`;
+  });
+  hueSl.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
+}
+
 /** Sync all custom controls EXCEPT the hex text input (safe while user is typing). */
 function syncCustomControls() {
   customColor = toHex(cR, cG, cB);
@@ -680,6 +709,9 @@ function syncCustomControls() {
     if (customMode === 'gray') {
       customGraySaved = cR;
       localStorage.setItem('custom-gray-v', String(customGraySaved));
+    } else if (customMode === 'lum') {
+      customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
+      localStorage.setItem('custom-lum-v', JSON.stringify(customLumSaved));
     } else {
       customColorSaved = { r: cR, g: cG, b: cB };
       localStorage.setItem('custom-color-rgb', JSON.stringify(customColorSaved));
@@ -707,6 +739,19 @@ function syncCustomControls() {
 
   updateCustomSliderTracks();
   renderCustomWheel();
+
+  if (customMode === 'lum') {
+    const cuLumSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider'));
+    const cuSatSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-slider'));
+    const cuHueSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-hue-slider'));
+    if (document.activeElement !== cuLumSl) cuLumSl.value = String(Math.round(cuLum * 1000));
+    if (document.activeElement !== cuSatSl) cuSatSl.value = String(Math.round(cuSat * 100));
+    if (document.activeElement !== cuHueSl) cuHueSl.value = String(Math.round(cuHue));
+    setValIfBlurred('cu-lum-val', cuLum.toFixed(3));
+    setUnitVal(document.getElementById('cu-sat-val'), Math.round(cuSat * 100), '%');
+    setUnitVal(document.getElementById('cu-hue-val'), Math.round(cuHue), '°');
+    updateLumModeSliderTracks();
+  }
 }
 
 /** Full sync including hex text input (use when change did NOT come from that input). */
@@ -865,6 +910,27 @@ document.getElementById('c-gray-slider').addEventListener('input', e => {
   setCustomFromRgb(v, v, v);
 });
 
+// ─── Lum mode sliders ─────────────────────────────────────────────────────────
+
+function setCustomFromLumHueSat(lum, hue, sat) {
+  cuLum = Math.max(0, Math.min(1, lum));
+  cuHue = ((hue % 360) + 360) % 360;
+  cuSat = Math.max(0, Math.min(1, sat));
+  const l = findLightness(cuHue, cuSat, cuLum);
+  const [r, g, b] = hslToRgb(cuHue, cuSat, l);
+  setCustomFromRgb(r, g, b);
+}
+
+document.getElementById('cu-lum-slider').addEventListener('input', e => {
+  setCustomFromLumHueSat(+/** @type {HTMLInputElement} */ (e.target).value / 1000, cuHue, cuSat);
+});
+document.getElementById('cu-sat-slider').addEventListener('input', e => {
+  setCustomFromLumHueSat(cuLum, cuHue, +/** @type {HTMLInputElement} */ (e.target).value / 100);
+});
+document.getElementById('cu-hue-slider').addEventListener('input', e => {
+  setCustomFromLumHueSat(cuLum, +/** @type {HTMLInputElement} */ (e.target).value, cuSat);
+});
+
 // ─── Wire editable value inputs ──────────────────────────────────────────────
 
 wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
@@ -924,6 +990,22 @@ wireValInput(
   0, 255, 1, str => Math.round(parseFloat(str)), String,
   v => { /** @type {HTMLInputElement} */ (document.getElementById('c-gray-slider')).value = String(v); setCustomFromRgb(v, v, v); }
 );
+wireValInput(
+  /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-val')),
+  0, 1, 0.001, parseFloat, v => v.toFixed(3),
+  v => { /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider')).value = String(Math.round(v * 1000)); setCustomFromLumHueSat(v, cuHue, cuSat); }
+);
+wireValInput(
+  /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-val')),
+  0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%',
+  v => { /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-slider')).value = String(v); setCustomFromLumHueSat(cuLum, cuHue, v / 100); }
+);
+wireValInput(
+  /** @type {HTMLInputElement} */ (document.getElementById('cu-hue-val')),
+  0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°',
+  v => { /** @type {HTMLInputElement} */ (document.getElementById('cu-hue-slider')).value = String(v); setCustomFromLumHueSat(cuLum, v, cuSat); },
+  true
+);
 
 // Hex text input
 const customHexInput = /** @type {HTMLInputElement} */ (document.getElementById('custom-hex-input'));
@@ -931,7 +1013,7 @@ const customHexInput = /** @type {HTMLInputElement} */ (document.getElementById(
 // ─── Custom slider mode (Color / Gray) ───────────────────────────────────────
 
 function applyCustomModeTabs(mode) {
-  for (const m of ['color', 'gray']) {
+  for (const m of ['color', 'gray', 'lum']) {
     /** @type {HTMLElement} */ (document.getElementById('custom-group-' + m)).classList.toggle('active', m === mode);
     /** @type {HTMLElement} */ (document.getElementById('custom-tab-' + m)).classList.toggle('active', m === mode);
   }
@@ -943,6 +1025,9 @@ function setCustomMode(mode) {
   if (customMode === 'gray') {
     customGraySaved = cR;
     try { localStorage.setItem('custom-gray-v', String(customGraySaved)); } catch(e) {}
+  } else if (customMode === 'lum') {
+    customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
+    try { localStorage.setItem('custom-lum-v', JSON.stringify(customLumSaved)); } catch(e) {}
   } else {
     customColorSaved = { r: cR, g: cG, b: cB };
     try { localStorage.setItem('custom-color-rgb', JSON.stringify(customColorSaved)); } catch(e) {}
@@ -950,10 +1035,25 @@ function setCustomMode(mode) {
   customMode = mode;
   try { localStorage.setItem('custom-mode', mode); } catch(e) {}
   // Restore new mode's state
-  const [nr, ng, nb] = mode === 'gray'
-    ? [customGraySaved, customGraySaved, customGraySaved]
-    : [customColorSaved.r, customColorSaved.g, customColorSaved.b];
-  setCustomFromRgb(nr, ng, nb);
+  if (mode === 'gray') {
+    setCustomFromRgb(customGraySaved, customGraySaved, customGraySaved);
+  } else if (mode === 'lum') {
+    if (customLumSaved === null) {
+      // First entry: derive from current color
+      cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
+      cuHue = cH;
+      cuSat = cS > 0.01 ? cS : 1;
+    } else {
+      cuLum = customLumSaved.lum;
+      cuHue = customLumSaved.hue;
+      cuSat = customLumSaved.sat;
+    }
+    const l = findLightness(cuHue, cuSat, cuLum);
+    const [r, g, b] = hslToRgb(cuHue, cuSat, l);
+    setCustomFromRgb(r, g, b);
+  } else {
+    setCustomFromRgb(customColorSaved.r, customColorSaved.g, customColorSaved.b);
+  }
   syncCustomUI();
   updateUI();
   applyCustomModeTabs(mode);
@@ -961,6 +1061,7 @@ function setCustomMode(mode) {
 
 document.getElementById('custom-tab-color').addEventListener('click', () => setCustomMode('color'));
 document.getElementById('custom-tab-gray').addEventListener('click',  () => setCustomMode('gray'));
+document.getElementById('custom-tab-lum').addEventListener('click',   () => setCustomMode('lum'));
 customHexInput.addEventListener('input', () => {
   let val = customHexInput.value.replace(/[^0-9a-fA-F#]/g, '');
   if (val && !val.startsWith('#')) val = '#' + val;
@@ -1202,16 +1303,28 @@ try {
 // Mode-aware custom color restore
 try {
   const m = localStorage.getItem('custom-mode');
-  if (m === 'color' || m === 'gray') customMode = m;
+  if (m === 'color' || m === 'gray' || m === 'lum') customMode = m;
   const cc = localStorage.getItem('custom-color-rgb');
   if (cc) { const p = JSON.parse(cc); if (typeof p.r === 'number') customColorSaved = { r: p.r, g: p.g, b: p.b }; }
   const cgv = localStorage.getItem('custom-gray-v');
   if (cgv !== null) { const v = parseInt(cgv); if (!isNaN(v)) customGraySaved = Math.max(0, Math.min(255, v)); }
+  const clv = localStorage.getItem('custom-lum-v');
+  if (clv) {
+    const p = JSON.parse(clv);
+    if (typeof p.lum === 'number') {
+      customLumSaved = { lum: p.lum, hue: p.hue || 0, sat: p.sat || 1 };
+      cuLum = customLumSaved.lum; cuHue = customLumSaved.hue; cuSat = customLumSaved.sat;
+    }
+  }
 } catch(e) {}
 
 // Apply the active mode's color to cR/cG/cB
 if (customMode === 'gray') {
   cR = cG = cB = customGraySaved;
+} else if (customMode === 'lum' && customLumSaved !== null) {
+  const _l = findLightness(cuHue, cuSat, cuLum);
+  const [_r, _g, _b] = hslToRgb(cuHue, cuSat, _l);
+  cR = _r; cG = _g; cB = _b;
 } else {
   cR = customColorSaved.r; cG = customColorSaved.g; cB = customColorSaved.b;
 }
