@@ -775,12 +775,14 @@ function syncCustomControls() {
     if (customMode === 'gray') {
       customGraySaved = cR;
       localStorage.setItem('custom-gray-v', String(customGraySaved));
-    } else if (customMode === 'lum') {
-      customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
-      localStorage.setItem('custom-lum-v', JSON.stringify(customLumSaved));
     } else {
+      // Color and Lum share the same color save slot
       customColorSaved = { r: cR, g: cG, b: cB };
       localStorage.setItem('custom-color-rgb', JSON.stringify(customColorSaved));
+      if (customMode === 'lum') {
+        customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
+        localStorage.setItem('custom-lum-v', JSON.stringify(customLumSaved));
+      }
     }
   } catch(e) {}
   /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display')).style.background = customColor;
@@ -1087,38 +1089,46 @@ function applyCustomModeTabs(mode) {
 
 function setCustomMode(mode) {
   if (mode === customMode) return;
-  // Save current mode's state before switching
-  if (customMode === 'gray') {
+  const prev = customMode;
+
+  // ── Color ↔ Lum: shared color, no save/restore ────────────────────────────
+  if ((prev === 'color' && mode === 'lum') || (prev === 'lum' && mode === 'color')) {
+    customMode = mode;
+    try { localStorage.setItem('custom-mode', mode); } catch(e) {}
+    if (mode === 'lum') {
+      // Derive Lum-mode params from the current color
+      cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
+      cuHue = cH;
+      cuSat = cS;
+    }
+    syncCustomUI();
+    updateUI();
+    applyCustomModeTabs(mode);
+    return;
+  }
+
+  // ── Transitions involving Gray: save current, restore target ──────────────
+  if (prev === 'gray') {
     customGraySaved = cR;
     try { localStorage.setItem('custom-gray-v', String(customGraySaved)); } catch(e) {}
-  } else if (customMode === 'lum') {
-    customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
-    try { localStorage.setItem('custom-lum-v', JSON.stringify(customLumSaved)); } catch(e) {}
   } else {
+    // prev is 'color' or 'lum' — both save to the shared color slot
     customColorSaved = { r: cR, g: cG, b: cB };
     try { localStorage.setItem('custom-color-rgb', JSON.stringify(customColorSaved)); } catch(e) {}
   }
   customMode = mode;
   try { localStorage.setItem('custom-mode', mode); } catch(e) {}
-  // Restore new mode's state
+
   if (mode === 'gray') {
     setCustomFromRgb(customGraySaved, customGraySaved, customGraySaved);
-  } else if (mode === 'lum') {
-    if (customLumSaved === null) {
-      // First entry: derive from current color
+  } else {
+    // Entering 'color' or 'lum' from gray: restore shared color
+    setCustomFromRgb(customColorSaved.r, customColorSaved.g, customColorSaved.b);
+    if (mode === 'lum') {
       cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
       cuHue = cH;
-      cuSat = cS > 0.01 ? cS : 1;
-    } else {
-      cuLum = customLumSaved.lum;
-      cuHue = customLumSaved.hue;
-      cuSat = customLumSaved.sat;
+      cuSat = cS;
     }
-    const l = findLightness(cuHue, cuSat, cuLum);
-    const [r, g, b] = hslToRgb(cuHue, cuSat, l);
-    setCustomFromRgb(r, g, b);
-  } else {
-    setCustomFromRgb(customColorSaved.r, customColorSaved.g, customColorSaved.b);
   }
   syncCustomUI();
   updateUI();
@@ -1388,11 +1398,18 @@ try {
 if (customMode === 'gray') {
   cR = cG = cB = customGraySaved;
 } else if (customMode === 'lum' && customLumSaved !== null) {
+  // Restore exact Lum params from saved state (avoids integer-RGB rounding drift)
+  cuLum = customLumSaved.lum; cuHue = customLumSaved.hue; cuSat = customLumSaved.sat;
   const _l = findLightness(cuHue, cuSat, cuLum);
-  const [_r, _g, _b] = hslToRgb(cuHue, cuSat, _l);
-  cR = _r; cG = _g; cB = _b;
+  [cR, cG, cB] = hslToRgb(cuHue, cuSat, _l);
 } else {
+  // Color mode, or Lum mode with no saved lum params
   cR = customColorSaved.r; cG = customColorSaved.g; cB = customColorSaved.b;
+  if (customMode === 'lum') {
+    [cH, cS, cL] = rgbToHsl(cR, cG, cB);
+    cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
+    cuHue = cH; cuSat = cS;
+  }
 }
 [cH, cS, cL] = rgbToHsl(cR, cG, cB);
 customColor = toHex(cR, cG, cB);

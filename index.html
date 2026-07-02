@@ -64,7 +64,7 @@
 <header>
   <span class="wordmark">Relative Luminous Color Wheel</span>
   <div class="header-right">
-    <span class="app-version">ver. 1.4.3</span>
+    <span class="app-version">ver. 1.4.4</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -378,8 +378,8 @@
       <div class="custom-sliders-wrap">
         <div class="custom-mode-tabs">
           <button class="custom-mode-tab" id="custom-tab-color">Color</button>
-          <button class="custom-mode-tab" id="custom-tab-gray">Gray</button>
           <button class="custom-mode-tab" id="custom-tab-lum">Lum</button>
+          <button class="custom-mode-tab" id="custom-tab-gray">Gray</button>
         </div>
         <div class="custom-slider-group" id="custom-group-color">
           <div class="custom-color-subgroups">
@@ -421,13 +421,6 @@
             </div>
           </div>
         </div>
-        <div class="custom-slider-group" id="custom-group-gray">
-          <div class="custom-slider-row">
-            <span class="custom-ch"></span>
-            <input type="range" id="c-gray-slider" min="0" max="255" value="26" class="custom-gray-slider">
-            <input type="text" class="custom-val" id="c-gray-val" value="26" inputmode="numeric" autocomplete="off" spellcheck="false">
-          </div>
-        </div>
         <div class="custom-slider-group" id="custom-group-lum">
           <div class="custom-slider-row">
             <span class="custom-ch">L</span>
@@ -443,6 +436,13 @@
             <span class="custom-ch">H</span>
             <input type="range" id="cu-hue-slider" min="0" max="359" value="0">
             <input type="text" class="custom-val" id="cu-hue-val" value="0°" inputmode="numeric" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="custom-slider-group" id="custom-group-gray">
+          <div class="custom-slider-row">
+            <span class="custom-ch"></span>
+            <input type="range" id="c-gray-slider" min="0" max="255" value="26" class="custom-gray-slider">
+            <input type="text" class="custom-val" id="c-gray-val" value="26" inputmode="numeric" autocomplete="off" spellcheck="false">
           </div>
         </div>
       </div>
