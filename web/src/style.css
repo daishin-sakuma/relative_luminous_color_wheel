@@ -649,6 +649,12 @@ input.custom-val:focus {
 .preview-share-btn:active { opacity: 0.55; transform: scale(0.95); }
 .preview-share-btn .preview-share-label,
 .preview-share-btn .preview-icon { color: var(--tile-bg); }
+.preview-platform-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
 .preview-platform-btn {
   display: inline-flex;
   align-items: center;
