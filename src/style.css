@@ -264,7 +264,7 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 
-/* ── Mobile: larger touch area + thumb ──────────────────────────────────────── */
+/* ── Mobile: larger touch area + thumb; prevent auto-zoom on text inputs ────── */
 @media (pointer: coarse) {
   input[type="range"] {
     height: 28px;
@@ -276,6 +276,10 @@ input[type="range"]::-moz-range-thumb {
   input[type="range"]::-moz-range-thumb {
     width: 24px;
     height: 24px;
+  }
+  /* iOS/Android zoom in when focused input font-size < 16px. Force 1rem to suppress. */
+  input[type="text"] {
+    font-size: 1rem !important;
   }
 }
 
