@@ -1,4 +1,4 @@
-# Relative Luminance Color Wheel
+# Relative Luminous Color Wheel
 
 A color picker where every point on the wheel shares the same WCAG 2.2 relative luminance — making it easy to explore hue and saturation while keeping contrast ratios predictable.
 
@@ -17,7 +17,8 @@ A color picker where every point on the wheel shares the same WCAG 2.2 relative 
 - [Vite](https://vite.dev) — build tooling
 - Vanilla JavaScript & CSS — no runtime dependencies
 - WCAG 2.2 relative luminance formula (`L = 0.2126R + 0.7152G + 0.0722B`)
-- Fonts: [NATS](Purushoth Kumar Guthula) · [Zen Kaku Gothic New](https://fonts.google.com/specimen/Zen+Kaku+Gothic+New)
+- Fonts: [NATS](https://fonts.google.com/specimen/NATS) · [Zen Kaku Gothic New](https://fonts.google.com/specimen/Zen+Kaku+Gothic+New)
+
 ## License
 
 [MIT](./LICENSE) © 2026 Daishin Sakuma

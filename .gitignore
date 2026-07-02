@@ -1,21 +1,15 @@
 # Dependencies
 node_modules/
-web/node_modules/
 
 # Build output
 dist/
-web/dist/
 
-# Electron (local only — not needed for Vercel deployment)
+# Electron local build files (not for Vercel)
 electron/
-src/
-public/
-index.html
-vite.config.js
-package.json
 package-lock.json
 scripts/
 release/
+web/
 
 # macOS
 .DS_Store
