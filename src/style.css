@@ -867,7 +867,9 @@ input.custom-val:focus {
   cursor: pointer;
   flex-shrink: 0;
   line-height: 0;
+  transition: opacity 0.2s;
 }
+.toggle-switch:hover { opacity: 0.82; }
 .toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 .toggle-track {
@@ -878,7 +880,7 @@ input.custom-val:focus {
   border-radius: 0.5rem;
   border: 1px solid var(--muted);
   position: relative;
-  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  transition: background 0.2s, border-color 0.2s;
 }
 .toggle-thumb {
   position: absolute;
@@ -893,16 +895,12 @@ input.custom-val:focus {
 .toggle-switch input:checked + .toggle-track {
   background: var(--text);
   border-color: transparent;
-  opacity: 0.75;
 }
 .toggle-switch input:checked + .toggle-track .toggle-thumb {
   transform: translateX(1.0rem);
   background: var(--ground);
 }
-.toggle-switch:hover .toggle-track              { border-color: var(--border); }
-.toggle-switch:hover .toggle-thumb              { background: color-mix(in srgb, var(--text) 65%, var(--ground)); }
-.toggle-switch:hover input:checked + .toggle-track { opacity: 1; }
-.toggle-switch:focus-within .toggle-track       { outline: 2px solid var(--muted); outline-offset: 2px; }
+.toggle-switch:focus-within .toggle-track { outline: 2px solid var(--muted); outline-offset: 2px; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 
