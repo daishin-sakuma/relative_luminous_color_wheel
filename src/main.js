@@ -325,7 +325,7 @@ function updateLumSliderTrack() {
     const l = findLightness(selHue, s, t);
     return `${toHex(...hslToRgb(selHue, s, l))} ${(t * 100).toFixed(0)}%`;
   });
-  lumSlider.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+  lumSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
 function updateHueSliderTrack() {
@@ -334,7 +334,7 @@ function updateHueSliderTrack() {
     const l = findLightness(h, 1, targetLum);
     return `${toHex(...hslToRgb(h, 1, l))} ${Math.round(i / 12 * 100)}%`;
   });
-  hueSlider.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+  hueSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
 function updateSatSliderTrack() {
@@ -342,7 +342,7 @@ function updateSatSliderTrack() {
     const l = findLightness(selHue, s, targetLum);
     return `${toHex(...hslToRgb(selHue, s, l))} ${Math.round(s * 100)}%`;
   });
-  satSlider.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+  satSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
 // ─── Contrast row helpers ─────────────────────────────────────────────────────
@@ -658,17 +658,17 @@ function updateCustomSliderTracks() {
   const sSl = /** @type {HTMLInputElement} */ (document.getElementById('c-s-slider'));
   const lSl = /** @type {HTMLInputElement} */ (document.getElementById('c-l-slider'));
 
-  rSl.style.background = `linear-gradient(to right,${toHex(0,cG,cB)},${toHex(255,cG,cB)})`;
-  gSl.style.background = `linear-gradient(to right,${toHex(cR,0,cB)},${toHex(cR,255,cB)})`;
-  bSl.style.background = `linear-gradient(to right,${toHex(cR,cG,0)},${toHex(cR,cG,255)})`;
+  rSl.style.backgroundImage = `linear-gradient(to right,${toHex(0,cG,cB)},${toHex(255,cG,cB)})`;
+  gSl.style.backgroundImage = `linear-gradient(to right,${toHex(cR,0,cB)},${toHex(cR,255,cB)})`;
+  bSl.style.backgroundImage = `linear-gradient(to right,${toHex(cR,cG,0)},${toHex(cR,cG,255)})`;
 
   const hStops = Array.from({ length: 13 }, (_, i) => {
     const h = i * 30;
     return `${toHex(...hslToRgb(h, cS, cL))} ${Math.round(i / 12 * 100)}%`;
   });
-  hSl.style.background = `linear-gradient(to right,${hStops.join(',')})`;
-  sSl.style.background = `linear-gradient(to right,${toHex(...hslToRgb(cH,0,cL))},${toHex(...hslToRgb(cH,1,cL))})`;
-  lSl.style.background = `linear-gradient(to right,${toHex(...hslToRgb(cH,cS,0))},${toHex(...hslToRgb(cH,cS,0.5))},${toHex(...hslToRgb(cH,cS,1))})`;
+  hSl.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
+  sSl.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(cH,0,cL))},${toHex(...hslToRgb(cH,1,cL))})`;
+  lSl.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(cH,cS,0))},${toHex(...hslToRgb(cH,cS,0.5))},${toHex(...hslToRgb(cH,cS,1))})`;
 }
 
 /** Sync all custom controls EXCEPT the hex text input (safe while user is typing). */
@@ -1121,11 +1121,7 @@ document.addEventListener('click', e => {
   }
 
   function updateSatSliderBg(hue) {
-    uiSatSlider.style.setProperty(
-      'background',
-      `linear-gradient(to right, hsl(${hue},0%,55%), hsl(${hue},75%,55%))`,
-      'important'
-    );
+    uiSatSlider.style.backgroundImage = `linear-gradient(to right, hsl(${hue},0%,55%), hsl(${hue},75%,55%))`;
   }
 
   // Restore saved values (CSS vars already applied via head script; just sync UI)
@@ -1242,6 +1238,50 @@ syncCustomUI();
 updateUI();
 renderCustomWheel();
 applyCustomModeTabs(customMode);
+
+// ─── Mobile slider touch fix ──────────────────────────────────────────────────
+// On touch devices the browser may start a page scroll before the native range
+// input can claim the gesture. This directional-lock handler intercepts touchmove
+// on each slider: if the first significant movement is horizontal it takes over
+// and prevents the scroll; if vertical it steps aside and lets the page scroll.
+function addSliderTouchFix(slider) {
+  let startX = 0, startY = 0, active = false, decided = false;
+
+  slider.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    active = true;
+    decided = false;
+  }, { passive: true });
+
+  slider.addEventListener('touchmove', e => {
+    if (!active) return;
+    const adx = Math.abs(e.touches[0].clientX - startX);
+    const ady = Math.abs(e.touches[0].clientY - startY);
+
+    if (!decided && (adx > 4 || ady > 4)) {
+      decided = true;
+      if (ady > adx) { active = false; return; } // vertical → let browser scroll
+    }
+    if (!active) return;
+
+    e.preventDefault();
+    const rect = slider.getBoundingClientRect();
+    const min = +slider.min, max = +slider.max, step = +(slider.step) || 1;
+    const ratio = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+    const val = Math.max(min, Math.min(max, Math.round((min + ratio * (max - min)) / step) * step));
+    if (+slider.value !== val) {
+      slider.value = String(val);
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, { passive: false });
+
+  const reset = () => { active = false; decided = false; };
+  slider.addEventListener('touchend', reset);
+  slider.addEventListener('touchcancel', reset);
+}
+
+document.querySelectorAll('input[type="range"]').forEach(addSliderTouchFix);
 
 // ─── Share buttons ────────────────────────────────────────────────────────────
 

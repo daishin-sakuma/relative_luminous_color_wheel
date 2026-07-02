@@ -233,8 +233,12 @@ input[type="range"] {
   border-radius: 3px;
   outline: none;
   cursor: pointer;
-  background: linear-gradient(to right, #000, #fff);
-  transition: background 0.12s;
+  background-image: linear-gradient(to right, #000, #fff);
+  background-color: transparent;
+  background-size: 100% 5px;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: background-image 0.12s;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -258,6 +262,21 @@ input[type="range"]::-moz-range-thumb {
   background: var(--text);
   border: 2px solid var(--ground);
   cursor: pointer;
+}
+
+/* ── Mobile: larger touch area + thumb ──────────────────────────────────────── */
+@media (pointer: coarse) {
+  input[type="range"] {
+    height: 28px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+  }
 }
 
 /* ── Swatch + data row wrapper ──────────────────────────────────────────────── */
@@ -427,7 +446,7 @@ input[type="range"]::-moz-range-thumb {
 .custom-hex-copy-icon.hex-copied::after { content: '✓'; }
 
 .custom-gray-slider {
-  background: linear-gradient(to right, #000, #fff) !important;
+  background-image: linear-gradient(to right, #000, #fff) !important;
 }
 
 .custom-slider-group {
@@ -846,11 +865,11 @@ input.custom-val:focus {
 }
 
 #ui-brightness-slider {
-  background: linear-gradient(to right, #000, #fff) !important;
+  background-image: linear-gradient(to right, #000, #fff) !important;
 }
 
 #ui-hue-slider {
-  background: linear-gradient(to right,
+  background-image: linear-gradient(to right,
     hsl(0,70%,55%), hsl(30,70%,55%), hsl(60,70%,55%), hsl(90,70%,55%),
     hsl(120,70%,55%), hsl(150,70%,55%), hsl(180,70%,55%), hsl(210,70%,55%),
     hsl(240,70%,55%), hsl(270,70%,55%), hsl(300,70%,55%), hsl(330,70%,55%),
