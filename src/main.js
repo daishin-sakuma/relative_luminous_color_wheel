@@ -1246,6 +1246,7 @@ const SHARE_TITLE = 'Relative Luminous Color Wheel';
 
 document.querySelectorAll('.preview-share-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
+    btn.focus();
     try {
       if (navigator.share) {
         await navigator.share({ title: SHARE_TITLE, url: SHARE_URL });
