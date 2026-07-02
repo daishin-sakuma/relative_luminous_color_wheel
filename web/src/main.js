@@ -1237,4 +1237,26 @@ syncSliders();
 syncCustomUI();
 updateUI();
 renderCustomWheel();
+
+// ─── Share buttons ─────────────────────────────────────────────────────────────
+
+const SHARE_URL   = 'https://relative-luminous-color-wheel.vercel.app/';
+const SHARE_TITLE = 'Relative Luminous Color Wheel';
+
+document.querySelectorAll('.preview-share-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: SHARE_TITLE, url: SHARE_URL });
+      } else {
+        await navigator.clipboard.writeText(SHARE_URL);
+        const label = btn.querySelector('.preview-share-label');
+        const prev  = label.textContent;
+        label.textContent = 'Copied!';
+        btn.classList.add('shared');
+        setTimeout(() => { label.textContent = prev; btn.classList.remove('shared'); }, 2000);
+      }
+    } catch (_) { /* user cancelled or permission denied */ }
+  });
+});
 applyCustomModeTabs(customMode);
