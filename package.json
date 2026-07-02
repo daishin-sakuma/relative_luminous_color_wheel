@@ -1,0 +1,45 @@
+{
+  "name": "relative-luminous-color-wheel",
+  "version": "1.2.0",
+  "description": "WCAG 2.2 relative luminance color wheel — every color on the wheel shares the same perceptual luminance",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev":          "vite",
+    "build":        "vite build",
+    "preview":      "vite preview",
+    "electron:dev": "vite build && electron .",
+    "dist:mac":     "vite build && electron-builder --mac",
+    "dist:win":     "vite build && electron-builder --win",
+    "dmg:mac":      "hdiutil create -volname \"Relative Luminous Color Wheel\" -srcfolder \"release/mac/Relative Luminous Color Wheel.app\" -ov -format UDZO \"release/Relative Luminous Color Wheel-1.2.0.dmg\" && hdiutil create -volname \"Relative Luminous Color Wheel\" -srcfolder \"release/mac-arm64/Relative Luminous Color Wheel.app\" -ov -format UDZO \"release/Relative Luminous Color Wheel-1.2.0-arm64.dmg\""
+  },
+  "build": {
+    "appId": "dev.mutex.relative-luminance-color-wheel",
+    "productName": "Relative Luminous Color Wheel",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "electron/assets/Icon-iOS-Default-1024x1024@1x.png",
+      "target": [
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "win": {
+      "icon": "electron/assets/Icon-iOS-Default-1024x1024@1x.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^36.0.0",
+    "electron-builder": "^25.0.0",
+    "vite": "^5.4.0"
+  }
+}

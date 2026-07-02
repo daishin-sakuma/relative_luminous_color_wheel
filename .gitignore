@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+web/node_modules/
+relative_luminous_color_wheel/node_modules/
+
+# Build output
+dist/
+web/dist/
+relative_luminous_color_wheel/dist/
+
+# Electron release artifacts
+release/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# Electron local environment (has its own git repo)
+relative_luminous_color_wheel/
