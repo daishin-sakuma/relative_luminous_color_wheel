@@ -876,9 +876,9 @@ input.custom-val:focus {
   height: 1.0rem;
   background: var(--border);
   border-radius: 0.5rem;
-  border: 1px solid transparent;
+  border: 1px solid var(--muted);
   position: relative;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
 }
 .toggle-thumb {
   position: absolute;
@@ -886,21 +886,22 @@ input.custom-val:focus {
   left: 0.125rem;
   width: 0.625rem;
   height: 0.625rem;
-  background: var(--muted);
+  background: var(--text);
   border-radius: 50%;
   transition: transform 0.2s, background 0.2s;
 }
 .toggle-switch input:checked + .toggle-track {
   background: var(--text);
   border-color: transparent;
+  opacity: 0.75;
 }
 .toggle-switch input:checked + .toggle-track .toggle-thumb {
   transform: translateX(1.0rem);
   background: var(--ground);
 }
-.toggle-switch:hover .toggle-track              { border-color: var(--muted); }
-.toggle-switch:hover .toggle-thumb              { background: var(--text); }
-.toggle-switch:hover input:checked + .toggle-track { opacity: 0.75; }
+.toggle-switch:hover .toggle-track              { border-color: transparent; }
+.toggle-switch:hover .toggle-thumb              { background: var(--muted); }
+.toggle-switch:hover input:checked + .toggle-track { opacity: 1; }
 .toggle-switch:focus-within .toggle-track       { outline: 2px solid var(--muted); outline-offset: 2px; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
