@@ -394,6 +394,25 @@ function renderPreviewWcag(el, l1, l2, bgLum) {
     { label: 'Large · UI', thresholds: [['AA', 3],   ['AAA', 4.5]] },
   ];
 
+  // lum(#5dde8a) ≈ 0.586 (bright green),  lum(#1a7a42) ≈ 0.057 (dark green)
+  const LUM_BRIGHT = 0.586, LUM_DARK = 0.057;
+  const cr = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const crBright = cr(bgLum, LUM_BRIGHT);
+  const crDark   = cr(bgLum, LUM_DARK);
+
+  // Text: use green when it achieves ≥4.5:1; otherwise fall back to black/white
+  // (isLight ≡ bgLum > 0.179 ≡ black gives more contrast than white)
+  const passColor = crBright >= 4.5 ? '#5dde8a'
+                  : crDark   >= 4.5 ? '#1a7a42'
+                  : isLight          ? '#000000'
+                  :                    '#ffffff';
+
+  // Border/bg: always use whichever green has more contrast against tile bg
+  const useBrightStyle = crBright >= crDark;
+  const passBorder = useBrightStyle ? 'rgba(93,222,138,0.45)' : 'rgba(26,122,66,0.45)';
+  const passBg     = useBrightStyle ? 'rgba(93,222,138,0.10)' : 'rgba(26,122,66,0.10)';
+  const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
+
   for (const { label, thresholds } of CATEGORIES) {
     const row = document.createElement('div');
     row.className = 'preview-wcag-row';
@@ -410,13 +429,15 @@ function renderPreviewWcag(el, l1, l2, bgLum) {
       b.className = 'preview-badge';
       b.textContent = badge;
       if (pass) {
-        b.style.color       = isLight ? '#1a6b38' : '#5dde8a';
-        b.style.borderColor = isLight ? 'rgba(26,107,56,0.35)' : 'rgba(93,222,138,0.3)';
-        b.style.background  = isLight ? 'rgba(26,107,56,0.08)' : 'rgba(93,222,138,0.1)';
+        b.style.color       = passColor;
+        b.style.borderColor = passBorder;
+        b.style.background  = passBg;
+        b.style.boxShadow   = passRing;
       } else {
         b.style.color       = isLight ? 'rgba(0,0,0,0.3)'   : 'rgba(255,255,255,0.3)';
         b.style.borderColor = isLight ? 'rgba(0,0,0,0.12)'  : 'rgba(255,255,255,0.12)';
         b.style.background  = isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)';
+        b.style.boxShadow   = 'none';
       }
       row.appendChild(b);
     }
@@ -1216,13 +1237,16 @@ document.addEventListener('click', e => {
 {
   const stripHashCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('strip-hash-checkbox'));
   try {
-    if (localStorage.getItem('pref-strip-hash') === '1') {
-      stripHash = true;
-      stripHashCheckbox.checked = true;
+    const stored = localStorage.getItem('pref-strip-hash');
+    if (stored !== null) {
+      // '1' = old opt-in to strip → new checkbox unchecked; '0' = include → checked
+      stripHash = stored === '1';
+      stripHashCheckbox.checked = !stripHash;
     }
+    // No stored value: HTML default (checked) applies, stripHash stays false
   } catch(e) {}
   stripHashCheckbox.addEventListener('change', () => {
-    stripHash = stripHashCheckbox.checked;
+    stripHash = !stripHashCheckbox.checked;
     try { localStorage.setItem('pref-strip-hash', stripHash ? '1' : '0'); } catch(e) {}
     updateUI();
     syncCustomUI();
@@ -1568,29 +1592,40 @@ document.querySelectorAll('.preview-share-btn').forEach(btn => {
     } catch (_) { /* cancelled or denied */ }
   });
 });
+/**
+ * Open a URL in a new tab using an anchor click rather than window.open,
+ * so iOS Safari treats it as a user-initiated navigation and reliably
+ * hands off to registered Universal Link / App Link handlers.
+ * @param {string} url
+ */
+function openShareLink(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 document.querySelectorAll('.preview-platform-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', () => {
     const platform = btn.dataset.platform;
     const shareUrl = buildShareUrl();
     if (platform === 'x') {
-      window.open(
-        'https://twitter.com/intent/tweet?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(SHARE_TITLE),
-        '_blank', 'noopener'
+      // x.com is the canonical domain; the X app registers it as a Universal Link
+      openShareLink(
+        'https://x.com/intent/tweet?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(SHARE_TITLE)
       );
     } else if (platform === 'line') {
-      window.open(
-        'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(shareUrl),
-        '_blank', 'noopener'
+      // line.me/R/share is LINE's Universal Link — opens native app directly on iOS/Android
+      openShareLink(
+        'https://line.me/R/share?text=' + encodeURIComponent(SHARE_TITLE + '\n' + shareUrl)
       );
     } else if (platform === 'pinterest') {
-      window.open(
-        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(shareUrl) + '&description=' + encodeURIComponent(SHARE_TITLE),
-        '_blank', 'noopener'
-      );
-    } else if (platform === 'linkedin') {
-      window.open(
-        'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl),
-        '_blank', 'noopener'
+      // pinterest.com is registered as a Universal Link by the Pinterest app
+      openShareLink(
+        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(shareUrl) + '&description=' + encodeURIComponent(SHARE_TITLE)
       );
     }
   });
