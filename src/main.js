@@ -1176,7 +1176,6 @@ customHexInput.addEventListener('input', () => {
 const customHexCopyIcon = /** @type {HTMLElement} */ (document.getElementById('custom-hex-copy-icon'));
 
 function doCopyCustomHex() {
-  customHexInput.select();
   const raw = /^#/i.test(customHexInput.value) ? customHexInput.value : '#' + customHexInput.value;
   copyToClipboard(formatHex(raw));
   customHexInput.classList.add('hex-copied');
