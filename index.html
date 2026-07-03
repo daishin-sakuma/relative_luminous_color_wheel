@@ -14,8 +14,9 @@
   <link rel="canonical" href="https://relative-luminous-color-wheel.vercel.app/">
 
   <!-- Open Graph (Facebook, LINE, general SNS) -->
+  <!-- og:url intentionally omitted: scrapers use the actual request URL (including
+       color-state query params), so each shared state gets its own fresh OGP cache. -->
   <meta property="og:type"         content="website">
-  <meta property="og:url"          content="https://relative-luminous-color-wheel.vercel.app/">
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
   <meta property="og:title"        content="Relative Luminous Color Wheel">
@@ -64,7 +65,7 @@
 <header>
   <span class="wordmark">Relative Luminous Color Wheel</span>
   <div class="header-right">
-    <span class="app-version">ver. 1.6.2</span>
+    <span class="app-version">ver. 1.6.3</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
