@@ -1622,9 +1622,12 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
         'https://line.me/R/share?text=' + encodeURIComponent(SHARE_TITLE + '\n' + shareUrl)
       );
     } else if (platform === 'pinterest') {
-      // pinterest.com is registered as a Universal Link by the Pinterest app
+      // media= must be explicit; Pinterest cannot scrape images from this SPA
+      const OGP_IMAGE = 'https://relative-luminous-color-wheel.vercel.app/ogp.png';
       openShareLink(
-        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(shareUrl) + '&description=' + encodeURIComponent(SHARE_TITLE)
+        'https://pinterest.com/pin/create/button/?url=' + encodeURIComponent(shareUrl) +
+        '&media=' + encodeURIComponent(OGP_IMAGE) +
+        '&description=' + encodeURIComponent(SHARE_TITLE)
       );
     }
   });
