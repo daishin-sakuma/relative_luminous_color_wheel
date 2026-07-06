@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Luminance Color Wheel — Color Picker &amp; WCAG 2.2 Contrast Tool</title>
+  <title>Relative Luminance Color Wheel — WCAG 2.2 Contrast Checker &amp; Color Picker</title>
 
   <!-- SEO -->
-  <meta name="description" content="Color wheel &amp; color picker where every hue shares equal luminance. Pick accessible web colors and check WCAG 2.2 AA/AAA contrast ratios in real time.">
-  <meta name="keywords" content="color wheel, color picker, luminance color wheel, WCAG 2.2, WCAG contrast checker, accessible color picker, contrast ratio, web design colors, equal luminance, HSL color picker, AA, AAA, color contrast, accessibility">
+  <meta name="description" content="Free color wheel where every hue shares equal relative luminance — pick accessible web colors and verify WCAG 2.2 AA/AAA contrast ratios in real time.">
+  <meta name="keywords" content="color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG contrast checker, WCAG contrast ratio checker, accessible color picker, contrast ratio, web design colors, equal luminance, HSL color picker, hex color picker, AA, AAA, color contrast, accessibility, color accessibility tool, relative luminance calculator, web accessibility colors, free color picker online">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212">
@@ -60,13 +60,44 @@
     } catch(e) { document.documentElement.dataset.theme = 'dark'; }
   </script>
   <meta name="google-site-verification" content="pVRFM7bCfKvQV0zh60Ucitax5O17wD_4SALwzEsgjv4" />
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Relative Luminous Color Wheel",
+    "url": "https://relative-luminous-color-wheel.vercel.app/",
+    "description": "Free online color wheel where every hue shares equal relative luminance. Pick accessible web colors and check WCAG 2.2 AA/AAA contrast ratios in real time.",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Equal relative luminance color wheel",
+      "WCAG 2.2 AA/AAA contrast ratio checker",
+      "Accessible color picker",
+      "HSL and HEX color values",
+      "Custom color comparison",
+      "Shareable color state via URL"
+    ],
+    "author": {
+      "@type": "Person",
+      "name": "Daishin Sakuma"
+    },
+    "image": "https://relative-luminous-color-wheel.vercel.app/ogp.png"
+  }
+  </script>
 </head>
 <body>
 
 <header>
-  <span class="wordmark">Relative Luminous Color Wheel</span>
+  <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.6.6</span>
+    <span class="app-version">ver. 1.6.7</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -122,7 +153,7 @@
   </div>
 </header>
 
-<div class="app-body">
+<main class="app-body">
 
   <!-- ── Left: Wheel + Color info ──────────────────────────────────────────────── -->
   <div class="col-left">
@@ -447,9 +478,9 @@
 
   </div>
 
-</div>
+</main>
 
-<span class="copyright"><a href="https://fxx.huruike.com/projects/relative-luminous-color-wheel.html" target="_blank" rel="noopener noreferrer">MIT © Daishin Sakuma.</a></span>
+<footer class="copyright"><a href="https://fxx.huruike.com/projects/relative-luminous-color-wheel.html" target="_blank" rel="noopener noreferrer">MIT © Daishin Sakuma.</a></footer>
 
 <script type="module" src="/src/main.js"></script>
 </body>

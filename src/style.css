@@ -109,7 +109,9 @@ header {
 .theme-toggle:active { transform: scale(0.86); opacity: 0.9; }
 
 .wordmark {
+  margin: 0;
   font-size: clamp(0.5rem, 3.2vw, 0.86rem);
+  font-weight: normal;
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--muted);
