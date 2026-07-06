@@ -605,6 +605,29 @@ let shareState = true;
 /** Format a #rrggbb hex string according to the current stripHash preference. */
 function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
 
+// ─── RAF render scheduler ─────────────────────────────────────────────────────
+// iOS fires slider input events well above 60 Hz. Without throttling, each
+// event runs renderCustomWheel() (~17 k hslToRgb calls) + three slider-track
+// updates synchronously, saturating the main thread and causing visible jank.
+// scheduleRender() coalesces all rapid events into one render per animation frame.
+let _rafId = null;
+let _pendingWheelDraw = false;
+let _pendingCustomSync = false;
+
+function _renderFrame() {
+  _rafId = null;
+  if (_pendingWheelDraw)  { drawWheel(targetLum); _pendingWheelDraw  = false; }
+  if (_pendingCustomSync) { syncCustomUI();        _pendingCustomSync = false; }
+  updateUI();
+}
+
+function scheduleRender(redrawWheel, syncCustom) {
+  if (redrawWheel)  _pendingWheelDraw  = true;
+  if (syncCustom)   _pendingCustomSync = true;
+  if (_rafId !== null) return;
+  _rafId = requestAnimationFrame(_renderFrame);
+}
+
 // ─── Custom color wheel ───────────────────────────────────────────────────────
 
 const CW_CSS = 148;
@@ -856,16 +879,14 @@ function setCustomFromRgb(r, g, b) {
   cB = Math.round(Math.max(0, Math.min(255, b)));
   const [h, s, l] = rgbToHsl(cR, cG, cB);
   cH = h; cS = s; cL = l;
-  syncCustomUI();
-  updateUI();
+  scheduleRender(false, true);
 }
 
 function setCustomFromHsl(h, s, l) {
   cH = h; cS = s; cL = l;
   const [r, g, b] = hslToRgb(cH, cS, cL);
   cR = r; cG = g; cB = b;
-  syncCustomUI();
-  updateUI();
+  scheduleRender(false, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -909,7 +930,7 @@ function handlePointer(e) {
   selHue = ((angle * 180 / Math.PI) + 360) % 360;
 
   syncSliders();
-  updateUI();
+  scheduleRender();
   try {
     localStorage.setItem('sel-hue', String(selHue));
     localStorage.setItem('sel-sat', String(selSat));
@@ -940,8 +961,7 @@ const satValEl  = /** @type {HTMLInputElement} */ (document.getElementById('sat-
 lumSlider.addEventListener('input', () => {
   targetLum = lumSlider.value / 1000;
   if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-  drawWheel(targetLum);
-  updateUI();
+  scheduleRender(true);
   try { localStorage.setItem('sel-lum', String(targetLum)); } catch(e) {}
 });
 
@@ -949,7 +969,7 @@ hueSlider.addEventListener('input', () => {
   selHue = parseFloat(hueSlider.value);
   setUnitVal(hueValEl, Math.round(selHue), '°');
   updateMarkerPosition();
-  updateUI();
+  scheduleRender();
   try { localStorage.setItem('sel-hue', String(selHue)); } catch(e) {}
 });
 
@@ -957,7 +977,7 @@ satSlider.addEventListener('input', () => {
   selSat = satSlider.value / 100;
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
   updateMarkerPosition();
-  updateUI();
+  scheduleRender();
   try { localStorage.setItem('sel-sat', String(selSat)); } catch(e) {}
 });
 
@@ -966,32 +986,32 @@ satSlider.addEventListener('input', () => {
 document.getElementById('c-r-slider').addEventListener('input', e => {
   cR = +/** @type {HTMLInputElement} */ (e.target).value;
   [cH, cS, cL] = rgbToHsl(cR, cG, cB);
-  syncCustomUI(); updateUI();
+  scheduleRender(false, true);
 });
 document.getElementById('c-g-slider').addEventListener('input', e => {
   cG = +/** @type {HTMLInputElement} */ (e.target).value;
   [cH, cS, cL] = rgbToHsl(cR, cG, cB);
-  syncCustomUI(); updateUI();
+  scheduleRender(false, true);
 });
 document.getElementById('c-b-slider').addEventListener('input', e => {
   cB = +/** @type {HTMLInputElement} */ (e.target).value;
   [cH, cS, cL] = rgbToHsl(cR, cG, cB);
-  syncCustomUI(); updateUI();
+  scheduleRender(false, true);
 });
 document.getElementById('c-h-slider').addEventListener('input', e => {
   cH = +/** @type {HTMLInputElement} */ (e.target).value;
   [cR, cG, cB] = hslToRgb(cH, cS, cL);
-  syncCustomUI(); updateUI();
+  scheduleRender(false, true);
 });
 document.getElementById('c-s-slider').addEventListener('input', e => {
   cS = +/** @type {HTMLInputElement} */ (e.target).value / 100;
   [cR, cG, cB] = hslToRgb(cH, cS, cL);
-  syncCustomUI(); updateUI();
+  scheduleRender(false, true);
 });
 document.getElementById('c-l-slider').addEventListener('input', e => {
   cL = +/** @type {HTMLInputElement} */ (e.target).value / 100;
   [cR, cG, cB] = hslToRgb(cH, cS, cL);
-  syncCustomUI(); updateUI();
+  scheduleRender(false, true);
 });
 
 // Grayscale slider
@@ -1026,54 +1046,54 @@ document.getElementById('cu-hue-slider').addEventListener('input', e => {
 wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
   targetLum = v;
   lumSlider.value = String(Math.round(v * 1000));
-  drawWheel(targetLum); updateUI();
+  scheduleRender(true);
   try { localStorage.setItem('sel-lum', String(targetLum)); } catch(e) {}
 });
 
 wireValInput(hueValEl, 0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°', v => {
   selHue = v;
   hueSlider.value = String(v);
-  updateMarkerPosition(); updateUI();
+  updateMarkerPosition(); scheduleRender();
   try { localStorage.setItem('sel-hue', String(selHue)); } catch(e) {}
 }, true);
 
 wireValInput(satValEl, 0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%', v => {
   selSat = v / 100;
   satSlider.value = String(v);
-  updateMarkerPosition(); updateUI();
+  updateMarkerPosition(); scheduleRender();
   try { localStorage.setItem('sel-sat', String(selSat)); } catch(e) {}
 });
 
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-r-val')),
   0, 255, 1, str => Math.round(parseFloat(str)), String,
-  v => { cR = v; /** @type {HTMLInputElement} */ (document.getElementById('c-r-slider')).value = String(v); [cH, cS, cL] = rgbToHsl(cR, cG, cB); syncCustomUI(); updateUI(); }
+  v => { cR = v; /** @type {HTMLInputElement} */ (document.getElementById('c-r-slider')).value = String(v); [cH, cS, cL] = rgbToHsl(cR, cG, cB); scheduleRender(false, true); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-g-val')),
   0, 255, 1, str => Math.round(parseFloat(str)), String,
-  v => { cG = v; /** @type {HTMLInputElement} */ (document.getElementById('c-g-slider')).value = String(v); [cH, cS, cL] = rgbToHsl(cR, cG, cB); syncCustomUI(); updateUI(); }
+  v => { cG = v; /** @type {HTMLInputElement} */ (document.getElementById('c-g-slider')).value = String(v); [cH, cS, cL] = rgbToHsl(cR, cG, cB); scheduleRender(false, true); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-b-val')),
   0, 255, 1, str => Math.round(parseFloat(str)), String,
-  v => { cB = v; /** @type {HTMLInputElement} */ (document.getElementById('c-b-slider')).value = String(v); [cH, cS, cL] = rgbToHsl(cR, cG, cB); syncCustomUI(); updateUI(); }
+  v => { cB = v; /** @type {HTMLInputElement} */ (document.getElementById('c-b-slider')).value = String(v); [cH, cS, cL] = rgbToHsl(cR, cG, cB); scheduleRender(false, true); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-h-val')),
   0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°',
-  v => { cH = v; /** @type {HTMLInputElement} */ (document.getElementById('c-h-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); syncCustomUI(); updateUI(); },
+  v => { cH = v; /** @type {HTMLInputElement} */ (document.getElementById('c-h-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); scheduleRender(false, true); },
   true
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-s-val')),
   0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%',
-  v => { cS = v / 100; /** @type {HTMLInputElement} */ (document.getElementById('c-s-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); syncCustomUI(); updateUI(); }
+  v => { cS = v / 100; /** @type {HTMLInputElement} */ (document.getElementById('c-s-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); scheduleRender(false, true); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-l-val')),
   0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%',
-  v => { cL = v / 100; /** @type {HTMLInputElement} */ (document.getElementById('c-l-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); syncCustomUI(); updateUI(); }
+  v => { cL = v / 100; /** @type {HTMLInputElement} */ (document.getElementById('c-l-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); scheduleRender(false, true); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-gray-val')),
@@ -1123,8 +1143,7 @@ function setCustomMode(mode) {
       cuHue = cH;
       cuSat = cS;
     }
-    syncCustomUI();
-    updateUI();
+    scheduleRender(false, true);
     applyCustomModeTabs(mode);
     return;
   }
@@ -1152,8 +1171,6 @@ function setCustomMode(mode) {
       cuSat = cS;
     }
   }
-  syncCustomUI();
-  updateUI();
   applyCustomModeTabs(mode);
 }
 
@@ -1169,8 +1186,7 @@ customHexInput.addEventListener('input', () => {
     const [r, g, b] = hexToRgb(val);
     cR = r; cG = g; cB = b;
     [cH, cS, cL] = rgbToHsl(r, g, b);
-    syncCustomControls(); // not syncCustomUI — keeps cursor in hex input
-    updateUI();
+    scheduleRender(false, true);
   }
 });
 const customHexCopyIcon = /** @type {HTMLElement} */ (document.getElementById('custom-hex-copy-icon'));

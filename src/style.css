@@ -246,7 +246,6 @@ input[type="range"] {
   background-size: 100% 5px;
   background-position: center;
   background-repeat: no-repeat;
-  transition: background-image 0.12s;
 }
 
 input[type="range"]::-webkit-slider-thumb {
