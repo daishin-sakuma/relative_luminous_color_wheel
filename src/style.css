@@ -109,10 +109,11 @@ header {
 .theme-toggle:active { transform: scale(0.86); opacity: 0.9; }
 
 .wordmark {
-  font-size: 0.80rem;
+  font-size: clamp(0.5rem, 3.2vw, 0.86rem);
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 
@@ -1026,7 +1027,6 @@ input.custom-val:focus {
   .custom-mini-swatch { width: 100%; height: auto; }
   .preview-body { font-size: 0.85rem; }
   .preview-small { font-size: 0.70rem; }
-  .wordmark { font-size: 0.68rem; letter-spacing: 0.12em; }
   .header-right { gap: 0.6rem; }
 }
 
@@ -1034,7 +1034,6 @@ input.custom-val:focus {
 @media (max-width: 400px) {
   body { padding: 1rem 0.75rem 1.5rem; }
   .preview-tiles { grid-template-columns: 1fr; }
-  .wordmark { font-size: 0.58rem; letter-spacing: 0.06em; }
   .app-version { font-size: 0.62rem; letter-spacing: 0.06em; }
   .header-right { gap: 0.35rem; }
 }
