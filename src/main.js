@@ -686,16 +686,18 @@ function scheduleRender(redrawWheel, syncCustom) {
 let _skipEnforceOnce = false;
 
 /**
- * Nearest luminance for the free side that reaches `ratio` against `fixedLum`,
- * or null when neither direction can reach it (possible for 7:1 when
+ * Most moderate luminance for the free side that reaches `ratio` against
+ * `fixedLum`. Both boundary values meet the ratio exactly, so prefer the one
+ * closer to mid luminance (0.5) — never white/black when a calmer color works.
+ * Returns null when neither direction can reach it (possible for 7:1 when
  * 0.1 < fixedLum < 0.3, since max contrast is capped by white and black).
  */
-function solveContrastLum(fixedLum, currentLum, ratio) {
+function solveContrastLum(fixedLum, ratio) {
   const hi = ratio * (fixedLum + 0.05) - 0.05; // free side lighter than fixed
   const lo = (fixedLum + 0.05) / ratio - 0.05; // free side darker than fixed
   const canHi = hi <= 1, canLo = lo >= 0;
   if (!canHi && !canLo) return null;
-  if (canHi && canLo) return Math.abs(hi - currentLum) <= Math.abs(currentLum - lo) ? hi : lo;
+  if (canHi && canLo) return Math.abs(hi - 0.5) <= Math.abs(lo - 0.5) ? hi : lo;
   return canHi ? hi : lo;
 }
 
@@ -711,38 +713,44 @@ function enforceContrastLock(changed) {
   const l = findLightness(selHue, selSat, targetLum);
   const fgLum = relativeLuminance(...hslToRgb(selHue, selSat, l));
   const bgLum = relativeLuminance(cR, cG, cB);
-  if (contrastRatio(fgLum, bgLum) >= R) { setContrastLockError(''); return; }
+  const fixedLum = changed === 'fg' ? fgLum : bgLum;
+  const freeLum  = changed === 'fg' ? bgLum : fgLum;
 
-  // Overshoot slightly so integer-RGB rounding can't land just below target
+  const solved = solveContrastLum(fixedLum, R);
+  if (solved === null) {
+    setContrastLockError(changed === 'fg'
+      ? `${R}:1 is unreachable against this luminance — no background can satisfy it.`
+      : `${R}:1 is unreachable against this luminance — no wheel color can satisfy it.`);
+    return;
+  }
+
+  // The free side is always pinned to the boundary (exactly the target ratio),
+  // overshot slightly away from the fixed side so integer-RGB rounding can't
+  // land just below target.
   const EPS = 0.004;
+  const desired = Math.max(0, Math.min(1, solved + (solved > fixedLum ? EPS : -EPS)));
 
+  // Already pinned (within rounding) and satisfying → nothing to do
+  if (Math.abs(freeLum - desired) <= 0.008 && contrastRatio(fgLum, bgLum) >= R) {
+    setContrastLockError('');
+    return;
+  }
+
+  _skipEnforceOnce = true;
   if (changed === 'fg') {
-    const solved = solveContrastLum(fgLum, bgLum, R);
-    if (solved === null) {
-      setContrastLockError(`${R}:1 is unreachable against this luminance — no background can satisfy it.`);
-      return;
-    }
-    const newLum = Math.max(0, Math.min(1, solved + (solved > bgLum ? EPS : -EPS)));
-    _skipEnforceOnce = true;
     if (customMode === 'lum') {
-      setCustomFromLumHueSat(newLum, cuHue, cuSat);
+      setCustomFromLumHueSat(desired, cuHue, cuSat);
     } else if (customMode === 'gray') {
-      const v = Math.round(findLightness(0, 0, newLum) * 255);
+      const v = Math.round(findLightness(0, 0, desired) * 255);
       setCustomFromRgb(v, v, v);
     } else {
-      setCustomFromHsl(cH, cS, findLightness(cH, cS, newLum));
+      setCustomFromHsl(cH, cS, findLightness(cH, cS, desired));
     }
   } else {
-    const solved = solveContrastLum(bgLum, fgLum, R);
-    if (solved === null) {
-      setContrastLockError(`${R}:1 is unreachable against this luminance — no wheel color can satisfy it.`);
-      return;
-    }
-    targetLum = Math.max(0, Math.min(1, solved + (solved > fgLum ? EPS : -EPS)));
+    targetLum = desired;
     lumSlider.value = String(Math.round(targetLum * 1000));
     if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
     saveToStorage('sel-lum', String(targetLum));
-    _skipEnforceOnce = true;
     scheduleRender(true);
   }
   setContrastLockError('');
