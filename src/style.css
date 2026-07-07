@@ -114,12 +114,13 @@ header {
 
 /* ── 2-column app grid (desktop-first) ──────────────────────────────────────── */
 .app-body {
+  --wheel-col: 360px;
   width: 100%;
   /* Cap content width so tiles don't stretch absurdly on wide monitors;
      body's align-items:center keeps it centered */
   max-width: 1560px;
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: var(--wheel-col) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
@@ -1273,7 +1274,7 @@ body.beta-on .preview-apca { display: inline; }
 /* Tablet: shrink left column, stack color subgroups */
 @media (max-width: 1099px) {
   body { padding: 1rem 1.5rem; }
-  .app-body { grid-template-columns: 300px 1fr; gap: 1.25rem; }
+  .app-body { --wheel-col: 300px; gap: 1.25rem; }
   .wheel-wrap { width: 300px; height: 300px; }
   #wheel, #overlay { width: 300px; height: 300px; }
   .custom-color-subgroups { grid-template-columns: 1fr; }
@@ -1344,7 +1345,7 @@ body.beta-on .preview-apca { display: inline; }
 
 @media (min-width: 861px) and (max-height: 849px) {
   body { padding: 0.7rem 2rem 0.6rem; gap: 0.4rem; }
-  .app-body { grid-template-columns: 300px 1fr; gap: 1.25rem; }
+  .app-body { --wheel-col: 300px; gap: 1.25rem; }
   .col-left, .col-right { gap: 0.5rem; }
   .wheel-wrap { width: 300px; height: 300px; }
   #wheel, #overlay { width: 300px; height: 300px; }
@@ -1362,7 +1363,7 @@ body.beta-on .preview-apca { display: inline; }
 /* Even shorter windows (e.g. 1280×800 laptops with browser chrome) */
 @media (min-width: 861px) and (max-height: 769px) {
   body { padding: 0.5rem 2rem 0.45rem; gap: 0.45rem; }
-  .app-body { grid-template-columns: 280px 1fr; }
+  .app-body { --wheel-col: 280px; }
   .wheel-wrap { width: 280px; height: 280px; }
   #wheel, #overlay { width: 280px; height: 280px; }
   .swatch { height: 36px; }
@@ -1377,7 +1378,7 @@ body.beta-on .preview-apca { display: inline; }
 @media (min-width: 861px) and (max-height: 719px) {
   body { padding: 0.4rem 1.5rem 0.35rem; gap: 0.25rem; }
   header { padding: 0.3rem 0; }
-  .app-body { grid-template-columns: 250px 1fr; gap: 1rem; }
+  .app-body { --wheel-col: 250px; gap: 1rem; }
   .wheel-wrap { width: 250px; height: 250px; }
   #wheel, #overlay { width: 250px; height: 250px; }
   .about summary { padding: 0.05rem 0; font-size: 0.66rem; }
@@ -1399,9 +1400,71 @@ body.beta-on .preview-apca { display: inline; }
 /* ── Large displays: scale the wheel up (buffer is 420px × DPR, so 420px CSS
    stays pixel-perfect on Retina) ─────────────────────────────────────────── */
 @media (min-width: 1500px) and (min-height: 950px) {
-  .app-body { grid-template-columns: 420px 1fr; gap: 2rem; }
+  .app-body { --wheel-col: 420px; gap: 2rem; }
   .wheel-wrap { width: 420px; height: 420px; }
   #wheel, #overlay { width: 420px; height: 420px; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ── 3-column layout: palette joins as a third column when in use ─────────────
+   With colors pinned (section not [hidden]) and enough width, the palette
+   moves beside the contrast column so every feature — rail and matrix
+   included — is reachable without page scrolling. The matrix scrolls
+   internally when it outgrows the column. */
+@media (min-width: 1360px) {
+  .app-body:has(> .palette-section:not([hidden])) {
+    grid-template-columns: var(--wheel-col) minmax(0, 1fr) 300px;
+  }
+  .app-body:has(> .palette-section:not([hidden])) > .palette-section {
+    grid-column: 3;
+    grid-row: 1;
+    margin-top: 0;
+    min-height: 0;
+    max-height: calc(100vh - 130px);
+    overflow: hidden;
+  }
+  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-wrap {
+    flex: 1;
+    min-height: 0;
+  }
+  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-scroll {
+    overflow: auto;
+    min-height: 0;
+    max-height: 100%;
+    scrollbar-width: thin;
+  }
+  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+}
+
+/* Narrower 3-column windows: slim the palette column so the middle column's
+   tiles and custom panel don't wrap taller */
+@media (min-width: 1360px) and (max-width: 1499px) {
+  .app-body:has(> .palette-section:not([hidden])) {
+    grid-template-columns: var(--wheel-col) minmax(0, 1fr) 260px;
+  }
+}
+
+/* Short wide windows: compress both columns back into the height budget
+   (also compensates the 3-column mode's narrower middle column) */
+@media (min-width: 1360px) and (max-height: 719px) {
+  .col-left { gap: 0.3rem; }
+  .swatch { height: 26px; }
+  .data-cell { padding: 0.15rem 0.5rem; }
+  .lum-row { margin-bottom: 0.18rem; }
+  .col-right { gap: 0.3rem; }
+  .contrast-section { gap: 0.18rem; }
+  .preview-tile { padding: 0.34rem 0.7rem; gap: 0.14rem; }
+  .preview-display { font-size: 1.1rem; }
+  .custom-panel { padding: 0.38rem 0.75rem; gap: 0.5rem 1rem; }
+}
+
+/* Narrow + short (e.g. 1366×768 laptops): one notch tighter */
+@media (min-width: 1360px) and (max-width: 1439px) and (max-height: 719px) {
+  .preview-tile { padding: 0.3rem 0.65rem; gap: 0.1rem; }
+  .preview-display { font-size: 1rem; }
+  .preview-share-btn { padding: 0.18rem 0.5rem; }
+  .preview-platform-btn { padding: 0.18rem; }
+  .custom-panel { padding: 0.32rem 0.7rem; gap: 0.4rem 0.9rem; }
+}
