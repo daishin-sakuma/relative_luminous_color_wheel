@@ -1954,23 +1954,27 @@ function buildExport(format) {
   const sel    = { hex: toHex(r, g, b).toLowerCase(),    lum: relativeLuminance(r, g, b) };
   const custom = { hex: toHex(cR, cG, cB).toLowerCase(), lum: relativeLuminance(cR, cG, cB) };
   const ratio  = contrastRatio(sel.lum, custom.lum);
+  const pal = palette.map(hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
 
   if (format === 'css') {
+    const palLines = pal.map((c, i) =>
+      `  --color-palette-${i + 1}: ${c.hex};  /* relative luminance ${c.lum.toFixed(4)} */`);
     return `:root {
   /* contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
   --color-primary: ${sel.hex};    /* relative luminance ${sel.lum.toFixed(4)} */
   --color-secondary: ${custom.hex}; /* relative luminance ${custom.lum.toFixed(4)} */
-}
+${palLines.length ? palLines.join('\n') + '\n' : ''}}
 `;
   }
   if (format === 'tailwind') {
+    const palLines = pal.map((c, i) => `  --color-palette-${i + 1}: ${c.hex};`);
     return `@theme {
   --color-primary: ${sel.hex};
   --color-secondary: ${custom.hex};
-}
+${palLines.length ? palLines.join('\n') + '\n' : ''}}
 `;
   }
-  return JSON.stringify({
+  const json = {
     color: {
       primary:   { $type: 'color', $value: sel.hex },
       secondary: { $type: 'color', $value: custom.hex },
@@ -1982,7 +1986,14 @@ function buildExport(format) {
         contrastRatio:      +ratio.toFixed(2),
       },
     },
-  }, null, 2) + '\n';
+  };
+  if (pal.length) {
+    json.color.palette = Object.fromEntries(
+      pal.map((c, i) => [String(i + 1), { $type: 'color', $value: c.hex }]));
+    json.$extensions['relative-luminous-color-wheel'].paletteLuminances =
+      pal.map(c => +c.lum.toFixed(4));
+  }
+  return JSON.stringify(json, null, 2) + '\n';
 }
 
 {
