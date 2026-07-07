@@ -7,7 +7,7 @@
 
   <!-- SEO -->
   <meta name="description" content="Color scheme and palette picker for designers. Every hue shares equal relative luminance — build accessible UI themes and verify WCAG 2.2 AA/AAA contrast ratios.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG contrast checker, WCAG contrast ratio checker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, relative luminance calculator">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG contrast checker, WCAG contrast ratio checker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, design tokens export, Tailwind colors">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -119,7 +119,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.11.3</span>
+    <span class="app-version">ver. 1.12.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -184,6 +184,15 @@
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
+        <div class="settings-theme-row">
+          <span class="settings-row-label">Vision</span>
+          <div class="settings-theme-btns">
+            <button class="settings-theme-btn active" data-cvd="" title="Normal vision">None</button>
+            <button class="settings-theme-btn" data-cvd="protan" title="Protanopia (red-blind)">Prot</button>
+            <button class="settings-theme-btn" data-cvd="deutan" title="Deuteranopia (green-blind)">Deut</button>
+            <button class="settings-theme-btn" data-cvd="tritan" title="Tritanopia (blue-blind)">Trit</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -227,6 +236,17 @@
     <div class="swatch-data-row">
       <div class="swatch" id="swatch">
         <span class="swatch-hex copyable" id="swatch-hex">#808080</span>
+        <div class="export-wrap">
+          <button class="export-btn" id="export-btn" title="Export colors as CSS / Tailwind / JSON" aria-haspopup="true">
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M8.5 6 3.5 12l5 6 M15.5 6l5 6-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="export-panel" id="export-panel">
+            <span class="export-panel-label">Copy as</span>
+            <button class="export-option" data-format="css">CSS variables</button>
+            <button class="export-option" data-format="tailwind">Tailwind @theme</button>
+            <button class="export-option" data-format="json">Design tokens JSON</button>
+          </div>
+        </div>
       </div>
       <div class="data-grid">
         <div class="data-cell">
@@ -525,7 +545,60 @@
 
 </main>
 
+<section class="about">
+  <details>
+    <summary><h2>What is this? — a color wheel with locked WCAG contrast</h2></summary>
+    <div class="about-body">
+      <p>
+        The Relative Luminous Color Wheel is a free color picker and WCAG 2.2 contrast checker
+        built around one idea: <strong>every color on the wheel shares exactly the same relative
+        luminance</strong>. WCAG contrast ratios are computed from relative luminance alone, so any
+        color you pick from the wheel keeps the same contrast ratio against your chosen background —
+        change hue and saturation as much as you like, and an AA or AAA rating never breaks.
+      </p>
+      <h3>Why equal luminance matters</h3>
+      <p>
+        Traditional color pickers make you choose a color first and verify accessibility afterwards,
+        looping between the picker and a contrast checker until something passes. Here the order is
+        reversed: set the target relative luminance first, and the wheel redraws so that every
+        reachable color already satisfies it. Exploring accessible color stops being trial-and-error
+        and becomes a guarantee.
+      </p>
+      <h3>What you can do here</h3>
+      <ul>
+        <li>Pick accessible text and background colors for websites, apps, and design systems</li>
+        <li>Check WCAG 2.2 contrast ratios against white, black, or any custom color — AA (4.5:1) and AAA (7:1) for normal text, 3:1 / 4.5:1 for large text and UI components</li>
+        <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
+        <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
+        <li>Share your exact color state with a URL, or export it as CSS variables, Tailwind theme tokens, or design-tokens JSON</li>
+      </ul>
+      <h3>Who it's for</h3>
+      <p>
+        UI and visual designers choosing theme colors, front-end engineers implementing design
+        tokens, and accessibility specialists auditing color contrast. Everything runs locally in
+        your browser — no account, no upload, free to use.
+      </p>
+    </div>
+  </details>
+</section>
+
 <footer class="copyright"><a href="https://fxx.huruike.com/projects/relative-luminous-color-wheel.html" target="_blank" rel="noopener noreferrer">MIT © Daishin Sakuma.</a></footer>
+
+<!-- Color-vision-deficiency simulation filters (Machado et al. 2009, severity 1.0).
+     feColorMatrix operates in linearRGB, matching the matrices' color space. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="cvd-protan" color-interpolation-filters="linearRGB">
+      <feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0"/>
+    </filter>
+    <filter id="cvd-deutan" color-interpolation-filters="linearRGB">
+      <feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0"/>
+    </filter>
+    <filter id="cvd-tritan" color-interpolation-filters="linearRGB">
+      <feColorMatrix type="matrix" values="1.255528 -0.076749 -0.178779 0 0  -0.078411 0.930809 0.147602 0 0  0.004733 0.691367 0.303900 0 0  0 0 0 1 0"/>
+    </filter>
+  </defs>
+</svg>
 
 <script type="module" src="/src/main.js"></script>
 </body>

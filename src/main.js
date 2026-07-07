@@ -159,6 +159,28 @@ function getForeground(bgLum) {
   return bgLum > 0.179 ? '#111111' : '#eeeeee';
 }
 
+// ─── APCA (experimental) ──────────────────────────────────────────────────────
+// APCA-W3 0.0.98G-4g. Lc is signed: positive for dark-on-light, negative for
+// light-on-dark. Shown as a reference value only — WCAG 2.2 remains normative.
+
+function apcaY(r, g, b) {
+  const c = v => Math.pow(v / 255, 2.4);
+  return 0.2126729 * c(r) + 0.7151522 * c(g) + 0.0721750 * c(b);
+}
+
+function apcaLc(txtRgb, bgRgb) {
+  const soft = Y => (Y <= 0.022 ? Y + Math.pow(0.022 - Y, 1.414) : Y);
+  const Yt = soft(apcaY(...txtRgb));
+  const Yb = soft(apcaY(...bgRgb));
+  if (Math.abs(Yb - Yt) < 0.0005) return 0;
+  if (Yb > Yt) {
+    const S = (Math.pow(Yb, 0.56) - Math.pow(Yt, 0.57)) * 1.14;
+    return S < 0.1 ? 0 : (S - 0.027) * 100;
+  }
+  const S = (Math.pow(Yb, 0.65) - Math.pow(Yt, 0.62)) * 1.14;
+  return S > -0.1 ? 0 : (S + 0.027) * 100;
+}
+
 // ─── WebGL wheel renderer ──────────────────────────────────────────────────────
 
 const VS_SRC = /* glsl */`
@@ -422,11 +444,15 @@ function buildPreviewWcag(el) {
   }
 
   el.appendChild(rowsEl);
-  const dom = {
-    ratioEl: document.getElementById(el.id.replace('-wcag', '-ratio')),
-    cats,
-    badges,
-  };
+  const ratioEl = document.getElementById(el.id.replace('-wcag', '-ratio'));
+  let apcaEl = null;
+  if (ratioEl) {
+    apcaEl = document.createElement('span');
+    apcaEl.className = 'preview-apca';
+    apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
+    ratioEl.insertAdjacentElement('afterend', apcaEl);
+  }
+  const dom = { ratioEl, apcaEl, cats, badges };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -438,8 +464,10 @@ function buildPreviewWcag(el) {
  * @param {number} l1      text luminance
  * @param {number} l2      bg luminance
  * @param {number} bgLum   tile background luminance (for color adaptation)
+ * @param {number[]} [txtRgb]  text color RGB (for the experimental APCA readout)
+ * @param {number[]} [bgRgb]   bg color RGB (for the experimental APCA readout)
  */
-function renderPreviewWcag(el, l1, l2, bgLum) {
+function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
   const isLight = bgLum > 0.179;
@@ -448,6 +476,15 @@ function renderPreviewWcag(el, l1, l2, bgLum) {
   if (dom.ratioEl) {
     dom.ratioEl.textContent = ratio.toFixed(2) + ':1';
     dom.ratioEl.style.color = dim;
+  }
+  if (dom.apcaEl) {
+    if (betaFeatures && txtRgb && bgRgb) {
+      const lc = apcaLc(txtRgb, bgRgb);
+      dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
+      dom.apcaEl.style.color = dim;
+    } else {
+      dom.apcaEl.textContent = '';
+    }
   }
 
   // lum(#5dde8a) ≈ 0.586 (bright green),  lum(#1a7a42) ≈ 0.057 (dark green)
@@ -505,6 +542,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
     selectedLum, 1, 1,
+    hexToRgb(selectedHex), [255, 255, 255],
   );
 
   // vs Black (bg lum = 0, isLight = false)
@@ -520,6 +558,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
     selectedLum, 0, 0,
+    hexToRgb(selectedHex), [0, 0, 0],
   );
 }
 
@@ -551,6 +590,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
     selectedLum, customLum, customLum,
+    hexToRgb(selectedHex), hexToRgb(customHex),
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
@@ -573,6 +613,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
     customLum, selectedLum, selectedLum,
+    hexToRgb(customHex), hexToRgb(selectedHex),
   );
 }
 
@@ -591,6 +632,8 @@ function updateUI() {
   swatchHexEl.textContent = formatHex(selHex);
   swatchHexEl.style.color = selLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
   swatchHexEl.style.setProperty('--icon-clr', selLum > 0.179 ? '#000' : '#fff');
+  /** @type {HTMLElement} */ (document.getElementById('export-btn')).style.color =
+    selLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
   document.documentElement.style.setProperty('--accent', selHex);
 
   // Data grid
@@ -1463,11 +1506,13 @@ document.addEventListener('click', e => {
     }
   } catch(e) {}
   lockRow.hidden = !betaFeatures;
+  document.body.classList.toggle('beta-on', betaFeatures);
 
   betaCheckbox.addEventListener('change', () => {
     betaFeatures = betaCheckbox.checked;
     try { localStorage.setItem('pref-beta', betaFeatures ? '1' : '0'); } catch(e) {}
     lockRow.hidden = !betaFeatures;
+    document.body.classList.toggle('beta-on', betaFeatures);
     if (betaFeatures) {
       setLockTarget(storedLockTarget(), false);
     } else {
@@ -1475,6 +1520,7 @@ document.addEventListener('click', e => {
       contrastLockTarget = 0;
       setContrastLockError('');
     }
+    updateUI(); // refresh the APCA readouts' visibility/content
   });
 
   lockBtns.forEach(btn => btn.addEventListener('click', () => {
@@ -1897,3 +1943,67 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
     }
   });
 });
+
+// ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
+
+function buildExport(format) {
+  const l = findLightness(selHue, selSat, targetLum);
+  const [r, g, b] = hslToRgb(selHue, selSat, l);
+  const sel    = { hex: toHex(r, g, b).toLowerCase(),    lum: relativeLuminance(r, g, b) };
+  const custom = { hex: toHex(cR, cG, cB).toLowerCase(), lum: relativeLuminance(cR, cG, cB) };
+  const ratio  = contrastRatio(sel.lum, custom.lum);
+
+  if (format === 'css') {
+    return `:root {
+  /* contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
+  --color-primary: ${sel.hex};    /* relative luminance ${sel.lum.toFixed(4)} */
+  --color-secondary: ${custom.hex}; /* relative luminance ${custom.lum.toFixed(4)} */
+}
+`;
+  }
+  if (format === 'tailwind') {
+    return `@theme {
+  --color-primary: ${sel.hex};
+  --color-secondary: ${custom.hex};
+}
+`;
+  }
+  return JSON.stringify({
+    color: {
+      primary:   { $type: 'color', $value: sel.hex },
+      secondary: { $type: 'color', $value: custom.hex },
+    },
+    $extensions: {
+      'relative-luminous-color-wheel': {
+        primaryLuminance:   +sel.lum.toFixed(4),
+        secondaryLuminance: +custom.lum.toFixed(4),
+        contrastRatio:      +ratio.toFixed(2),
+      },
+    },
+  }, null, 2) + '\n';
+}
+
+document.querySelectorAll('.export-option').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(buildExport(/** @type {HTMLElement} */ (btn).dataset.format));
+      const prev = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = prev; }, 1500);
+    } catch (_) { /* clipboard denied */ }
+  });
+});
+
+// ─── Color-vision-deficiency simulation ───────────────────────────────────────
+// Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html;
+// applying the filter to <body> simulates the whole app, wheel included.
+// Intentionally not persisted: a simulation surviving reload would look broken.
+
+{
+  const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
+  cvdBtns.forEach(btn => btn.addEventListener('click', () => {
+    cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
+    const v = btn.dataset.cvd;
+    document.body.style.filter = v ? `url(#cvd-${v})` : '';
+  }));
+}

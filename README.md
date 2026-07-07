@@ -12,6 +12,9 @@ A color picker where every point on the wheel shares the same WCAG 2.2 relative 
 - **Custom color picker** — set a second color to preview text/background contrast pairs, in three modes: **Color** (RGB / HSL), **Lum** (relative luminance / saturation / hue), or **Gray** (neutral grayscale)
 - **Copy-ready values** — click any hex or HSL value to copy it
 - **Shareable links** — share buttons embed the selected colors and UI theme in the URL, so recipients see exactly what you see (each can be opted out in Preferences)
+- **Export** — copy the current pair as CSS variables, a Tailwind `@theme` block, or design-tokens JSON
+- **Color vision simulation** — preview the whole app under protanopia, deuteranopia, or tritanopia (Machado et al. 2009)
+- **APCA Lc readout** — experimental APCA contrast values alongside WCAG ratios (enable Beta features in Preferences)
 - **Appearance controls** — adjustable UI hue, saturation, and brightness with dark/light theme toggle
 
 ## Tech stack

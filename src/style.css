@@ -190,6 +190,7 @@ header {
 
 /* ── Swatch ─────────────────────────────────────────────────────────────────── */
 .swatch {
+  position: relative;
   width: 100%;
   height: 52px;
   border-radius: 3px;
@@ -757,6 +758,128 @@ input.custom-val:focus {
   opacity: 1;
 }
 
+/* ── Export popover (inside swatch) ─────────────────────────────────────────── */
+.export-wrap {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+.export-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.2rem;
+  opacity: 0.65;
+  color: inherit;
+  transition: opacity 0.12s, transform 0.1s;
+}
+.export-btn:hover  { opacity: 1; }
+.export-btn:active { transform: scale(0.9); }
+.export-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 175px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.45rem;
+  display: none;
+  flex-direction: column;
+  gap: 0.15rem;
+  z-index: 150;
+}
+.export-panel::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+.export-wrap:hover .export-panel,
+.export-wrap:focus-within .export-panel {
+  display: flex;
+  animation: panel-in 0.14s ease-out;
+}
+.export-panel-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.1rem 0.45rem 0.25rem;
+}
+.export-option {
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-align: left;
+  padding: 0.32rem 0.45rem;
+  transition: background 0.12s;
+}
+.export-option:hover { background: var(--surface2); }
+
+/* ── APCA readout (experimental, shown with Beta features) ──────────────────── */
+.preview-apca {
+  display: none;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  margin-left: 0.4rem;
+  opacity: 0.85;
+}
+body.beta-on .preview-apca { display: inline; }
+
+/* ── About section ──────────────────────────────────────────────────────────── */
+.about {
+  width: 100%;
+  max-width: 1560px;
+}
+.about summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.35rem 0;
+  transition: color 0.12s;
+}
+.about summary:hover { color: var(--text); }
+.about summary h2 {
+  display: inline;
+  font-size: inherit;
+  font-weight: normal;
+  letter-spacing: inherit;
+}
+.about-body {
+  max-width: 720px;
+  padding: 0.5rem 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+.about-body h3 {
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: normal;
+  margin-top: 0.4rem;
+}
+.about-body ul { padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+
 /* ── Footer ─────────────────────────────────────────────────────────────────── */
 
 .copyright {
@@ -1100,17 +1223,25 @@ input.custom-val:focus {
   .header-right { gap: 0.35rem; }
 }
 
-/* ── Height-constrained desktops (e.g. 1440×900 minus browser chrome) ─────────
+/* ── Height-constrained desktops ───────────────────────────────────────────────
    Two-column layout kept, spacing compressed and wheel reduced so the whole
-   app fits without vertical scrolling. */
+   app fits without vertical scrolling. Tiers cascade (later blocks override). */
+
+/* Mild: just absorb the About row (~900px inner height) */
+@media (min-width: 861px) and (max-height: 919px) {
+  body { gap: 0.6rem; }
+  .about summary { padding: 0.15rem 0; }
+}
+
 @media (min-width: 861px) and (max-height: 849px) {
-  body { padding: 0.7rem 2rem 0.6rem; gap: 0.6rem; }
+  body { padding: 0.7rem 2rem 0.6rem; gap: 0.4rem; }
   .app-body { grid-template-columns: 300px 1fr; gap: 1.25rem; }
-  .col-left, .col-right { gap: 0.55rem; }
+  .col-left, .col-right { gap: 0.5rem; }
   .wheel-wrap { width: 300px; height: 300px; }
   #wheel, #overlay { width: 300px; height: 300px; }
-  .swatch { height: 42px; }
-  .data-cell { padding: 0.3rem 0.5rem; gap: 0.14rem; }
+  .swatch { height: 38px; }
+  .about summary { padding: 0.1rem 0; font-size: 0.7rem; }
+  .data-cell { padding: 0.26rem 0.5rem; gap: 0.14rem; }
   .contrast-section { gap: 0.3rem; }
   .contrast-lock-row { margin: 0.1rem 0 0; }
   .preview-tiles { gap: 0.6rem; }
@@ -1135,11 +1266,12 @@ input.custom-val:focus {
 
 /* ~800px-tall displays (effective inner height ≤ ~720px) */
 @media (min-width: 861px) and (max-height: 719px) {
-  body { padding: 0.4rem 1.5rem 0.35rem; gap: 0.3rem; }
+  body { padding: 0.4rem 1.5rem 0.35rem; gap: 0.25rem; }
   header { padding: 0.3rem 0; }
-  .app-body { grid-template-columns: 260px 1fr; gap: 1rem; }
-  .wheel-wrap { width: 260px; height: 260px; }
-  #wheel, #overlay { width: 260px; height: 260px; }
+  .app-body { grid-template-columns: 250px 1fr; gap: 1rem; }
+  .wheel-wrap { width: 250px; height: 250px; }
+  #wheel, #overlay { width: 250px; height: 250px; }
+  .about summary { padding: 0.05rem 0; font-size: 0.66rem; }
   .swatch { height: 30px; }
   .col-left, .col-right { gap: 0.38rem; }
   .data-cell { padding: 0.2rem 0.5rem; gap: 0.08rem; }
