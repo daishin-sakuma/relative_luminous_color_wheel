@@ -6,7 +6,6 @@ dist/
 
 # Electron local build files (not for Vercel)
 electron/
-package-lock.json
 scripts/
 release/
 web/

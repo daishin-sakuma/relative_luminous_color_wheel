@@ -65,12 +65,18 @@
         ?? (t === 'light' || t === 'dark' ? t
             : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
       document.documentElement.dataset.theme = theme;
-      const h = q.get('uh') ?? localStorage.getItem('ui-hue');
-      const s = q.get('us') ?? localStorage.getItem('ui-sat');
-      if (h !== null) document.documentElement.style.setProperty('--ui-hue', h);
-      if (s !== null) document.documentElement.style.setProperty('--ui-sat', (parseFloat(s) / 100).toFixed(4));
-      const gl = q.get('ug') ?? localStorage.getItem('ui-ground-l-' + theme);
-      if (gl !== null) document.documentElement.style.setProperty('--ui-ground-l', gl);
+      // Values reach setProperty() from the URL, so validate numerically —
+      // raw strings would allow CSS injection via a crafted share link.
+      const num = (v, lo, hi) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null;
+      };
+      const h = num(q.get('uh') ?? localStorage.getItem('ui-hue'), 0, 359);
+      const s = num(q.get('us') ?? localStorage.getItem('ui-sat'), 0, 200);
+      if (h !== null) document.documentElement.style.setProperty('--ui-hue', String(h));
+      if (s !== null) document.documentElement.style.setProperty('--ui-sat', (s / 100).toFixed(4));
+      const gl = num(q.get('ug') ?? localStorage.getItem('ui-ground-l-' + theme), 0, 100);
+      if (gl !== null) document.documentElement.style.setProperty('--ui-ground-l', String(gl));
     } catch(e) { document.documentElement.dataset.theme = 'dark'; }
   </script>
   <meta name="google-site-verification" content="pVRFM7bCfKvQV0zh60Ucitax5O17wD_4SALwzEsgjv4" />
@@ -113,7 +119,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.8.0</span>
+    <span class="app-version">ver. 1.8.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
