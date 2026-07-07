@@ -803,25 +803,27 @@ input.custom-val:focus {
   overflow: auto;
   max-height: 220px;
 }
+/* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
 .export-preview-copy {
   position: absolute;
-  top: 0.3rem;
-  right: 0.4rem;
+  top: 0.35rem;
+  right: 0.45rem;
   z-index: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0.1rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  opacity: 0.4;
   cursor: pointer;
-  font-family: inherit;
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 0.14rem 0.4rem;
-  transition: color 0.12s, background 0.12s, transform 0.1s;
+  color: var(--text);
+  transition: opacity 0.15s, color 0.15s;
+  user-select: none;
 }
-.export-preview-copy:hover  { color: var(--text); background: var(--surface2); }
-.export-preview-copy:active { transform: scale(0.93); }
+.export-preview-copy::after { content: '⧉'; }
+.export-preview-copy:hover { opacity: 0.8; }
+.export-preview-copy.copied { opacity: 1; color: var(--pass); }
+.export-preview-copy.copied::after { content: '✓'; }
 
 /* ── APCA readout (experimental, shown with Beta features) ──────────────────── */
 .preview-apca {

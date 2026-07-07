@@ -2030,8 +2030,8 @@ function buildExport(format) {
   previewCopy.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(buildExport(previewFormat));
-      previewCopy.textContent = 'Copied!';
-      setTimeout(() => { previewCopy.textContent = 'Copy'; }, 1500);
+      previewCopy.classList.add('copied');
+      setTimeout(() => { previewCopy.classList.remove('copied'); }, 1500);
     } catch (_) { /* clipboard denied */ }
   });
 
