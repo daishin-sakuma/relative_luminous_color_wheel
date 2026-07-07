@@ -1,7 +1,7 @@
 {
   "name": "relative-luminous-color-wheel",
   "version": "1.11.2",
-  "description": "WCAG 2.2 relative luminance color wheel — every color on the wheel shares the same perceptual luminance",
+  "description": "Accessible color picker & WCAG 2.2 contrast checker — every color on the wheel shares the same relative luminance, so you can explore hue and saturation without breaking AA/AAA contrast",
   "private": true,
   "type": "module",
   "scripts": {
