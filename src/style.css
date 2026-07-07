@@ -802,12 +802,20 @@ input.custom-val:focus {
   white-space: pre;
   overflow: auto;
   max-height: 220px;
+  scrollbar-width: thin;
 }
+.export-preview-code::-webkit-scrollbar { width: 8px; height: 8px; }
+.export-preview-code::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.export-preview-code::-webkit-scrollbar-track { background: transparent; }
 /* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
 .export-preview-copy {
   position: absolute;
   top: 0.35rem;
-  right: 0.45rem;
+  /* Clear of the code area's vertical scrollbar (8px + breathing room) */
+  right: calc(0.45rem + 10px);
   z-index: 1;
   background: none;
   border: none;
