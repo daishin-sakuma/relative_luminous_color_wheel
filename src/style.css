@@ -859,6 +859,8 @@ input.custom-val:focus {
   flex-wrap: wrap;
   margin: 0.55rem 0 0.2rem;
 }
+/* display:flex above beats the UA's [hidden] rule — restore it explicitly */
+.contrast-lock-row[hidden] { display: none; }
 .contrast-lock-label {
   font-size: 0.68rem;
   letter-spacing: 0.10em;
