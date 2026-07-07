@@ -119,7 +119,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.12.0</span>
+    <span class="app-version">ver. 1.13.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -236,6 +236,10 @@
     <div class="swatch-data-row">
       <div class="swatch" id="swatch">
         <span class="swatch-hex copyable" id="swatch-hex">#808080</span>
+        <div class="swatch-tools" id="swatch-tools">
+          <button class="pin-btn" id="pin-selected" title="Add this color to the palette">
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
         <div class="export-wrap">
           <button class="export-btn" id="export-btn" title="Export colors as CSS / Tailwind / JSON" aria-haspopup="true">
             <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M8.5 6 3.5 12l5 6 M15.5 6l5 6-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -246,6 +250,7 @@
             <button class="export-option" data-format="tailwind">Tailwind @theme</button>
             <button class="export-option" data-format="json">Design tokens JSON</button>
           </div>
+        </div>
         </div>
       </div>
       <div class="data-grid">
@@ -465,6 +470,9 @@
         <div class="custom-hex-wrap">
           <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="7" spellcheck="false" placeholder="#000000">
           <span class="custom-hex-copy-icon" id="custom-hex-copy-icon" title="Copy hex"></span>
+          <button class="pin-btn pin-btn--panel" id="pin-custom" title="Add custom color to the palette">
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
         </div>
       </div>
       <!-- Col 2: Color / Gray sliders (tab-switched) -->
@@ -543,6 +551,20 @@
 
   </div>
 
+  <section class="palette-section" id="palette-section" hidden>
+    <div class="palette-head">
+      <span class="section-label">Palette</span>
+      <button class="palette-clear" id="palette-clear">Clear all</button>
+    </div>
+    <div class="palette-rail" id="palette-rail"></div>
+    <div class="palette-matrix-wrap" id="palette-matrix-wrap" hidden>
+      <span class="palette-matrix-label">Contrast matrix — text (row) on background (column)</span>
+      <div class="palette-matrix-scroll">
+        <table class="palette-matrix" id="palette-matrix"></table>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <section class="about">
@@ -569,6 +591,7 @@
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check WCAG 2.2 contrast ratios against white, black, or any custom color — AA (4.5:1) and AAA (7:1) for normal text, 3:1 / 4.5:1 for large text and UI components</li>
         <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
+        <li>Pin colors to a palette and audit every text/background pairing in a contrast matrix</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
         <li>Share your exact color state with a URL, or export it as CSS variables, Tailwind theme tokens, or design-tokens JSON</li>
       </ul>

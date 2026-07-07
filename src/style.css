@@ -758,12 +758,34 @@ input.custom-val:focus {
   opacity: 1;
 }
 
-/* ── Export popover (inside swatch) ─────────────────────────────────────────── */
-.export-wrap {
+/* ── Swatch tools (pin + export) ────────────────────────────────────────────── */
+.swatch-tools {
   position: absolute;
   top: 50%;
   right: 0.55rem;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+.pin-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.2rem;
+  opacity: 0.65;
+  color: inherit;
+  transition: opacity 0.12s, transform 0.1s;
+}
+.pin-btn:hover  { opacity: 1; }
+.pin-btn:active { transform: scale(0.9); }
+.pin-btn--panel { color: var(--muted); font-size: 0.8rem; }
+.pin-btn--panel:hover { color: var(--text); }
+
+.export-wrap {
+  position: relative;
   display: flex;
   align-items: center;
 }
@@ -838,6 +860,111 @@ input.custom-val:focus {
   opacity: 0.85;
 }
 body.beta-on .preview-apca { display: inline; }
+
+/* ── Palette rail + contrast matrix ─────────────────────────────────────────── */
+.palette-section {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+/* display:flex beats the UA [hidden] rule — restore it explicitly */
+.palette-section[hidden],
+.palette-matrix-wrap[hidden] { display: none; }
+.palette-head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+.palette-clear {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.1rem 0;
+  transition: color 0.12s;
+}
+.palette-clear:hover { color: var(--text); }
+.palette-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.palette-chip {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.palette-chip-hex {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 0.4rem 0.5rem 0.6rem;
+}
+.palette-chip-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.55;
+  padding: 0.5rem 0.5rem 0.5rem 0.15rem;
+  transition: opacity 0.12s;
+}
+.palette-chip-remove:hover { opacity: 1; }
+.palette-matrix-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.palette-matrix-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.palette-matrix-scroll { overflow-x: auto; }
+.palette-matrix {
+  border-collapse: collapse;
+}
+.palette-matrix th,
+.palette-matrix td {
+  border: 1px solid var(--border);
+  padding: 0;
+}
+.palette-matrix th { background: var(--surface2); }
+.pm-corner {
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 0.3rem 0.45rem !important;
+  font-weight: normal;
+  white-space: nowrap;
+}
+.pm-head {
+  min-width: 4.6rem;
+  height: 1.5rem;
+}
+.pm-cell {
+  min-width: 4.6rem;
+  text-align: center;
+  padding: 0.34rem 0.5rem !important;
+}
+.pm-ratio { display: block; font-size: 0.76rem; letter-spacing: 0.04em; }
+.pm-verdict { display: block; font-size: 0.56rem; letter-spacing: 0.12em; opacity: 0.85; }
+.pm-diag { color: var(--muted); font-size: 0.72rem; text-align: center; }
 
 /* ── About section ──────────────────────────────────────────────────────────── */
 .about {

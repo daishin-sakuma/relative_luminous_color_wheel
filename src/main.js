@@ -632,7 +632,7 @@ function updateUI() {
   swatchHexEl.textContent = formatHex(selHex);
   swatchHexEl.style.color = selLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
   swatchHexEl.style.setProperty('--icon-clr', selLum > 0.179 ? '#000' : '#fff');
-  /** @type {HTMLElement} */ (document.getElementById('export-btn')).style.color =
+  /** @type {HTMLElement} */ (document.getElementById('swatch-tools')).style.color =
     selLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
   document.documentElement.style.setProperty('--accent', selHex);
 
@@ -1446,6 +1446,7 @@ document.addEventListener('click', e => {
     try { localStorage.setItem('pref-strip-hash', stripHash ? '1' : '0'); } catch(e) {}
     updateUI();
     syncCustomUI();
+    renderPalette();
   });
 }
 
@@ -1872,6 +1873,7 @@ function buildShareUrl() {
       p.set('ch', String(Math.round(cuHue)));
       p.set('cs', String(Math.round(cuSat * 100)));
     }
+    if (palette.length) p.set('p', palette.map(h => h.slice(1)).join(','));
   }
   if (shareTheme) {
     const theme = document.documentElement.dataset.theme || 'dark';
@@ -2007,3 +2009,160 @@ document.querySelectorAll('.export-option').forEach(btn => {
     document.body.style.filter = v ? `url(#cvd-${v})` : '';
   }));
 }
+
+// ─── Palette rail + contrast matrix ───────────────────────────────────────────
+// Pinned colors persist in localStorage and travel in the share URL (`p`,
+// governed by the "Color in share link" preference). The section is hidden
+// while empty so it never affects the height-fitted layouts.
+
+const PALETTE_MAX = 12;
+/** @type {string[]} lowercase '#rrggbb' */
+let palette = [];
+
+const paletteSection = /** @type {HTMLElement} */ (document.getElementById('palette-section'));
+const paletteRail    = /** @type {HTMLElement} */ (document.getElementById('palette-rail'));
+const paletteMatrixWrap = /** @type {HTMLElement} */ (document.getElementById('palette-matrix-wrap'));
+const paletteMatrix  = /** @type {HTMLTableElement} */ (document.getElementById('palette-matrix'));
+
+function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)); }
+
+function addToPalette(hex) {
+  hex = hex.toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(hex)) return;
+  if (palette.includes(hex) || palette.length >= PALETTE_MAX) return;
+  palette.push(hex);
+  savePalette();
+  renderPalette();
+}
+
+function removeFromPalette(index) {
+  palette.splice(index, 1);
+  savePalette();
+  renderPalette();
+}
+
+function renderPalette() {
+  paletteSection.hidden = palette.length === 0;
+  paletteRail.innerHTML = '';
+  palette.forEach((hex, i) => {
+    const [r, g, b] = hexToRgb(hex);
+    const lum = relativeLuminance(r, g, b);
+    const display = formatHex(toHex(r, g, b));
+
+    const chip = document.createElement('div');
+    chip.className = 'palette-chip';
+    chip.style.background = hex;
+    chip.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
+
+    const label = document.createElement('button');
+    label.className = 'palette-chip-hex';
+    label.textContent = display;
+    label.title = 'Copy hex';
+    label.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(display);
+        label.textContent = 'Copied!';
+        setTimeout(() => { label.textContent = display; }, 1200);
+      } catch (_) {}
+    });
+
+    const remove = document.createElement('button');
+    remove.className = 'palette-chip-remove';
+    remove.textContent = '×';
+    remove.title = 'Remove from palette';
+    remove.addEventListener('click', () => removeFromPalette(i));
+
+    chip.append(label, remove);
+    paletteRail.appendChild(chip);
+  });
+  renderPaletteMatrix();
+}
+
+function renderPaletteMatrix() {
+  paletteMatrixWrap.hidden = palette.length < 2;
+  paletteMatrix.innerHTML = '';
+  if (palette.length < 2) return;
+
+  const rgbs = palette.map(hexToRgb);
+  const lums = rgbs.map(c => relativeLuminance(...c));
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.className = 'pm-corner';
+  corner.textContent = 'text \\ bg';
+  headRow.appendChild(corner);
+  palette.forEach(hex => {
+    const th = document.createElement('th');
+    th.className = 'pm-head';
+    th.style.background = hex;
+    th.title = hex;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  paletteMatrix.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  palette.forEach((rowHex, i) => {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.className = 'pm-head';
+    th.style.background = rowHex;
+    th.title = rowHex;
+    tr.appendChild(th);
+
+    palette.forEach((colHex, j) => {
+      const td = document.createElement('td');
+      if (i === j) {
+        td.className = 'pm-diag';
+        td.textContent = '—';
+      } else {
+        const ratio = contrastRatio(lums[i], lums[j]);
+        td.className = 'pm-cell';
+        td.style.background = colHex;
+        td.style.color = rowHex;
+        const ratioEl = document.createElement('span');
+        ratioEl.className = 'pm-ratio';
+        ratioEl.textContent = ratio.toFixed(2);
+        const verdictEl = document.createElement('span');
+        verdictEl.className = 'pm-verdict';
+        verdictEl.textContent = ratio >= 7 ? 'AAA' : ratio >= 4.5 ? 'AA' : ratio >= 3 ? '3:1' : '✗';
+        td.title = `${rowHex} on ${colHex} — ${ratio.toFixed(2)}:1`;
+        td.append(ratioEl, verdictEl);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  paletteMatrix.appendChild(tbody);
+}
+
+document.getElementById('pin-selected').addEventListener('click', () => {
+  const l = findLightness(selHue, selSat, targetLum);
+  addToPalette(toHex(...hslToRgb(selHue, selSat, l)));
+});
+document.getElementById('pin-custom').addEventListener('click', () => {
+  addToPalette(toHex(cR, cG, cB));
+});
+document.getElementById('palette-clear').addEventListener('click', () => {
+  palette = [];
+  savePalette();
+  renderPalette();
+});
+
+// Restore: localStorage first, then share-URL override
+try {
+  const stored = JSON.parse(localStorage.getItem('palette-colors') || '[]');
+  if (Array.isArray(stored)) {
+    palette = stored.filter(h => typeof h === 'string' && /^#[0-9a-f]{6}$/.test(h)).slice(0, PALETTE_MAX);
+  }
+} catch (e) {}
+try {
+  const pp = new URLSearchParams(location.search).get('p');
+  if (pp !== null) {
+    const fromUrl = pp.split(',').map(h => '#' + h.toLowerCase())
+      .filter(h => /^#[0-9a-f]{6}$/.test(h)).slice(0, PALETTE_MAX);
+    if (fromUrl.length) { palette = fromUrl; savePalette(); }
+  }
+} catch (e) {}
+renderPalette();
