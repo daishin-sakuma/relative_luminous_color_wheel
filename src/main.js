@@ -1987,22 +1987,50 @@ function buildExport(format) {
 
 {
   const previewEl = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
+  const exportBtns = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.export-option')]);
+  const btnsRow = /** @type {HTMLElement} */ (exportBtns[0].closest('.settings-theme-btns'));
 
-  // Hide with a short grace period so the cursor can travel from a format
-  // button into the preview (to scroll it) without the preview vanishing.
-  let _previewHideTimer = null;
-  const cancelHide = () => {
-    if (_previewHideTimer !== null) { clearTimeout(_previewHideTimer); _previewHideTimer = null; }
-  };
-  const scheduleHide = () => {
-    cancelHide();
-    _previewHideTimer = setTimeout(() => { previewEl.hidden = true; }, 150);
-  };
-  previewEl.addEventListener('mouseenter', cancelHide);
-  previewEl.addEventListener('mouseleave', scheduleHide);
+  // Aim-aware hiding: after the cursor leaves a format button or the preview,
+  // keep the preview visible as long as the cursor keeps closing in on the
+  // target zone (buttons row + preview) — however slowly, pauses included.
+  // Hide only once it starts moving away (4px hysteresis).
+  let _aimActive = false;
+  let _aimDist = Infinity;
 
-  document.querySelectorAll('.export-option').forEach(btn => {
-    const format = /** @type {HTMLElement} */ (btn).dataset.format;
+  const rectDist = (x, y, r) => {
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    return Math.hypot(dx, dy);
+  };
+  const zoneDist = (x, y) => Math.min(
+    rectDist(x, y, previewEl.getBoundingClientRect()),
+    rectDist(x, y, btnsRow.getBoundingClientRect()),
+  );
+  const stopAim = () => {
+    if (!_aimActive) return;
+    _aimActive = false;
+    document.removeEventListener('mousemove', onAimMove);
+  };
+  const onAimMove = e => {
+    const d = zoneDist(e.clientX, e.clientY);
+    if (d === 0) { stopAim(); return; }                              // reached the zone
+    if (d > _aimDist + 4) { previewEl.hidden = true; stopAim(); return; } // moving away
+    _aimDist = Math.min(_aimDist, d);
+  };
+  const startAim = e => {
+    if (previewEl.hidden) return;
+    _aimDist = zoneDist(e.clientX, e.clientY);
+    if (!_aimActive) {
+      _aimActive = true;
+      document.addEventListener('mousemove', onAimMove);
+    }
+  };
+
+  previewEl.addEventListener('mouseenter', stopAim);
+  previewEl.addEventListener('mouseleave', startAim);
+
+  exportBtns.forEach(btn => {
+    const format = btn.dataset.format;
     btn.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(buildExport(format));
@@ -2013,14 +2041,21 @@ function buildExport(format) {
     });
     // Live preview of the exact string that would be copied
     const showPreview = () => {
-      cancelHide();
+      stopAim();
       previewEl.textContent = buildExport(format);
       previewEl.hidden = false;
     };
     btn.addEventListener('mouseenter', showPreview);
     btn.addEventListener('focus', showPreview);
-    btn.addEventListener('mouseleave', scheduleHide);
-    btn.addEventListener('blur', scheduleHide);
+    btn.addEventListener('mouseleave', startAim);
+    btn.addEventListener('blur', e => {
+      // Keyboard: hide unless focus moved to another format button
+      const next = /** @type {HTMLElement | null} */ (e.relatedTarget);
+      if (!next || !next.classList || !next.classList.contains('export-option')) {
+        previewEl.hidden = true;
+        stopAim();
+      }
+    });
   });
 }
 
