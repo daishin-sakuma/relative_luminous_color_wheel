@@ -122,7 +122,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.18.0</span>
+    <span class="app-version">ver. 1.19.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -374,11 +374,11 @@
       <div class="contrast-lock-row" id="contrast-lock-row">
         <span class="contrast-lock-label">Target contrast</span>
         <div class="contrast-lock-btns contrast-lock-mode" id="contrast-lock-mode">
-          <button class="contrast-lock-btn" data-lockmode="off" title="No contrast target — both colors move freely">Off</button>
+          <button class="contrast-lock-btn active" data-lockmode="off" title="No contrast target — both colors move freely">Off</button>
           <button class="contrast-lock-btn" data-lockmode="wcag2" title="WCAG 2.2 contrast-ratio targets (normative)">WCAG 2</button>
           <button class="contrast-lock-btn" data-lockmode="apca" title="APCA lightness-contrast (Lc) targets — WCAG 3 working-draft candidate, experimental">APCA</button>
         </div>
-        <div class="contrast-lock-btns" id="contrast-lock-btns-wcag2">
+        <div class="contrast-lock-btns" id="contrast-lock-btns-wcag2" hidden>
           <button class="contrast-lock-btn active" data-target="0">Off</button>
           <button class="contrast-lock-btn" data-target="3" title="3:1 — large text AA, UI components &amp; graphical objects (1.4.11)">3:1</button>
           <button class="contrast-lock-btn" data-target="4.5" title="4.5:1 — normal text AA, large text AAA">4.5:1</button>
@@ -573,7 +573,6 @@
     <div class="palette-head">
       <span class="section-label">Palette</span>
       <button class="palette-clear" id="palette-clear">Clear all</button>
-      <button class="palette-close" id="palette-close" title="Close palette" aria-label="Close palette sidebar">&#215;</button>
     </div>
     <div class="palette-rail" id="palette-rail"></div>
   </aside>

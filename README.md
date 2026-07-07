@@ -1,30 +1,43 @@
 # Relative Luminous Color Wheel
 
-A color picker where every point on the wheel shares the same WCAG 2.2 relative luminance — making it easy to explore hue and saturation while keeping contrast ratios predictable.
+**Accessible color picker with a contrast lock.** Every color on the wheel shares the same WCAG 2.2 relative luminance, so you can explore hue and saturation freely while the contrast against your background never breaks — and a target lock (WCAG 2.2 ratios or APCA Lc levels from the WCAG 3 working draft) keeps a color pair pinned to a threshold in real time.
 
 **Live:** https://relative-luminous-color-wheel.vercel.app/
 
+![Relative Luminous Color Wheel — accessible color picker with WCAG 2.2 and APCA contrast lock](public/ogp.png)
+
+## Why this exists
+
+The usual workflow treats accessibility as an afterthought: pick a color, run it through a contrast checker, fail, adjust, repeat. This tool inverts the loop — **contrast is a constraint you set first, not something you verify afterwards.**
+
+- **The wheel is luminance-locked.** Set a target relative luminance and the wheel redraws so every reachable hue/saturation renders at exactly that luminance. WCAG contrast ratios are computed from relative luminance alone, so an AA or AAA rating cannot break while you explore.
+- **The target contrast lock goes further.** Hold a WCAG 2.2 threshold (3:1, 4.5:1, 7:1) or an APCA lightness-contrast target (Lc 45–90), move either color, and the other side re-pins itself to the boundary — landing on the first representable RGB at-or-beyond the target, every input tick.
+
 ## Features
 
-- **Luminance-locked wheel** — rotate the target luminance slider and the entire wheel redraws so every selectable color satisfies it
-- **Real-time contrast ratios** — instant WCAG AA / AAA pass/fail against white, black, and a custom reference color
-- **HSL & RGB sliders** — fine-tune the selected color with linked HSL and RGB controls
-- **Custom color picker** — set a second color to preview text/background contrast pairs, in three modes: **Color** (RGB / HSL), **Lum** (relative luminance / saturation / hue), or **Gray** (neutral grayscale)
-- **Copy-ready values** — click any hex or HSL value to copy it
-- **Shareable links** — share buttons embed the selected colors and UI theme in the URL, so recipients see exactly what you see (each can be opted out in Preferences)
-- **Palette rail** — pin colors while you explore; click a saved color to re-edit it, copy its hex, reorder by drag & drop, or remove it. Palettes persist and travel in share links
-- **Export** — copy the current pair as CSS variables, a Tailwind `@theme` block, or design-tokens JSON
-- **Color vision simulation** — preview the whole app under protanopia, deuteranopia, or tritanopia (Machado et al. 2009)
-- **APCA Lc readout** — experimental APCA contrast values alongside WCAG ratios (enable Beta features in Preferences)
-- **Appearance controls** — adjustable UI hue, saturation, and brightness with dark/light theme toggle
+- **Luminance-locked wheel** — rendered by a WebGL fragment shader (per-pixel lightness search), with a chunked 2D canvas fallback
+- **Target contrast lock** — `Off / WCAG 2 / APCA` modes; WCAG 2.2 thresholds where text ratings change (3:1 large text & UI, 4.5:1 normal AA, 7:1 AAA) or APCA Lc 45/60/75/90 following the WCAG 3 working draft's Bronze Simple Mode levels
+- **Live contrast readouts** — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components against white, black, and a custom color, with APCA Lc values alongside every ratio
+- **Custom comparison color** — three modes: **Color** (RGB/HSL), **Lum** (relative luminance / saturation / hue), **Gray** (neutral grayscale)
+- **Palette sidebar** — pin up to 12 colors; each remembers whether it was saved as a text or a background color and reopens in the matching picker for re-editing; smooth drag & drop reordering; persists locally and travels in share links
+- **Export** — CSS custom properties, Tailwind `@theme` block, or W3C design-tokens JSON, palette included
+- **Color vision simulation** — protanopia / deuteranopia / tritanopia (Machado et al. 2009 matrices) applied to the entire app
+- **Shareable links** — colors, palette, and UI theme travel in the URL, so recipients see exactly what you see (each part can be opted out in Preferences)
+- **Copy-ready values** — click any hex, HSL, or RGB value to copy it
+- **Appearance controls** — adjustable UI hue, saturation, and brightness with a dark/light theme toggle
+- **Private by design** — no account, no upload; everything runs locally in your browser
 
 ## Tech stack
 
-- [Vite](https://vite.dev) — build tooling
-- Vanilla JavaScript & CSS — no runtime dependencies
-- WebGL fragment shader renders the luminance-locked wheel (per-pixel binary search), with a chunked 2D canvas fallback
-- WCAG 2.2 relative luminance formula (`L = 0.2126R + 0.7152G + 0.0722B`)
+- [Vite](https://vite.dev) — build tooling; zero runtime dependencies (vanilla JavaScript & CSS)
+- WebGL fragment shader renders the luminance-locked wheel; chunked 2D canvas fallback
+- WCAG 2.2 relative luminance (`L = 0.2126R + 0.7152G + 0.0722B`) and contrast-ratio math
+- APCA-W3 0.0.98G-4g lightness contrast (reference values and lock targets; WCAG 2.2 remains normative)
 - Font: [NATS](https://fonts.google.com/specimen/NATS)
+
+## Contributing
+
+The whole app is three files — `index.html`, `src/main.js`, `src/style.css` — with no runtime dependencies, which makes it an approachable codebase for first contributions. See [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
 
 ## License
 

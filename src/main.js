@@ -744,7 +744,9 @@ let shareTheme = true;
 let contrastLockTarget = 0;
 // APCA lock (WCAG 3 working-draft candidate, not yet normative):
 // 0 = off, or a minimum |Lc| of 45 / 60 / 75 / 90 (Bronze Simple Mode levels)
-let contrastLockMode = 'wcag2'; // 'off' | 'wcag2' | 'apca'
+// Always starts 'off': an active lock surviving a reload would silently move
+// colors at launch. The per-mode targets are still remembered.
+let contrastLockMode = 'off'; // 'off' | 'wcag2' | 'apca'
 let apcaLockTarget = 0;
 function apcaLockActive() { return contrastLockMode === 'apca'; }
 /** The target the current mode enforces (0 when the lock is off). */
@@ -1737,12 +1739,11 @@ document.addEventListener('click', e => {
     if (target > 0) enforceContrastLock(_lastTouchedSide);
   }
 
-  // Contrast lock is a regular feature: restore the persisted targets directly
+  // Restore the per-mode targets only — the mode itself always launches
+  // 'off' so a reload never starts silently adjusting colors
   try {
     contrastLockTarget = storedLockTarget();
     apcaLockTarget = storedApcaTarget();
-    const m = localStorage.getItem('contrast-lock-mode');
-    if (m === 'apca' || m === 'off') contrastLockMode = m;
   } catch(e) {}
   lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === contrastLockTarget));
   apcaBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.apcaTarget) === apcaLockTarget));
@@ -1752,7 +1753,6 @@ document.addEventListener('click', e => {
   modeBtns.forEach(btn => btn.addEventListener('click', () => {
     const m = btn.dataset.lockmode;
     contrastLockMode = m === 'apca' || m === 'off' ? m : 'wcag2';
-    try { localStorage.setItem('contrast-lock-mode', contrastLockMode); } catch(e) {}
     setContrastLockError('');
     refreshLockUI();
     if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
@@ -2318,6 +2318,7 @@ const paletteToggleCount = /** @type {HTMLElement} */ (document.getElementById('
 
 let paletteOpen = false;
 let _paletteCloseTimer = null;
+let _paletteInteracted = false;
 
 function applyPaletteOpen() {
   clearTimeout(_paletteCloseTimer);
@@ -2338,17 +2339,50 @@ function applyPaletteOpen() {
 
 function setPaletteOpen(open) {
   paletteOpen = open;
+  if (open) _paletteInteracted = false; // fresh open starts as "untouched"
   applyPaletteOpen();
   saveToStorage('palette-open', open ? '1' : '0');
 }
 
-paletteToggle.addEventListener('click', () => setPaletteOpen(!paletteOpen));
-document.getElementById('palette-close').addEventListener('click', () => setPaletteOpen(false));
+// Hovering the toggle opens the sidebar (mouse only — on touch, the tap's
+// synthesized pointerenter would open it just before click toggled it shut).
+// A click that lands while the hover-open is still active is absorbed, so
+// hover-then-click out of habit doesn't immediately close the drawer.
+let _paletteHoverOpened = false;
+paletteToggle.addEventListener('pointerenter', e => {
+  if (e.pointerType === 'mouse' && !paletteOpen) {
+    setPaletteOpen(true);
+    _paletteHoverOpened = true;
+  }
+});
+paletteToggle.addEventListener('pointerleave', () => { _paletteHoverOpened = false; });
+paletteToggle.addEventListener('click', () => {
+  if (_paletteHoverOpened) { _paletteHoverOpened = false; return; }
+  setPaletteOpen(!paletteOpen);
+});
+// Auto-close an untouched sidebar when the mouse leaves its area (sidebar +
+// toggle): an accidental open — typically via hover — dismisses itself. Any
+// interaction inside (press or scroll) marks it as intentional; from then on
+// it closes only through the explicit routes (outside press, ×, toggle).
+paletteSection.addEventListener('pointerdown', () => { _paletteInteracted = true; });
+paletteSection.addEventListener('wheel', () => { _paletteInteracted = true; }, { passive: true });
 
-// Clicking anywhere outside the sidebar closes it. Exempt: the toggle
-// (manages itself) and the pin buttons (their click just auto-opened it —
-// closing again in the same event would undo that).
-document.addEventListener('click', e => {
+const _paletteMaybeAutoClose = e => {
+  if (e.pointerType !== 'mouse' || !paletteOpen || _paletteInteracted) return;
+  const to = /** @type {Node | null} */ (e.relatedTarget);
+  if (to && (paletteSection.contains(to) || paletteToggle.contains(to))) return;
+  setPaletteOpen(false);
+};
+paletteSection.addEventListener('pointerleave', _paletteMaybeAutoClose);
+paletteToggle.addEventListener('pointerleave', _paletteMaybeAutoClose);
+
+// Pressing anywhere outside the sidebar closes it — on pointerdown, not
+// click, so it reacts the moment the press starts. This also keeps in-sidebar
+// deletes from closing it: by click time the removed chip's × is already
+// detached by renderPalette() and would no longer count as "inside". Exempt:
+// the toggle (manages itself) and the pin buttons (their click is about to
+// auto-open it — closing here first would cause a close/reopen flicker).
+document.addEventListener('pointerdown', e => {
   if (!paletteOpen) return;
   const t = /** @type {HTMLElement} */ (e.target);
   if (paletteSection.contains(t) || paletteToggle.contains(t)) return;
