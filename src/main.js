@@ -672,6 +672,10 @@ function _renderFrame() {
 }
 
 function scheduleRender(redrawWheel, syncCustom) {
+  // Remember which side the user touched last (wheel = fg, custom = bg) so a
+  // contrast-target change adjusts the other one. Renders scheduled by the
+  // contrast-lock enforcement itself (_skipEnforceOnce set) don't count.
+  if (!_skipEnforceOnce) _lastTouchedSide = syncCustom ? 'bg' : 'fg';
   if (redrawWheel)  _pendingWheelDraw  = true;
   if (syncCustom)   _pendingCustomSync = true;
   if (_rafId !== null) return;
@@ -684,6 +688,7 @@ function scheduleRender(redrawWheel, syncCustom) {
 // the luminance of the untouched side moves (via findLightness).
 
 let _skipEnforceOnce = false;
+let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
 
 /**
  * Most moderate luminance for the free side that reaches `ratio` against
@@ -1444,8 +1449,8 @@ document.addEventListener('click', e => {
     lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === target));
     setContrastLockError('');
     if (persist) { try { localStorage.setItem('contrast-lock-target', String(target)); } catch(e) {} }
-    // The wheel side is authoritative on (re)activation: adjust the custom color
-    if (target > 0) enforceContrastLock('fg');
+    // The side the user touched last stays put; the other one gets adjusted
+    if (target > 0) enforceContrastLock(_lastTouchedSide);
   }
 
   try {
@@ -1757,7 +1762,7 @@ renderCustomWheel();
 applyCustomModeTabs(customMode);
 // Contrast lock persisted from a previous session: enforce against the
 // (possibly URL-restored) state, treating the wheel side as authoritative
-if (betaFeatures && contrastLockTarget) enforceContrastLock('fg');
+if (betaFeatures && contrastLockTarget) enforceContrastLock(_lastTouchedSide);
 
 // ─── Mobile slider touch fix ──────────────────────────────────────────────────
 // On touch devices the browser may start a page scroll before the native range
