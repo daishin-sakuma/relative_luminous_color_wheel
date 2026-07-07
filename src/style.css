@@ -853,8 +853,7 @@ body.beta-on .preview-apca { display: inline; }
   margin-top: 0.25rem;
 }
 /* display:flex beats the UA [hidden] rule — restore it explicitly */
-.palette-section[hidden],
-.palette-matrix-wrap[hidden] { display: none; }
+.palette-section[hidden] { display: none; }
 .palette-head {
   display: flex;
   align-items: center;
@@ -884,7 +883,10 @@ body.beta-on .preview-apca { display: inline; }
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
+  cursor: grab;
 }
+.palette-chip.dragging { opacity: 0.45; }
+.palette-chip.drag-over { outline: 2px dashed var(--muted); outline-offset: 2px; }
 .palette-chip-hex {
   background: none;
   border: none;
@@ -893,8 +895,26 @@ body.beta-on .preview-apca { display: inline; }
   font-family: inherit;
   font-size: 0.72rem;
   letter-spacing: 0.06em;
-  padding: 0.5rem 0.4rem 0.5rem 0.6rem;
+  padding: 0.5rem 0.3rem 0.5rem 0.6rem;
 }
+.palette-chip-hex:hover { text-decoration: underline; }
+/* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
+.palette-chip-copy {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+  opacity: 0.55;
+  padding: 0.5rem 0.25rem;
+  transition: opacity 0.15s, color 0.15s;
+  user-select: none;
+}
+.palette-chip-copy::after { content: '⧉'; }
+.palette-chip-copy:hover { opacity: 1; }
+.palette-chip-copy.copied { opacity: 1; color: var(--pass); }
+.palette-chip-copy.copied::after { content: '✓'; }
 .palette-chip-remove {
   background: none;
   border: none;
@@ -907,48 +927,6 @@ body.beta-on .preview-apca { display: inline; }
   transition: opacity 0.12s;
 }
 .palette-chip-remove:hover { opacity: 1; }
-.palette-matrix-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.palette-matrix-label {
-  font-size: 0.64rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.palette-matrix-scroll { overflow-x: auto; }
-.palette-matrix {
-  border-collapse: collapse;
-}
-.palette-matrix th,
-.palette-matrix td {
-  border: 1px solid var(--border);
-  padding: 0;
-}
-.palette-matrix th { background: var(--surface2); }
-.pm-corner {
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  padding: 0.3rem 0.45rem !important;
-  font-weight: normal;
-  white-space: nowrap;
-}
-.pm-head {
-  min-width: 4.6rem;
-  height: 1.5rem;
-}
-.pm-cell {
-  min-width: 4.6rem;
-  text-align: center;
-  padding: 0.34rem 0.5rem !important;
-}
-.pm-ratio { display: block; font-size: 0.76rem; letter-spacing: 0.04em; }
-.pm-verdict { display: block; font-size: 0.56rem; letter-spacing: 0.12em; opacity: 0.85; }
-.pm-diag { color: var(--muted); font-size: 0.72rem; text-align: center; }
-
 /* ── About section ──────────────────────────────────────────────────────────── */
 .about {
   width: 100%;
@@ -1424,18 +1402,11 @@ body.beta-on .preview-apca { display: inline; }
     max-height: calc(100vh - 130px);
     overflow: hidden;
   }
-  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-wrap {
-    flex: 1;
+  .app-body:has(> .palette-section:not([hidden])) .palette-rail {
+    overflow-y: auto;
     min-height: 0;
-  }
-  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-scroll {
-    overflow: auto;
-    min-height: 0;
-    max-height: 100%;
     scrollbar-width: thin;
   }
-  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-  .app-body:has(> .palette-section:not([hidden])) .palette-matrix-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 }
 
 /* Narrower 3-column windows: slim the palette column so the middle column's

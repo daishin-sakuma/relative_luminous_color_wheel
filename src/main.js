@@ -2114,8 +2114,7 @@ let palette = [];
 
 const paletteSection = /** @type {HTMLElement} */ (document.getElementById('palette-section'));
 const paletteRail    = /** @type {HTMLElement} */ (document.getElementById('palette-rail'));
-const paletteMatrixWrap = /** @type {HTMLElement} */ (document.getElementById('palette-matrix-wrap'));
-const paletteMatrix  = /** @type {HTMLTableElement} */ (document.getElementById('palette-matrix'));
+let _paletteDragIndex = null;
 
 function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)); }
 
@@ -2146,88 +2145,62 @@ function renderPalette() {
     chip.className = 'palette-chip';
     chip.style.background = hex;
     chip.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
+    chip.draggable = true;
 
-    const label = document.createElement('button');
-    label.className = 'palette-chip-hex';
-    label.textContent = display;
-    label.title = 'Copy hex';
-    label.addEventListener('click', async () => {
+    const edit = document.createElement('button');
+    edit.className = 'palette-chip-hex';
+    edit.textContent = display;
+    edit.title = 'Edit this color (loads it into the custom color)';
+    edit.addEventListener('click', () => {
+      setCustomMode('color');
+      setCustomFromRgb(r, g, b);
+    });
+
+    const copy = document.createElement('button');
+    copy.className = 'palette-chip-copy';
+    copy.title = 'Copy hex';
+    copy.setAttribute('aria-label', 'Copy hex');
+    copy.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(display);
-        label.textContent = 'Copied!';
-        setTimeout(() => { label.textContent = display; }, 1200);
-      } catch (_) {}
+        copy.classList.add('copied');
+        setTimeout(() => copy.classList.remove('copied'), 1200);
+      } catch (_) { /* clipboard denied */ }
     });
 
     const remove = document.createElement('button');
     remove.className = 'palette-chip-remove';
-    remove.textContent = '×';
+    remove.textContent = '\u00d7';
     remove.title = 'Remove from palette';
     remove.addEventListener('click', () => removeFromPalette(i));
 
-    chip.append(label, remove);
+    // Drag & drop reorder
+    chip.addEventListener('dragstart', e => {
+      _paletteDragIndex = i;
+      e.dataTransfer.effectAllowed = 'move';
+      chip.classList.add('dragging');
+    });
+    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+    chip.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      chip.classList.add('drag-over');
+    });
+    chip.addEventListener('dragleave', () => chip.classList.remove('drag-over'));
+    chip.addEventListener('drop', e => {
+      e.preventDefault();
+      chip.classList.remove('drag-over');
+      if (_paletteDragIndex === null || _paletteDragIndex === i) return;
+      const [moved] = palette.splice(_paletteDragIndex, 1);
+      palette.splice(i, 0, moved);
+      _paletteDragIndex = null;
+      savePalette();
+      renderPalette();
+    });
+
+    chip.append(edit, copy, remove);
     paletteRail.appendChild(chip);
   });
-  renderPaletteMatrix();
-}
-
-function renderPaletteMatrix() {
-  paletteMatrixWrap.hidden = palette.length < 2;
-  paletteMatrix.innerHTML = '';
-  if (palette.length < 2) return;
-
-  const rgbs = palette.map(hexToRgb);
-  const lums = rgbs.map(c => relativeLuminance(...c));
-
-  const thead = document.createElement('thead');
-  const headRow = document.createElement('tr');
-  const corner = document.createElement('th');
-  corner.className = 'pm-corner';
-  corner.textContent = 'text \\ bg';
-  headRow.appendChild(corner);
-  palette.forEach(hex => {
-    const th = document.createElement('th');
-    th.className = 'pm-head';
-    th.style.background = hex;
-    th.title = hex;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  paletteMatrix.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  palette.forEach((rowHex, i) => {
-    const tr = document.createElement('tr');
-    const th = document.createElement('th');
-    th.className = 'pm-head';
-    th.style.background = rowHex;
-    th.title = rowHex;
-    tr.appendChild(th);
-
-    palette.forEach((colHex, j) => {
-      const td = document.createElement('td');
-      if (i === j) {
-        td.className = 'pm-diag';
-        td.textContent = '—';
-      } else {
-        const ratio = contrastRatio(lums[i], lums[j]);
-        td.className = 'pm-cell';
-        td.style.background = colHex;
-        td.style.color = rowHex;
-        const ratioEl = document.createElement('span');
-        ratioEl.className = 'pm-ratio';
-        ratioEl.textContent = ratio.toFixed(2);
-        const verdictEl = document.createElement('span');
-        verdictEl.className = 'pm-verdict';
-        verdictEl.textContent = ratio >= 7 ? 'AAA' : ratio >= 4.5 ? 'AA' : ratio >= 3 ? '3:1' : '✗';
-        td.title = `${rowHex} on ${colHex} — ${ratio.toFixed(2)}:1`;
-        td.append(ratioEl, verdictEl);
-      }
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  paletteMatrix.appendChild(tbody);
 }
 
 document.getElementById('pin-selected').addEventListener('click', () => {
