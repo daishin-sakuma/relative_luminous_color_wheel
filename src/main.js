@@ -129,6 +129,37 @@ function findLightness(h, s, target) {
   return (lo + hi) * 0.5;
 }
 
+/**
+ * findLightness, then nudge so the *quantized* integer-RGB color's luminance
+ * lands on the `dir` side of target (+1 → ≥ target, −1 → ≤ target, 0 → as is).
+ * Rounding to 8-bit RGB scatters the achieved luminance ±~0.002 around the
+ * target with a hue-dependent sign; judged against a background sitting
+ * exactly on a contrast boundary, that sign flip makes pass/fail flicker
+ * while sweeping hue/sat. Biasing the rounding away from the compared side
+ * keeps the achieved contrast at-or-above the continuous target instead.
+ */
+function findLightnessBiased(h, s, target, dir) {
+  let l = findLightness(h, s, target);
+  if (!dir) return l;
+  const STEP = 1 / 512; // ~half an 8-bit channel step in lightness
+  for (let i = 0; i < 12; i++) {
+    const lum = relativeLuminance(...hslToRgb(h, s, l));
+    if (dir > 0 ? lum >= target : lum <= target) break;
+    const next = Math.max(0, Math.min(1, l + dir * STEP));
+    if (next === l) break; // hit black/white — can't go further
+    l = next;
+  }
+  return l;
+}
+
+/** The rendered selected (wheel) color: quantization biased away from the
+    custom background's luminance so the fg:bg contrast never dips below what
+    the continuous target luminance promises, for any hue/sat. */
+function selectedRgbBiased() {
+  const dir = Math.sign(targetLum - relativeLuminance(cR, cG, cB));
+  return hslToRgb(selHue, selSat, findLightnessBiased(selHue, selSat, targetLum, dir));
+}
+
 function toHex(r, g, b) {
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
@@ -164,7 +195,9 @@ function getForeground(bgLum) {
 
 // ─── APCA (experimental) ──────────────────────────────────────────────────────
 // APCA-W3 0.0.98G-4g. Lc is signed: positive for dark-on-light, negative for
-// light-on-dark. Shown as a reference value only — WCAG 2.2 remains normative.
+// light-on-dark. Drives the per-tile Lc readouts and the APCA contrast
+// lock; evaluation always uses |Lc|. WCAG 2.2 remains the normative standard
+// (APCA is a WCAG 3 working-draft candidate, not yet finalized).
 
 function apcaY(r, g, b) {
   const c = v => Math.pow(v / 255, 2.4);
@@ -500,7 +533,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
     dom.ratioEl.style.color = dim;
   }
   if (dom.apcaEl) {
-    if (betaFeatures && txtRgb && bgRgb) {
+    if (txtRgb && bgRgb) {
       const lc = apcaLc(txtRgb, bgRgb);
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = dim;
@@ -642,8 +675,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
 // ─── Main UI update ───────────────────────────────────────────────────────────
 
 function updateUI() {
-  const l         = findLightness(selHue, selSat, targetLum);
-  const [r, g, b] = hslToRgb(selHue, selSat, l);
+  const [r, g, b] = selectedRgbBiased();
   const selLum    = relativeLuminance(r, g, b);
   const selHex    = toHex(r, g, b);
   const hsl       = rgbToHsl(r, g, b);
@@ -706,10 +738,21 @@ let customLumSaved = null;
 let stripHash = false;
 let shareState = true;
 let shareTheme = true;
-let betaFeatures = false;
 
-// Contrast lock (Beta): 0 = off, 4.5 = AA, 7 = AAA
+// Contrast lock: 0 = off, or a WCAG 2.2 threshold ratio — 3 (large text AA /
+// UI components), 4.5 (normal AA / large AAA), 7 (normal AAA)
 let contrastLockTarget = 0;
+// APCA lock (WCAG 3 working-draft candidate, not yet normative):
+// 0 = off, or a minimum |Lc| of 45 / 60 / 75 / 90 (Bronze Simple Mode levels)
+let contrastLockMode = 'wcag2'; // 'off' | 'wcag2' | 'apca'
+let apcaLockTarget = 0;
+function apcaLockActive() { return contrastLockMode === 'apca'; }
+/** The target the current mode enforces (0 when the lock is off). */
+function activeContrastTarget() {
+  return contrastLockMode === 'apca' ? apcaLockTarget
+       : contrastLockMode === 'wcag2' ? contrastLockTarget
+       : 0;
+}
 /** Format a #rrggbb hex string according to the current stripHash preference. */
 function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
 
@@ -721,19 +764,33 @@ function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
 let _rafId = null;
 let _pendingWheelDraw = false;
 let _pendingCustomSync = false;
+let _lockSettleTimer = null;
 
 function _renderFrame() {
   _rafId = null;
-  const wheelChanged  = _pendingWheelDraw;
   const customChanged = _pendingCustomSync;
   if (_pendingWheelDraw)  { drawWheel(targetLum); _pendingWheelDraw  = false; }
   if (_pendingCustomSync) { syncCustomUI();        _pendingCustomSync = false; }
   updateUI();
-  // Contrast lock (Beta): adjust the side the user did NOT touch. Renders
+  // Contrast lock: adjust the side the user did NOT touch. Renders
   // scheduled by the enforcement itself are skipped to prevent ping-ponging.
+  // Wheel hue/sat renders arrive with neither flag set, but still shift the
+  // fg color (RGB quantization; APCA's Lc is hue-dependent even at equal
+  // luminance) — treat them as fg-touched so the lock tracks every tick.
+  // Redundant runs are cheap: enforcement no-ops unless the free side's
+  // rendered color would actually change.
   if (_skipEnforceOnce) { _skipEnforceOnce = false; }
   else if (customChanged) enforceContrastLock('bg');
-  else if (wheelChanged)  enforceContrastLock('fg');
+  else enforceContrastLock('fg');
+  // Settle pass: during fast drags the newest input can land in the one
+  // frame that skips enforcement (it coalesced with the lock's own
+  // adjustment) and would otherwise stay un-enforced when the drag stops.
+  // Once the frame stream goes quiet, verify and correct. Idempotent: the
+  // enforcement no-ops when the pair is already pinned.
+  clearTimeout(_lockSettleTimer);
+  _lockSettleTimer = setTimeout(() => {
+    if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
+  }, 120);
 }
 
 function scheduleRender(redrawWheel, syncCustom) {
@@ -747,7 +804,7 @@ function scheduleRender(redrawWheel, syncCustom) {
   _rafId = requestAnimationFrame(_renderFrame);
 }
 
-// ─── Contrast lock (Beta) ─────────────────────────────────────────────────────
+// ─── Contrast lock ─────────────────────────────────────────────────────
 // When active, changing one side's luminance auto-adjusts the other side so
 // contrastRatio(fg, bg) meets the target. Hue/saturation are preserved; only
 // the luminance of the untouched side moves (via findLightness).
@@ -776,15 +833,72 @@ function setContrastLockError(msg, full) {
   if (el) { el.textContent = msg; el.title = full ?? msg; }
 }
 
+/** Move the free side to the desired WCAG luminance, preserving its hue/sat.
+    Shared by the WCAG 2 and APCA locks. `desired` is the exact boundary;
+    every mode quantizes directionally (away from the fixed side), so the
+    result lands on the first representable color at-or-beyond the target —
+    no fixed overshoot margin needed. */
+function applyLockAdjustment(changed, desired) {
+  _skipEnforceOnce = true;
+  if (changed === 'fg') {
+    // Free side = custom bg; push its rounding away from the fg target
+    const dir = Math.sign(desired - targetLum);
+    if (customMode === 'lum') {
+      setCustomFromLumHueSat(desired, cuHue, cuSat); // biases internally
+    } else if (customMode === 'gray') {
+      const lRaw = findLightness(0, 0, desired) * 255;
+      const v = Math.max(0, Math.min(255,
+        dir > 0 ? Math.ceil(lRaw) : dir < 0 ? Math.floor(lRaw) : Math.round(lRaw)));
+      setCustomFromRgb(v, v, v);
+    } else {
+      setCustomFromHsl(cH, cS, findLightnessBiased(cH, cS, desired, dir));
+    }
+  } else {
+    // Free side = wheel fg; selectedRgbBiased() biases away from the bg
+    targetLum = desired;
+    lumSlider.value = String(Math.round(targetLum * 1000));
+    if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
+    saveToStorage('sel-lum', String(targetLum));
+    scheduleRender(true);
+  }
+}
+
+/** The integer RGB the free side would render at luminance `lum`. Mirrors the
+    setters in applyLockAdjustment (including their quantization biases) so an
+    enforcement can be skipped exactly when it wouldn't change the color. */
+function lockFreeRgbAt(changed, lum) {
+  if (changed === 'fg') { // free side = custom bg
+    const dir = Math.sign(lum - targetLum);
+    if (customMode === 'lum') {
+      return hslToRgb(cuHue, cuSat, findLightnessBiased(cuHue, cuSat, lum, dir));
+    }
+    if (customMode === 'gray') {
+      const lRaw = findLightness(0, 0, lum) * 255;
+      const v = Math.max(0, Math.min(255,
+        dir > 0 ? Math.ceil(lRaw) : dir < 0 ? Math.floor(lRaw) : Math.round(lRaw)));
+      return [v, v, v];
+    }
+    return hslToRgb(cH, cS, findLightnessBiased(cH, cS, lum, dir));
+  }
+  const dir = Math.sign(lum - relativeLuminance(cR, cG, cB));
+  return hslToRgb(selHue, selSat, findLightnessBiased(selHue, selSat, lum, dir));
+}
+
+/** true when `rgb` already matches the free side's current color. */
+function lockFreeAtRgb(changed, rgb) {
+  const cur = changed === 'fg' ? [cR, cG, cB] : selectedRgbBiased();
+  return rgb[0] === cur[0] && rgb[1] === cur[1] && rgb[2] === cur[2];
+}
+
 function enforceContrastLock(changed) {
-  if (!betaFeatures || !contrastLockTarget) return;
+  if (contrastLockMode === 'off') return;
+  if (apcaLockActive()) { enforceApcaLock(changed); return; }
+  if (!contrastLockTarget) return;
   const R = contrastLockTarget;
   // Use the luminances of the actual rendered colors (RGB-quantized)
-  const l = findLightness(selHue, selSat, targetLum);
-  const fgLum = relativeLuminance(...hslToRgb(selHue, selSat, l));
+  const fgLum = relativeLuminance(...selectedRgbBiased());
   const bgLum = relativeLuminance(cR, cG, cB);
   const fixedLum = changed === 'fg' ? fgLum : bgLum;
-  const freeLum  = changed === 'fg' ? bgLum : fgLum;
 
   const solved = solveContrastLum(fixedLum, R);
   if (solved === null) {
@@ -796,35 +910,93 @@ function enforceContrastLock(changed) {
     return;
   }
 
-  // The free side is always pinned to the boundary (exactly the target ratio),
-  // overshot slightly away from the fixed side so integer-RGB rounding can't
-  // land just below target.
-  const EPS = 0.004;
-  const desired = Math.max(0, Math.min(1, solved + (solved > fixedLum ? EPS : -EPS)));
+  // The free side is pinned to the exact boundary; directional quantization
+  // in applyLockAdjustment guarantees the rendered color lands at-or-beyond
+  // it (a fixed luminance overshoot would balloon the ratio margin on the
+  // dark side, where (L + 0.05) makes the ratio hyper-sensitive).
+  const desired = solved;
 
-  // Already pinned (within rounding) and satisfying → nothing to do
-  if (Math.abs(freeLum - desired) <= 0.008 && contrastRatio(fgLum, bgLum) >= R) {
+  // Skip only when the adjustment wouldn't change the free side's rendered
+  // color — any real movement of the fixed side re-pins immediately
+  if (lockFreeAtRgb(changed, lockFreeRgbAt(changed, desired)) && contrastRatio(fgLum, bgLum) >= R) {
     setContrastLockError('');
     return;
   }
 
-  _skipEnforceOnce = true;
-  if (changed === 'fg') {
-    if (customMode === 'lum') {
-      setCustomFromLumHueSat(desired, cuHue, cuSat);
-    } else if (customMode === 'gray') {
-      const v = Math.round(findLightness(0, 0, desired) * 255);
-      setCustomFromRgb(v, v, v);
-    } else {
-      setCustomFromHsl(cH, cS, findLightness(cH, cS, desired));
-    }
+  applyLockAdjustment(changed, desired);
+  setContrastLockError('');
+}
+
+// ─── APCA lock ────────────────────────────────────────────────────────────────
+// Pins the free side so |Lc(text = wheel color, bg = custom color)| meets the
+// target. APCA is polarity-aware and has no closed-form inverse through the
+// hue/sat-preserving lightness solver, so the boundary is found numerically:
+// |Lc| is ~0 where the free side's luminance matches the fixed side's and
+// grows monotonically toward black and white, giving at most two boundary
+// solutions. As with the WCAG 2 lock, the more moderate one (closer to mid
+// luminance) wins.
+
+function enforceApcaLock(changed) {
+  const T = apcaLockTarget;
+  if (!T) return;
+  const fgRgb = selectedRgbBiased();
+  const bgRgb = [cR, cG, cB];
+
+  // Free side's hue/sat (preserved while its luminance moves)
+  let freeHue, freeSat;
+  if (changed === 'fg') { // custom bg is free
+    if (customMode === 'gray')     { freeHue = 0;     freeSat = 0; }
+    else if (customMode === 'lum') { freeHue = cuHue; freeSat = cuSat; }
+    else                           { freeHue = cH;    freeSat = cS; }
   } else {
-    targetLum = desired;
-    lumSlider.value = String(Math.round(targetLum * 1000));
-    if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-    saveToStorage('sel-lum', String(targetLum));
-    scheduleRender(true);
+    freeHue = selHue; freeSat = selSat;
   }
+
+  const lcAt = lum => {
+    const rgb = hslToRgb(freeHue, freeSat, findLightness(freeHue, freeSat, lum));
+    return Math.abs(changed === 'fg' ? apcaLc(fgRgb, rgb) : apcaLc(rgb, bgRgb));
+  };
+
+  const split   = relativeLuminance(...(changed === 'fg' ? fgRgb : bgRgb));
+  const currentLc = Math.abs(apcaLc(fgRgb, bgRgb));
+
+  // On each branch the satisfying region ends at a boundary: binary-search
+  // from a satisfying endpoint toward the (unsatisfying) split point.
+  const solveBranch = endpoint => {
+    let sat = endpoint, unsat = split;
+    for (let i = 0; i < 36; i++) {
+      const mid = (sat + unsat) / 2;
+      if (lcAt(mid) >= T) sat = mid; else unsat = mid;
+    }
+    return sat;
+  };
+  const candidates = [];
+  if (lcAt(0) >= T) candidates.push(solveBranch(0));
+  if (lcAt(1) >= T) candidates.push(solveBranch(1));
+
+  if (!candidates.length) {
+    setContrastLockError(
+      changed === 'fg' ? `BG can't reach Lc ${T}` : `Text can't reach Lc ${T}`,
+      changed === 'fg'
+        ? `No background can reach |Lc| ${T} against this text color.`
+        : `No wheel color can reach |Lc| ${T} on this background.`);
+    return;
+  }
+
+  // Exact boundary — the directional quantization in applyLockAdjustment
+  // only ever moves the color further from the split, so |Lc| stays ≥ T
+  const desired = candidates.length === 2
+    ? (Math.abs(candidates[0] - 0.5) <= Math.abs(candidates[1] - 0.5) ? candidates[0] : candidates[1])
+    : candidates[0];
+
+  // Skip only when the adjustment wouldn't change the free side's rendered
+  // color — any real movement of the fixed side re-pins immediately
+  if (lockFreeAtRgb(changed, lockFreeRgbAt(changed, desired)) && currentLc >= T) {
+    setContrastLockError('');
+    return;
+  }
+
+  applyLockAdjustment(changed, desired);
   setContrastLockError('');
 }
 
@@ -1251,7 +1423,10 @@ function setCustomFromLumHueSat(lum, hue, sat) {
   cuLum = Math.max(0, Math.min(1, lum));
   cuHue = ((hue % 360) + 360) % 360;
   cuSat = Math.max(0, Math.min(1, sat));
-  const l = findLightness(cuHue, cuSat, cuLum);
+  // Quantization biased away from the wheel side's target luminance — the
+  // mirror of selectedRgbBiased(), so hue/sat sweeps in Lum mode can't
+  // flicker across a contrast boundary either
+  const l = findLightnessBiased(cuHue, cuSat, cuLum, Math.sign(cuLum - targetLum));
   const [r, g, b] = hslToRgb(cuHue, cuSat, l);
   setCustomFromRgb(r, g, b);
 }
@@ -1523,13 +1698,26 @@ document.addEventListener('click', e => {
 }
 
 {
-  const betaCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('beta-checkbox'));
-  const lockRow  = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-row'));
-  const lockBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.contrast-lock-btn')]);
+  const lockModeWrap = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-mode'));
+  const modeBtns = /** @type {HTMLButtonElement[]} */ ([...lockModeWrap.querySelectorAll('.contrast-lock-btn')]);
+  const wcagWrap = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-btns-wcag2'));
+  const lockBtns = /** @type {HTMLButtonElement[]} */ ([...wcagWrap.querySelectorAll('.contrast-lock-btn')]);
+  const apcaWrap = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-btns-apca'));
+  const apcaBtns = /** @type {HTMLButtonElement[]} */ ([...apcaWrap.querySelectorAll('.contrast-lock-btn')]);
 
   function storedLockTarget() {
     const t = parseFloat(localStorage.getItem('contrast-lock-target') ?? '0');
-    return t === 4.5 || t === 7 ? t : 0;
+    return t === 3 || t === 4.5 || t === 7 ? t : 0;
+  }
+  function storedApcaTarget() {
+    const t = parseFloat(localStorage.getItem('contrast-lock-apca-target') ?? '0');
+    return t === 45 || t === 60 || t === 75 || t === 90 ? t : 0;
+  }
+  // The target groups swap with the selected mode; Off hides both
+  function refreshLockUI() {
+    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.lockmode === contrastLockMode));
+    wcagWrap.hidden = contrastLockMode !== 'wcag2';
+    apcaWrap.hidden = contrastLockMode !== 'apca';
   }
 
   function setLockTarget(target, persist) {
@@ -1541,35 +1729,41 @@ document.addEventListener('click', e => {
     if (target > 0) enforceContrastLock(_lastTouchedSide);
   }
 
-  try {
-    betaFeatures = localStorage.getItem('pref-beta') === '1';
-    betaCheckbox.checked = betaFeatures;
-    if (betaFeatures) {
-      const t = storedLockTarget();
-      contrastLockTarget = t;
-      lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === t));
-    }
-  } catch(e) {}
-  lockRow.hidden = !betaFeatures;
-  document.body.classList.toggle('beta-on', betaFeatures);
+  function setApcaTarget(target, persist) {
+    apcaLockTarget = target;
+    apcaBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.apcaTarget) === target));
+    setContrastLockError('');
+    if (persist) { try { localStorage.setItem('contrast-lock-apca-target', String(target)); } catch(e) {} }
+    if (target > 0) enforceContrastLock(_lastTouchedSide);
+  }
 
-  betaCheckbox.addEventListener('change', () => {
-    betaFeatures = betaCheckbox.checked;
-    try { localStorage.setItem('pref-beta', betaFeatures ? '1' : '0'); } catch(e) {}
-    lockRow.hidden = !betaFeatures;
-    document.body.classList.toggle('beta-on', betaFeatures);
-    if (betaFeatures) {
-      setLockTarget(storedLockTarget(), false);
-    } else {
-      // Deactivate without forgetting the stored target
-      contrastLockTarget = 0;
-      setContrastLockError('');
-    }
-    updateUI(); // refresh the APCA readouts' visibility/content
-  });
+  // Contrast lock is a regular feature: restore the persisted targets directly
+  try {
+    contrastLockTarget = storedLockTarget();
+    apcaLockTarget = storedApcaTarget();
+    const m = localStorage.getItem('contrast-lock-mode');
+    if (m === 'apca' || m === 'off') contrastLockMode = m;
+  } catch(e) {}
+  lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === contrastLockTarget));
+  apcaBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.apcaTarget) === apcaLockTarget));
+
+  refreshLockUI();
+
+  modeBtns.forEach(btn => btn.addEventListener('click', () => {
+    const m = btn.dataset.lockmode;
+    contrastLockMode = m === 'apca' || m === 'off' ? m : 'wcag2';
+    try { localStorage.setItem('contrast-lock-mode', contrastLockMode); } catch(e) {}
+    setContrastLockError('');
+    refreshLockUI();
+    if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
+  }));
 
   lockBtns.forEach(btn => btn.addEventListener('click', () => {
     setLockTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.target), true);
+  }));
+
+  apcaBtns.forEach(btn => btn.addEventListener('click', () => {
+    setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
   }));
 }
 
@@ -1781,7 +1975,7 @@ if (customMode === 'gray') {
 } else if (customMode === 'lum' && customLumSaved !== null) {
   // Restore exact Lum params from saved state (avoids integer-RGB rounding drift)
   cuLum = customLumSaved.lum; cuHue = customLumSaved.hue; cuSat = customLumSaved.sat;
-  const _l = findLightness(cuHue, cuSat, cuLum);
+  const _l = findLightnessBiased(cuHue, cuSat, cuLum, Math.sign(cuLum - targetLum));
   [cR, cG, cB] = hslToRgb(cuHue, cuSat, _l);
 } else {
   // Color mode, or Lum mode with no saved lum params
@@ -1817,7 +2011,7 @@ try {
       if (pcl !== null) cuLum = Math.max(0.001, Math.min(1, parseFloat(pcl) / 1000));
       if (pch !== null) cuHue = Math.max(0, Math.min(359, parseFloat(pch)));
       if (pcs !== null) cuSat = Math.max(0, Math.min(1,   parseFloat(pcs) / 100));
-      const _l = findLightness(cuHue, cuSat, cuLum);
+      const _l = findLightnessBiased(cuHue, cuSat, cuLum, Math.sign(cuLum - targetLum));
       [cR, cG, cB] = hslToRgb(cuHue, cuSat, _l);
     }
     [cH, cS, cL] = rgbToHsl(cR, cG, cB);
@@ -1853,7 +2047,7 @@ renderCustomWheel();
 applyCustomModeTabs(customMode);
 // Contrast lock persisted from a previous session: enforce against the
 // (possibly URL-restored) state, treating the wheel side as authoritative
-if (betaFeatures && contrastLockTarget) enforceContrastLock(_lastTouchedSide);
+if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
 
 // ─── Mobile slider touch fix ──────────────────────────────────────────────────
 // On touch devices the browser may start a page scroll before the native range
@@ -1993,8 +2187,7 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
 function buildExport(format) {
-  const l = findLightness(selHue, selSat, targetLum);
-  const [r, g, b] = hslToRgb(selHue, selSat, l);
+  const [r, g, b] = selectedRgbBiased();
   const sel    = { hex: toHex(r, g, b).toLowerCase(),    lum: relativeLuminance(r, g, b) };
   const custom = { hex: toHex(cR, cG, cB).toLowerCase(), lum: relativeLuminance(cR, cG, cB) };
   const ratio  = contrastRatio(sel.lum, custom.lum);
@@ -2045,41 +2238,25 @@ ${palLines.length ? palLines.join('\n') + '\n' : ''}}
   const previewCode = /** @type {HTMLElement} */ (document.getElementById('export-preview-code'));
   const previewCopy = /** @type {HTMLButtonElement} */ (document.getElementById('export-preview-copy'));
   const exportBtns = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.export-option')]);
-  const btnsRow = /** @type {HTMLElement} */ (exportBtns[0].closest('.settings-theme-btns'));
-  const panelEl = /** @type {HTMLElement} */ (btnsRow.closest('.settings-panel'));
+  const wrapEl = /** @type {HTMLElement} */ (previewEl.closest('.settings-wrap'));
 
-  let previewFormat = 'css';
+  // Click-only selection (no hover previews): one tab is pinned and its
+  // preview stays visible — across popper close/reopen too. Clicking the
+  // pinned tab again hides the preview. JSON starts selected.
+  let pinnedFormat = /** @type {string | null} */ ('json');
+  let previewFormat = 'json';
 
-  // The preview stays while the cursor is inside the containment area: from
-  // the format buttons row's top edge down to the settings panel's bottom,
-  // spanning the panel's full width — i.e. below the Export row the whole
-  // popper counts as inside. It hides once the cursor fully leaves that area.
-  const PAD = 4;
-
-  const onMove = e => {
-    const a = btnsRow.getBoundingClientRect();
-    const p = panelEl.getBoundingClientRect();
-    if (
-      e.clientX < p.left - PAD || e.clientX > p.right + PAD ||
-      e.clientY < a.top  - PAD || e.clientY > p.bottom + PAD
-    ) {
-      hidePreview();
-    }
-  };
-
-  const showPreview = format => {
+  const render = format => {
     previewFormat = format;
     previewCode.textContent = buildExport(format);
-    if (previewEl.hidden) {
-      previewEl.hidden = false;
-      document.addEventListener('mousemove', onMove);
-    }
   };
 
-  const hidePreview = () => {
-    if (previewEl.hidden) return;
-    previewEl.hidden = true;
-    document.removeEventListener('mousemove', onMove);
+  // Visibility/active state only — content is rendered lazily. This runs at
+  // module init, before `palette` (declared further down) exists, so calling
+  // buildExport() here would throw and abort the whole script.
+  const sync = () => {
+    exportBtns.forEach(b => b.classList.toggle('active', b.dataset.format === pinnedFormat));
+    previewEl.hidden = pinnedFormat === null;
   };
 
   previewCopy.addEventListener('click', async () => {
@@ -2092,26 +2269,21 @@ ${palLines.length ? palLines.join('\n') + '\n' : ''}}
 
   exportBtns.forEach(btn => {
     const format = btn.dataset.format;
-    btn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(buildExport(format));
-        const prev = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(() => { btn.textContent = prev; }, 1500);
-      } catch (_) { /* clipboard denied */ }
-    });
-    btn.addEventListener('mouseenter', () => showPreview(format));
-    btn.addEventListener('focus', () => showPreview(format));
-    btn.addEventListener('blur', e => {
-      // Keyboard: hide unless focus moved to another format button or the
-      // preview's own copy button
-      const next = /** @type {HTMLElement | null} */ (e.relatedTarget);
-      if (!next || !next.classList ||
-          (!next.classList.contains('export-option') && next !== previewCopy)) {
-        hidePreview();
-      }
+    btn.addEventListener('click', () => {
+      pinnedFormat = pinnedFormat === format ? null : format;
+      sync();
+      if (pinnedFormat !== null) render(pinnedFormat);
     });
   });
+
+  // The popper opens via CSS :hover on the wrap, so this always fires before
+  // the panel is seen — it both fills the initial JSON preview and refreshes
+  // a pinned one on reopen (colors may have changed meanwhile)
+  wrapEl.addEventListener('mouseenter', () => {
+    if (pinnedFormat !== null) render(pinnedFormat);
+  });
+
+  sync();
 }
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
@@ -2145,9 +2317,21 @@ const paletteToggle      = /** @type {HTMLButtonElement} */ (document.getElement
 const paletteToggleCount = /** @type {HTMLElement} */ (document.getElementById('palette-toggle-count'));
 
 let paletteOpen = false;
+let _paletteCloseTimer = null;
 
 function applyPaletteOpen() {
-  paletteSection.hidden = !paletteOpen;
+  clearTimeout(_paletteCloseTimer);
+  if (paletteOpen) {
+    paletteSection.classList.remove('palette-section--closing');
+    paletteSection.hidden = false;
+  } else if (!paletteSection.hidden) {
+    // Mirror of the slide-in: play the slide-out, then actually hide
+    paletteSection.classList.add('palette-section--closing');
+    _paletteCloseTimer = setTimeout(() => {
+      paletteSection.classList.remove('palette-section--closing');
+      paletteSection.hidden = true;
+    }, 220);
+  }
   document.body.classList.toggle('palette-open', paletteOpen);
   paletteToggle.setAttribute('aria-expanded', String(paletteOpen));
 }
@@ -2160,6 +2344,17 @@ function setPaletteOpen(open) {
 
 paletteToggle.addEventListener('click', () => setPaletteOpen(!paletteOpen));
 document.getElementById('palette-close').addEventListener('click', () => setPaletteOpen(false));
+
+// Clicking anywhere outside the sidebar closes it. Exempt: the toggle
+// (manages itself) and the pin buttons (their click just auto-opened it —
+// closing again in the same event would undo that).
+document.addEventListener('click', e => {
+  if (!paletteOpen) return;
+  const t = /** @type {HTMLElement} */ (e.target);
+  if (paletteSection.contains(t) || paletteToggle.contains(t)) return;
+  if (t.closest && t.closest('.pin-btn')) return;
+  setPaletteOpen(false);
+});
 
 // Mobile: the toggle moves into the header, next to the Preferences button;
 // desktop: it sits at the right end of the "vs White & Black" row. Moving the
@@ -2207,6 +2402,9 @@ function attachChipDrag(chip, index) {
   chip.addEventListener('contextmenu', e => e.preventDefault()); // long-press menu
   chip.addEventListener('pointerdown', e => {
     if (_chipDragActive || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    // Buttons (edit / copy / remove) own their clicks — everything else on
+    // the chip is a drag handle, so the two gestures never compete
+    if (/** @type {HTMLElement} */ (e.target).closest('button')) return;
     const isTouch = e.pointerType !== 'mouse';
     const startY = e.clientY, startX = e.clientX;
     const chips = /** @type {HTMLElement[]} */ ([...paletteRail.querySelectorAll('.palette-chip')]);
@@ -2317,12 +2515,16 @@ function renderPalette() {
     roleTag.textContent = role === 'fg' ? 'TEXT' : 'BG';
     roleTag.title = role === 'fg' ? 'Saved from the wheel (text color)' : 'Saved from the custom picker (background color)';
 
+    const hexLabel = document.createElement('span');
+    hexLabel.className = 'palette-chip-hex';
+    hexLabel.textContent = display;
+
     const edit = document.createElement('button');
-    edit.className = 'palette-chip-hex';
-    edit.textContent = display;
+    edit.className = 'palette-chip-edit';
     edit.title = role === 'fg'
       ? 'Edit this color on the wheel (text color)'
       : 'Edit this color in the custom picker (background color)';
+    edit.setAttribute('aria-label', 'Edit this color');
     edit.addEventListener('click', () => {
       if (role === 'fg') {
         setWheelFromRgb(r, g, b);
@@ -2352,14 +2554,13 @@ function renderPalette() {
 
     attachChipDrag(chip, i);
 
-    chip.append(roleTag, edit, copy, remove);
+    chip.append(roleTag, hexLabel, edit, copy, remove);
     paletteRail.appendChild(chip);
   });
 }
 
 document.getElementById('pin-selected').addEventListener('click', () => {
-  const l = findLightness(selHue, selSat, targetLum);
-  addToPalette(toHex(...hslToRgb(selHue, selSat, l)), 'fg');
+  addToPalette(toHex(...selectedRgbBiased()), 'fg');
 });
 document.getElementById('pin-custom').addEventListener('click', () => {
   addToPalette(toHex(cR, cG, cB), 'bg');

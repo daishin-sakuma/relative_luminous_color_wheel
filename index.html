@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Luminance Color Wheel — Color Scheme &amp; Palette Picker for Designers</title>
+  <title>Luminance Color Wheel — Accessible Color Picker with WCAG 2.2 &amp; APCA Contrast Lock</title>
 
   <!-- SEO -->
-  <meta name="description" content="Color scheme and palette picker for designers. Every hue shares equal relative luminance — build accessible UI themes and verify WCAG 2.2 AA/AAA contrast ratios.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG contrast checker, WCAG contrast ratio checker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, design tokens export, Tailwind colors">
+  <meta name="description" content="Accessible color picker with a contrast lock: hold a WCAG 2.2 ratio (3:1 / 4.5:1 / 7:1) or APCA Lc target (WCAG 3 draft) while exploring hue and saturation. Palettes, color-blindness preview, CSS / Tailwind / design-token export — free.">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG contrast checker, WCAG contrast ratio checker, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, WCAG 3 contrast, perceptual contrast, design tokens export, W3C design tokens, Tailwind colors">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -20,20 +20,20 @@
   <meta property="og:type"         content="website">
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
-  <meta property="og:title"        content="Relative Luminous Color Wheel — Color Scheme &amp; Palette Picker">
-  <meta property="og:description"  content="Build accessible color schemes and UI themes with ease. Every hue shares equal luminance — pick any color, check contrast against white, black, or custom, and hit WCAG 2.2 AA/AAA.">
+  <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
+  <meta property="og:description"  content="Lock a WCAG 2.2 ratio or APCA Lc target and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Palettes, color-blindness preview, CSS/Tailwind/token export.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt"    content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance">
+  <meta property="og:image:alt"    content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
-  <meta name="twitter:title"       content="Relative Luminous Color Wheel — Color Scheme &amp; Palette Picker">
-  <meta name="twitter:description" content="Build accessible color schemes and UI themes with ease. Every hue shares equal luminance — pick any color, check contrast against white, black, or custom, and hit WCAG 2.2 AA/AAA.">
+  <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
+  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio or APCA Lc target and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Palettes, color-blindness preview, CSS/Tailwind/token export.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
-  <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance">
+  <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
   <!-- Vercel Analytics -->
   <script defer src="/_vercel/insights/script.js"></script>
@@ -88,7 +88,7 @@
     "@type": "WebApplication",
     "name": "Relative Luminous Color Wheel",
     "url": "https://relative-luminous-color-wheel.vercel.app/",
-    "description": "Color scheme and palette picker for designers. Every hue shares equal relative luminance — build accessible UI themes and verify WCAG 2.2 AA/AAA contrast ratios.",
+    "description": "Accessible color picker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) or an APCA Lc target (WCAG 3 working draft) while exploring hue and saturation — every color on the wheel shares one relative luminance, so the contrast never breaks.",
     "applicationCategory": "DesignApplication",
     "operatingSystem": "Web",
     "offers": {
@@ -97,13 +97,16 @@
       "priceCurrency": "USD"
     },
     "featureList": [
-      "Color scheme builder for designers",
-      "Accessible color palette generator",
-      "UI theme color picker",
       "Equal relative luminance color wheel",
-      "WCAG 2.2 AA/AAA contrast ratio checker",
-      "HSL and HEX color values",
-      "Custom color comparison",
+      "Target contrast lock for WCAG 2.2 ratios (3:1, 4.5:1, 7:1)",
+      "APCA lightness contrast (Lc 45–90) targets per the WCAG 3 working draft",
+      "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color",
+      "APCA Lc readouts alongside every contrast ratio",
+      "Color palette sidebar with text/background roles and drag & drop reordering",
+      "Color blindness simulation (protanopia, deuteranopia, tritanopia)",
+      "Export as CSS variables, Tailwind theme tokens, or W3C design tokens JSON",
+      "Accessible color scheme and dark-mode palette builder",
+      "HSL, RGB and HEX color values",
       "Shareable color state via URL"
     ],
     "author": {
@@ -119,7 +122,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.17.0</span>
+    <span class="app-version">ver. 1.18.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -177,13 +180,6 @@
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
-        <div class="settings-toggle-row">
-          <span class="settings-row-label">Beta features</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="beta-checkbox">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
-        </div>
         <div class="settings-divider"></div>
         <div class="settings-theme-row">
           <span class="settings-row-label">Vision</span>
@@ -198,9 +194,9 @@
         <div class="settings-theme-row">
           <span class="settings-row-label">Export</span>
           <div class="settings-theme-btns">
-            <button class="settings-theme-btn export-option" data-format="css" title="Copy as CSS custom properties">CSS</button>
-            <button class="settings-theme-btn export-option" data-format="tailwind" title="Copy as Tailwind @theme block">Tailwind</button>
-            <button class="settings-theme-btn export-option" data-format="json" title="Copy as W3C design tokens JSON">JSON</button>
+            <button class="settings-theme-btn export-option" data-format="css" title="Preview as CSS custom properties">CSS</button>
+            <button class="settings-theme-btn export-option" data-format="tailwind" title="Preview as Tailwind @theme block">Tailwind</button>
+            <button class="settings-theme-btn export-option" data-format="json" title="Preview as W3C design tokens JSON">JSON</button>
           </div>
         </div>
         <div class="export-preview" id="export-preview" hidden>
@@ -225,7 +221,6 @@
     </div>
 
     <div class="wheel-wrap">
-      <div class="wheel-halo"></div>
       <canvas id="wheel"></canvas>
       <canvas id="overlay"></canvas>
     </div>
@@ -376,12 +371,25 @@
 
     <div class="contrast-section">
       <span class="section-label">vs Custom</span>
-      <div class="contrast-lock-row" id="contrast-lock-row" hidden>
-        <span class="contrast-lock-label">Target contrast<span class="beta-chip">Beta</span></span>
-        <div class="contrast-lock-btns">
+      <div class="contrast-lock-row" id="contrast-lock-row">
+        <span class="contrast-lock-label">Target contrast</span>
+        <div class="contrast-lock-btns contrast-lock-mode" id="contrast-lock-mode">
+          <button class="contrast-lock-btn" data-lockmode="off" title="No contrast target — both colors move freely">Off</button>
+          <button class="contrast-lock-btn" data-lockmode="wcag2" title="WCAG 2.2 contrast-ratio targets (normative)">WCAG 2</button>
+          <button class="contrast-lock-btn" data-lockmode="apca" title="APCA lightness-contrast (Lc) targets — WCAG 3 working-draft candidate, experimental">APCA</button>
+        </div>
+        <div class="contrast-lock-btns" id="contrast-lock-btns-wcag2">
           <button class="contrast-lock-btn active" data-target="0">Off</button>
-          <button class="contrast-lock-btn" data-target="4.5">AA 4.5:1</button>
-          <button class="contrast-lock-btn" data-target="7">AAA 7:1</button>
+          <button class="contrast-lock-btn" data-target="3" title="3:1 — large text AA, UI components &amp; graphical objects (1.4.11)">3:1</button>
+          <button class="contrast-lock-btn" data-target="4.5" title="4.5:1 — normal text AA, large text AAA">4.5:1</button>
+          <button class="contrast-lock-btn" data-target="7" title="7:1 — normal text AAA">7:1</button>
+        </div>
+        <div class="contrast-lock-btns" id="contrast-lock-btns-apca" hidden>
+          <button class="contrast-lock-btn active" data-apca-target="0">Off</button>
+          <button class="contrast-lock-btn" data-apca-target="45" title="Lc 45 — headlines and large fluent text (36px+)">45</button>
+          <button class="contrast-lock-btn" data-apca-target="60" title="Lc 60 — content text other than body copy (24px / 16px bold)">60</button>
+          <button class="contrast-lock-btn" data-apca-target="75" title="Lc 75 — minimum for body text (18px+)">75</button>
+          <button class="contrast-lock-btn" data-apca-target="90" title="Lc 90 — preferred for body text (14px+)">90</button>
         </div>
         <span class="contrast-lock-error" id="contrast-lock-error" role="alert"></span>
       </div>
@@ -574,7 +582,7 @@
 
 <section class="about">
   <details>
-    <summary><h2>What is this? — a color wheel with locked WCAG contrast</h2></summary>
+    <summary><h2>What is this? — a color wheel with locked WCAG &amp; APCA contrast</h2></summary>
     <div class="about-body">
       <p>
         The Relative Luminous Color Wheel is a free color picker and WCAG 2.2 contrast checker
@@ -591,14 +599,23 @@
         reachable color already satisfies it. Exploring accessible color stops being trial-and-error
         and becomes a guarantee.
       </p>
+      <h3>Lock a contrast target</h3>
+      <p>
+        Beyond checking, the picker can enforce. Choose a WCAG 2.2 threshold — 3:1 for large text
+        and UI components, 4.5:1 for normal text AA, 7:1 for AAA — or an APCA lightness-contrast
+        target (Lc 45–90, following the WCAG 3 working draft), and whichever side you are not
+        touching adjusts itself automatically, pinning the pair precisely at the threshold while
+        you explore hue, saturation, and luminance on the other side.
+      </p>
       <h3>What you can do here</h3>
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
-        <li>Check WCAG 2.2 contrast ratios against white, black, or any custom color — AA (4.5:1) and AAA (7:1) for normal text, 3:1 / 4.5:1 for large text and UI components</li>
+        <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside</li>
+        <li>Hold a target contrast (3:1 / 4.5:1 / 7:1 or APCA Lc 45–90) while freely exploring one side — the other side follows and never drops below the threshold</li>
         <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
-        <li>Pin colors to a palette — click any saved color to re-edit it, copy its hex, reorder by drag &amp; drop</li>
+        <li>Pin up to 12 colors to the palette sidebar — each remembers whether it was saved as a text or background color and reopens in the matching picker for re-editing, with smooth drag &amp; drop reordering and one-tap hex copy</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
-        <li>Share your exact color state with a URL, or export it as CSS variables, Tailwind theme tokens, or design-tokens JSON</li>
+        <li>Share your exact color state with a URL, or export everything — palette included — as CSS variables, Tailwind theme tokens, or design-tokens JSON</li>
       </ul>
       <h3>Who it's for</h3>
       <p>
