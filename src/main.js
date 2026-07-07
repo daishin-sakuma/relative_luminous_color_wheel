@@ -724,8 +724,8 @@ function enforceContrastLock(changed) {
   const solved = solveContrastLum(fixedLum, R);
   if (solved === null) {
     setContrastLockError(changed === 'fg'
-      ? `${R}:1 is unreachable against this luminance — no background can satisfy it.`
-      : `${R}:1 is unreachable against this luminance — no wheel color can satisfy it.`);
+      ? `No background can reach ${R}:1 from this luminance.`
+      : `No wheel color can reach ${R}:1 from this luminance.`);
     return;
   }
 

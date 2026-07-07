@@ -900,13 +900,19 @@ input.custom-val:focus {
 .contrast-lock-btn:hover  { background: var(--surface2); color: var(--text); }
 .contrast-lock-btn:active { transform: scale(0.93); }
 .contrast-lock-btn.active { background: var(--border); color: var(--text); }
+/* Always occupies one line so the section height doesn't jump when a
+   message appears/disappears */
 .contrast-lock-error {
   font-size: 0.7rem;
+  line-height: 1.4;
+  min-height: calc(0.7rem * 1.4);
   letter-spacing: 0.04em;
   color: var(--error);
   flex-basis: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.contrast-lock-error:empty { display: none; }
 
 .settings-panel-label {
   font-size: 0.65rem;
