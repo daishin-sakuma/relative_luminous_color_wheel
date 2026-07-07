@@ -640,6 +640,7 @@ let customLumSaved = null;
 // Preferences
 let stripHash = false;
 let shareState = true;
+let shareTheme = true;
 /** Format a #rrggbb hex string according to the current stripHash preference. */
 function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
 
@@ -1326,6 +1327,20 @@ document.addEventListener('click', e => {
 }
 
 {
+  const shareThemeCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('share-theme-checkbox'));
+  try {
+    if (localStorage.getItem('pref-share-theme') === '0') {
+      shareTheme = false;
+      shareThemeCheckbox.checked = false;
+    }
+  } catch(e) {}
+  shareThemeCheckbox.addEventListener('change', () => {
+    shareTheme = shareThemeCheckbox.checked;
+    try { localStorage.setItem('pref-share-theme', shareTheme ? '1' : '0'); } catch(e) {}
+  });
+}
+
+{
   const DEFAULT_HUE = 240;
   const DEFAULT_SAT = 0; // achromatic
 
@@ -1355,12 +1370,6 @@ document.addEventListener('click', e => {
         .forEach(m => m.setAttribute('content', bg));
     });
   }
-
-  // Init active theme button
-  setTheme(document.documentElement.dataset.theme || 'dark');
-
-  themeBtnDark.addEventListener('click',  () => setTheme('dark'));
-  themeBtnLight.addEventListener('click', () => setTheme('light'));
 
   const DARK_DEFAULT_L  = 7;
   const LIGHT_DEFAULT_L = 97;
@@ -1398,6 +1407,14 @@ document.addEventListener('click', e => {
     applyBrightness(e.detail.theme);
   });
 
+  // Init active theme button. Must run after the themechange listener above so
+  // applyBrightness() sets the slider's per-theme min/max on first load too
+  // (the HTML attributes only cover the dark range).
+  setTheme(document.documentElement.dataset.theme || 'dark');
+
+  themeBtnDark.addEventListener('click',  () => setTheme('dark'));
+  themeBtnLight.addEventListener('click', () => setTheme('light'));
+
   function applyUiColors(hue, sat100) {
     document.documentElement.style.setProperty('--ui-hue', String(hue));
     document.documentElement.style.setProperty('--ui-sat', (sat100 / 100).toFixed(4));
@@ -1407,14 +1424,40 @@ document.addEventListener('click', e => {
     uiSatSlider.style.backgroundImage = `linear-gradient(to right, hsl(${hue},0%,55%), hsl(${hue},75%,55%))`;
   }
 
-  // Restore saved values (CSS vars already applied via head script; just sync UI)
-  const savedHue = +(localStorage.getItem('ui-hue') ?? 240);
-  const savedSat = +(localStorage.getItem('ui-sat') ?? 0);
+  // Restore saved values (CSS vars already applied via head script; just sync UI).
+  // Shared-link theme params (uh/us/ug) override localStorage and are persisted,
+  // so the received theme survives into future visits — same as `t`, which
+  // setTheme() above already persisted via dataset.theme.
+  const _q = new URLSearchParams(location.search);
+  const _qNum = (key, lo, hi) => {
+    const n = parseFloat(_q.get(key) ?? '');
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null;
+  };
+  const urlHue = _qNum('uh', 0, 359);
+  const urlSat = _qNum('us', 0, 200);
+  const savedHue = urlHue ?? +(localStorage.getItem('ui-hue') ?? 240);
+  const savedSat = urlSat ?? +(localStorage.getItem('ui-sat') ?? 0);
   uiHueSlider.value = String(savedHue);
   uiSatSlider.value = String(savedSat);
   setUnitVal(uiHueVal, savedHue, '°');
   setUnitVal(uiSatVal, savedSat, '%');
   updateSatSliderBg(savedHue);
+  if (urlHue !== null || urlSat !== null) {
+    applyUiColors(savedHue, savedSat);
+    saveToStorage('ui-hue', String(savedHue));
+    saveToStorage('ui-sat', String(savedSat));
+  }
+  {
+    const theme = document.documentElement.dataset.theme || 'dark';
+    const [minL, maxL] = theme === 'dark' ? [0, 50] : [50, 100];
+    const urlGl = _qNum('ug', minL, maxL);
+    if (urlGl !== null) {
+      uiBrightnessSlider.value = String(urlGl);
+      setUnitVal(uiBrightnessVal, urlGl, '%');
+      document.documentElement.style.setProperty('--ui-ground-l', String(urlGl));
+      saveToStorage(`ui-ground-l-${theme}`, String(urlGl));
+    }
+  }
 
   uiHueSlider.addEventListener('input', () => {
     const h = +uiHueSlider.value, s = +uiSatSlider.value;
@@ -1626,19 +1669,29 @@ const SHARE_URL   = 'https://relative-luminous-color-wheel.vercel.app/';
 const SHARE_TITLE = 'Relative Luminous Color Wheel';
 
 function buildShareUrl() {
-  if (!shareState) return SHARE_URL;
   const p = new URLSearchParams();
-  p.set('h', String(Math.round(selHue)));
-  p.set('s', String(Math.round(selSat * 100)));
-  p.set('l', String(Math.round(targetLum * 1000)));
-  p.set('c', toHex(cR, cG, cB).slice(1).toLowerCase());
-  p.set('m', customMode);
-  if (customMode === 'lum') {
-    p.set('cl', String(Math.round(cuLum * 1000)));
-    p.set('ch', String(Math.round(cuHue)));
-    p.set('cs', String(Math.round(cuSat * 100)));
+  if (shareState) {
+    p.set('h', String(Math.round(selHue)));
+    p.set('s', String(Math.round(selSat * 100)));
+    p.set('l', String(Math.round(targetLum * 1000)));
+    p.set('c', toHex(cR, cG, cB).slice(1).toLowerCase());
+    p.set('m', customMode);
+    if (customMode === 'lum') {
+      p.set('cl', String(Math.round(cuLum * 1000)));
+      p.set('ch', String(Math.round(cuHue)));
+      p.set('cs', String(Math.round(cuSat * 100)));
+    }
   }
-  return SHARE_URL + '?' + p.toString();
+  if (shareTheme) {
+    const theme = document.documentElement.dataset.theme || 'dark';
+    p.set('t', theme === 'light' ? 'l' : 'd');
+    // Sliders are the live source of truth (localStorage writes are debounced)
+    p.set('uh', /** @type {HTMLInputElement} */ (document.getElementById('ui-hue-slider')).value);
+    p.set('us', /** @type {HTMLInputElement} */ (document.getElementById('ui-sat-slider')).value);
+    p.set('ug', /** @type {HTMLInputElement} */ (document.getElementById('ui-brightness-slider')).value);
+  }
+  const qs = p.toString();
+  return qs ? SHARE_URL + '?' + qs : SHARE_URL;
 }
 
 document.querySelectorAll('.preview-share-btn').forEach(btn => {

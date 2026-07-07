@@ -54,15 +54,22 @@
   <link rel="stylesheet" href="/src/style.css">
   <script>
     try {
+      // Shared-link theme params (t/uh/us/ug) take priority over localStorage
+      // so a received link paints with the sender's theme from the first frame.
+      const q = new URLSearchParams(location.search);
+      const qt = q.get('t');
+      const urlTheme = qt === 'l' || qt === 'light' ? 'light'
+                     : qt === 'd' || qt === 'dark'  ? 'dark' : null;
       const t = localStorage.getItem('theme');
-      document.documentElement.dataset.theme =
-        t === 'light' || t === 'dark' ? t
-        : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      const h = localStorage.getItem('ui-hue');
-      const s = localStorage.getItem('ui-sat');
+      const theme = urlTheme
+        ?? (t === 'light' || t === 'dark' ? t
+            : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = theme;
+      const h = q.get('uh') ?? localStorage.getItem('ui-hue');
+      const s = q.get('us') ?? localStorage.getItem('ui-sat');
       if (h !== null) document.documentElement.style.setProperty('--ui-hue', h);
       if (s !== null) document.documentElement.style.setProperty('--ui-sat', (parseFloat(s) / 100).toFixed(4));
-      const gl = localStorage.getItem('ui-ground-l-' + (t === 'light' || t === 'dark' ? t : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')));
+      const gl = q.get('ug') ?? localStorage.getItem('ui-ground-l-' + theme);
       if (gl !== null) document.documentElement.style.setProperty('--ui-ground-l', gl);
     } catch(e) { document.documentElement.dataset.theme = 'dark'; }
   </script>
@@ -106,7 +113,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.7.2</span>
+    <span class="app-version">ver. 1.8.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -154,6 +161,13 @@
           <span class="settings-row-label">Color in share link</span>
           <label class="toggle-switch">
             <input type="checkbox" id="share-state-checkbox" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="settings-toggle-row">
+          <span class="settings-row-label">Theme in share link</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="share-theme-checkbox" checked>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
