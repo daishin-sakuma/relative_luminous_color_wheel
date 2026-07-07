@@ -1346,6 +1346,14 @@ document.addEventListener('click', e => {
     themeBtnDark.classList.toggle('active',  theme === 'dark');
     themeBtnLight.classList.toggle('active', theme === 'light');
     document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
+    // Keep browser chrome (address bar / PWA title bar) matching the in-app
+    // theme, which can differ from the OS prefers-color-scheme that the
+    // static meta tags follow before JS runs.
+    requestAnimationFrame(() => {
+      const bg = getComputedStyle(document.body).backgroundColor;
+      document.querySelectorAll('meta[name="theme-color"]')
+        .forEach(m => m.setAttribute('content', bg));
+    });
   }
 
   // Init active theme button
