@@ -416,26 +416,45 @@ function buildPreviewWcag(el) {
   const rowsEl = document.createElement('div');
   rowsEl.className = 'preview-wcag-rows';
 
+  // Note: WCAG 1.4.11 (non-text contrast, 3:1) is Level AA only — UI
+  // components have no AAA criterion, so the AAA badge in the Large row
+  // applies to large text (1.4.6) exclusively.
   const CATEGORIES = [
-    { label: 'Normal',     thresholds: [['AA', 4.5], ['AAA', 7]]   },
-    { label: 'Large · UI', thresholds: [['AA', 3],   ['AAA', 4.5]] },
+    {
+      label: 'Normal',
+      title: 'Normal text — WCAG 1.4.3 (AA 4.5:1) / 1.4.6 (AAA 7:1)',
+      thresholds: [
+        ['AA',  4.5, 'Normal text AA — 4.5:1 (WCAG 1.4.3)'],
+        ['AAA', 7,   'Normal text AAA — 7:1 (WCAG 1.4.6)'],
+      ],
+    },
+    {
+      label: 'Large',
+      title: 'Large text — at least 24px, or bold and at least 18.66px (14pt)',
+      thresholds: [
+        ['AA',  3,   'Large text AA — 3:1 (WCAG 1.4.3). Same threshold as UI components & graphics (1.4.11, Level AA)'],
+        ['AAA', 4.5, 'Large text AAA — 4.5:1 (WCAG 1.4.6). Large text only: no AAA criterion exists for UI components'],
+      ],
+    },
   ];
 
   const cats = [], badges = [];
-  for (const { label, thresholds } of CATEGORIES) {
+  for (const { label, title, thresholds } of CATEGORIES) {
     const row = document.createElement('div');
     row.className = 'preview-wcag-row';
 
     const catEl = document.createElement('span');
     catEl.className   = 'preview-wcag-cat';
     catEl.textContent = label;
+    catEl.title = title;
     row.appendChild(catEl);
     cats.push(catEl);
 
-    for (const [badge, threshold] of thresholds) {
+    for (const [badge, threshold, badgeTitle] of thresholds) {
       const b = document.createElement('span');
       b.className = 'preview-badge';
       b.textContent = badge;
+      b.title = badgeTitle;
       row.appendChild(b);
       badges.push({ el: b, threshold });
     }
