@@ -408,9 +408,12 @@ input[type="range"]::-moz-range-thumb {
   flex-shrink: 0;
 }
 
+/* Shared height keeps the color preview and the hex input below it equal */
+.custom-wheel-col { --custom-field-h: 22px; }
 .custom-mini-swatch {
+  position: relative; /* anchors the pin button at its right end */
   width: 100%;
-  height: 16px;
+  height: var(--custom-field-h);
   border-radius: 3px;
   border: 1px solid var(--border);
   flex-shrink: 0;
@@ -428,6 +431,7 @@ input[type="range"]::-moz-range-thumb {
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
   letter-spacing: 0.08em;
+  height: var(--custom-field-h, 22px);
   padding: 0.15rem 0.4rem;
   text-align: center;
   text-transform: uppercase;
@@ -567,7 +571,6 @@ input.custom-val:focus {
 .preview-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.1rem;
 }
@@ -625,9 +628,10 @@ input.custom-val:focus {
   font-size: 0.70rem;
   font-variant-numeric: tabular-nums;
   opacity: 0.6;
-  font-family: ui-monospace, monospace;
+  font-family: inherit; /* NATS, matching the app's display text */
   white-space: nowrap;
   flex-shrink: 0;
+  margin-left: auto; /* ratio + Lc sit flush against the card's right edge */
 }
 
 .preview-display {
@@ -760,11 +764,13 @@ input.custom-val:focus {
 }
 
 /* ── Swatch tools (pin + export) ────────────────────────────────────────────── */
+/* Bottom-right. 0.5rem lands the icon's visual bottom on the hex text's
+   baseline (matching the ⧉ copy icon): the button's 0.2rem padding and the
+   svg's internal inset together offset the text's descent below the baseline */
 .swatch-tools {
   position: absolute;
-  top: 50%;
+  bottom: 0.5rem;
   right: 0.55rem;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 0.1rem;
@@ -780,10 +786,22 @@ input.custom-val:focus {
   color: inherit;
   transition: opacity 0.12s, transform 0.1s;
 }
+.pin-btn svg { display: block; } /* no inline-baseline gap below the icon */
 .pin-btn:hover  { opacity: 1; }
 .pin-btn:active { transform: scale(0.9); }
-.pin-btn--panel { color: var(--muted); font-size: 0.8rem; }
-.pin-btn--panel:hover { color: var(--text); }
+/* Overlaid on the custom color's mini swatch, flush right; color is set by
+   syncCustomUI() to contrast with the swatch color underneath */
+.pin-btn--mini {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  padding: 0.1rem;
+  display: flex;
+  align-items: center;
+}
+.pin-btn--mini:active { transform: translateY(-50%) scale(0.9); }
 
 /* ── Export preview (inside Preferences) ────────────────────────────────────── */
 .export-preview {
@@ -834,26 +852,93 @@ input.custom-val:focus {
 .export-preview-copy.copied { opacity: 1; color: var(--pass); }
 .export-preview-copy.copied::after { content: '✓'; }
 
-/* ── APCA readout (experimental, shown with Beta features) ──────────────────── */
+/* ── APCA readout (experimental, shown with Beta features) ────────────────────
+   Typography mirrors .preview-ratio-label so the two readouts form one unit. */
 .preview-apca {
   display: none;
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  margin-left: 0.4rem;
-  opacity: 0.85;
+  font-size: 0.70rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  font-family: inherit; /* NATS, matching .preview-ratio-label */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 body.beta-on .preview-apca { display: inline; }
 
-/* ── Palette rail + contrast matrix ─────────────────────────────────────────── */
+/* ── Palette sidebar ────────────────────────────────────────────────────────── */
+:root { --palette-w: 200px; }
+
+/* An overlay layer above the app: opening/closing never moves the content */
 .palette-section {
-  grid-column: 1 / -1;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--palette-w);
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  margin-top: 0.25rem;
+  padding: 1rem 0.9rem;
+  border-left: 1px solid var(--border);
+  background: var(--ground);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden; /* the rail scrolls, not the sidebar */
+  z-index: 5;
+  animation: palette-slide-in 0.22s ease;
 }
+@keyframes palette-slide-in { from { transform: translateX(100%); } }
 /* display:flex beats the UA [hidden] rule — restore it explicitly */
 .palette-section[hidden] { display: none; }
+/* While a chip is being dragged, lift the clipping so it can travel outside
+   the rail and the sidebar without being masked */
+.palette-section--dragging,
+.palette-section--dragging .palette-rail { overflow: visible; }
+
+/* Toggle: lives in the content layer at the right end of the "vs White &
+   Black" row; visuals come from the shared .theme-toggle class (identical to
+   the Preferences button), this only anchors the count badge */
+.palette-toggle { position: relative; }
+.palette-toggle-count {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--ground);
+  font-size: 0.54rem;
+  line-height: 14px;
+  padding: 0 4px;
+  text-align: center;
+}
+.section-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+@media (max-width: 520px) {
+  :root { --palette-w: min(230px, 80vw); }
+}
+
+.palette-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  transition: color 0.12s;
+}
+.palette-close:hover { color: var(--text); }
+
+.palette-empty {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
 .palette-head {
   display: flex;
   align-items: center;
@@ -874,19 +959,50 @@ body.beta-on .preview-apca { display: inline; }
 .palette-clear:hover { color: var(--text); }
 .palette-rail {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  /* breathing room so a lifted (scaled) chip isn't clipped at the edges */
+  padding: 3px;
+  margin: -3px;
 }
 .palette-chip {
   display: flex;
   align-items: center;
+  width: 100%;
+  flex-shrink: 0; /* keep chip height stable inside the scrollable rail */
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
   cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y; /* scroll until a long-press lifts the chip */
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.palette-chip.dragging { opacity: 0.45; }
-.palette-chip.drag-over { outline: 2px dashed var(--muted); outline-offset: 2px; }
+/* The lifted chip follows the pointer directly (no transition) while its
+   siblings animate out of the way — iOS-home-screen style */
+.palette-chip--lifted {
+  transition: box-shadow 0.18s ease;
+  position: relative;
+  z-index: 3;
+  box-shadow: 0 7px 22px rgba(0, 0, 0, 0.4);
+  cursor: grabbing;
+}
+.palette-chip--settling { position: relative; z-index: 3; }
+/* fg/bg origin marker — mirrors the TEXT / BG vocabulary of the preview tiles */
+.palette-chip-role {
+  font-size: 0.52rem;
+  letter-spacing: 0.1em;
+  opacity: 0.65;
+  padding-left: 0.55rem;
+  min-width: 2.6em;
+  flex-shrink: 0;
+  user-select: none;
+}
 .palette-chip-hex {
   background: none;
   border: none;
@@ -895,7 +1011,9 @@ body.beta-on .preview-apca { display: inline; }
   font-family: inherit;
   font-size: 0.72rem;
   letter-spacing: 0.06em;
-  padding: 0.5rem 0.3rem 0.5rem 0.6rem;
+  padding: 0.5rem 0.3rem 0.5rem 0.35rem;
+  flex: 1;
+  text-align: left;
 }
 .palette-chip-hex:hover { text-decoration: underline; }
 /* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
@@ -1071,9 +1189,10 @@ body.beta-on .preview-apca { display: inline; }
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  flex-wrap: wrap;
   margin: 0.55rem 0 0.2rem;
 }
+.contrast-lock-label,
+.contrast-lock-btns { flex-shrink: 0; }
 /* display:flex above beats the UA's [hidden] rule — restore it explicitly */
 .contrast-lock-row[hidden] { display: none; }
 .contrast-lock-label {
@@ -1115,15 +1234,13 @@ body.beta-on .preview-apca { display: inline; }
 .contrast-lock-btn:hover  { background: var(--surface2); color: var(--text); }
 .contrast-lock-btn:active { transform: scale(0.93); }
 .contrast-lock-btn.active { background: var(--border); color: var(--text); }
-/* Always occupies one line so the section height doesn't jump when a
-   message appears/disappears */
+/* Shares the row's single line; truncates instead of wrapping */
 .contrast-lock-error {
   font-size: 0.7rem;
-  line-height: 1.4;
-  min-height: calc(0.7rem * 1.4);
   letter-spacing: 0.04em;
   color: var(--error);
-  flex-basis: 100%;
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1369,10 +1486,8 @@ body.beta-on .preview-apca { display: inline; }
   .preview-display { font-size: 1.25rem; }
   .custom-panel { padding: 0.45rem 0.85rem; }
   .copyright { font-size: 0.62rem; }
-  /* Error sits inline next to the buttons (ellipsized) instead of its own line */
   .contrast-lock-row { margin: 0; }
   .contrast-lock-btn { padding: 0.16rem 0.5rem; }
-  .contrast-lock-error { flex: 1 1 auto; flex-basis: auto; min-width: 0; min-height: 0; }
 }
 
 /* ── Large displays: scale the wheel up (buffer is 420px × DPR, so 420px CSS
@@ -1385,40 +1500,8 @@ body.beta-on .preview-apca { display: inline; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
-/* ── 3-column layout: palette joins as a third column when in use ─────────────
-   With colors pinned (section not [hidden]) and enough width, the palette
-   moves beside the contrast column so every feature — rail and matrix
-   included — is reachable without page scrolling. The matrix scrolls
-   internally when it outgrows the column. */
-@media (min-width: 1360px) {
-  .app-body:has(> .palette-section:not([hidden])) {
-    grid-template-columns: var(--wheel-col) minmax(0, 1fr) 300px;
-  }
-  .app-body:has(> .palette-section:not([hidden])) > .palette-section {
-    grid-column: 3;
-    grid-row: 1;
-    margin-top: 0;
-    min-height: 0;
-    max-height: calc(100vh - 130px);
-    overflow: hidden;
-  }
-  .app-body:has(> .palette-section:not([hidden])) .palette-rail {
-    overflow-y: auto;
-    min-height: 0;
-    scrollbar-width: thin;
-  }
-}
 
-/* Narrower 3-column windows: slim the palette column so the middle column's
-   tiles and custom panel don't wrap taller */
-@media (min-width: 1360px) and (max-width: 1499px) {
-  .app-body:has(> .palette-section:not([hidden])) {
-    grid-template-columns: var(--wheel-col) minmax(0, 1fr) 260px;
-  }
-}
-
-/* Short wide windows: compress both columns back into the height budget
-   (also compensates the 3-column mode's narrower middle column) */
+/* Short wide windows: compress both columns back into the height budget */
 @media (min-width: 1360px) and (max-height: 719px) {
   .col-left { gap: 0.3rem; }
   .swatch { height: 26px; }

@@ -68,7 +68,10 @@ window.addEventListener('pagehide', flushStorage);
 const CSS_SZ   = 420;
 const IS_COARSE = window.matchMedia('(pointer: coarse)').matches;
 const DPR       = Math.min(window.devicePixelRatio || 1, IS_COARSE ? 1.5 : 2);
-const BUF_SZ    = CSS_SZ * DPR;
+// Buffer sizes must be integers: fractional DPR (browser zoom / scaled displays)
+// would make the ImageData pixel index (py * width + px) * 4 non-integer, and
+// TypedArray writes to non-integer indices are silently dropped.
+const BUF_SZ    = Math.round(CSS_SZ * DPR);
 const R_CSS  = 200;
 const R_BUF  = R_CSS * DPR;
 
@@ -768,9 +771,9 @@ function solveContrastLum(fixedLum, ratio) {
   return canHi ? hi : lo;
 }
 
-function setContrastLockError(msg) {
+function setContrastLockError(msg, full) {
   const el = document.getElementById('contrast-lock-error');
-  if (el) el.textContent = msg;
+  if (el) { el.textContent = msg; el.title = full ?? msg; }
 }
 
 function enforceContrastLock(changed) {
@@ -785,9 +788,11 @@ function enforceContrastLock(changed) {
 
   const solved = solveContrastLum(fixedLum, R);
   if (solved === null) {
-    setContrastLockError(changed === 'fg'
-      ? `No background can reach ${R}:1 from this luminance.`
-      : `No wheel color can reach ${R}:1 from this luminance.`);
+    setContrastLockError(
+      changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
+      changed === 'fg'
+        ? `No background can reach ${R}:1 from this luminance.`
+        : `No wheel color can reach ${R}:1 from this luminance.`);
     return;
   }
 
@@ -827,7 +832,7 @@ function enforceContrastLock(changed) {
 
 const CW_CSS = 148;
 const CW_DPR = Math.min(window.devicePixelRatio || 1, 2);
-const CW_BUF = CW_CSS * CW_DPR;
+const CW_BUF = Math.round(CW_CSS * CW_DPR); // integer, same reason as BUF_SZ
 
 const customWheelCanvas = /** @type {HTMLCanvasElement} */ (document.getElementById('custom-wheel'));
 customWheelCanvas.width = customWheelCanvas.height = CW_BUF;
@@ -1032,7 +1037,10 @@ function syncCustomControls() {
       saveToStorage('custom-lum-v', JSON.stringify(customLumSaved));
     }
   }
-  /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display')).style.background = customColor;
+  const customSwatchEl = /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display'));
+  customSwatchEl.style.background = customColor;
+  customSwatchEl.style.color = relativeLuminance(cR, cG, cB) > 0.179
+    ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
 
   const grayVal = Math.round(cL * 255);
   /** @type {HTMLInputElement} */ (document.getElementById('c-gray-slider')).value = String(grayVal);
@@ -1104,6 +1112,23 @@ function syncSliders() {
   satSlider.value      = String(Math.round(selSat * 100));
   setUnitVal(hueValEl, Math.round(selHue), '°');
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
+}
+
+/** Load an RGB color into the wheel (foreground) picker: its hue/sat becomes
+    the marker position and its relative luminance the target luminance. */
+function setWheelFromRgb(r, g, b) {
+  const [h, s] = rgbToHsl(r, g, b);
+  selHue = h;
+  selSat = s;
+  targetLum = relativeLuminance(r, g, b);
+  lumSlider.value = String(Math.round(targetLum * 1000));
+  if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
+  saveToStorage('sel-hue', String(selHue));
+  saveToStorage('sel-sat', String(selSat));
+  saveToStorage('sel-lum', String(targetLum));
+  updateMarkerPosition();
+  syncSliders();
+  scheduleRender(true);
 }
 
 // ─── Pointer interaction ──────────────────────────────────────────────────────
@@ -1892,7 +1917,7 @@ function buildShareUrl() {
       p.set('ch', String(Math.round(cuHue)));
       p.set('cs', String(Math.round(cuSat * 100)));
     }
-    if (palette.length) p.set('p', palette.map(h => h.slice(1)).join(','));
+    if (palette.length) p.set('p', palette.map(e => (e.role === 'fg' ? 'f' : 'b') + e.hex.slice(1)).join(','));
   }
   if (shareTheme) {
     const theme = document.documentElement.dataset.theme || 'dark';
@@ -1973,7 +1998,7 @@ function buildExport(format) {
   const sel    = { hex: toHex(r, g, b).toLowerCase(),    lum: relativeLuminance(r, g, b) };
   const custom = { hex: toHex(cR, cG, cB).toLowerCase(), lum: relativeLuminance(cR, cG, cB) };
   const ratio  = contrastRatio(sel.lum, custom.lum);
-  const pal = palette.map(hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
+  const pal = palette.map(({ hex }) => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
 
   if (format === 'css') {
     const palLines = pal.map((c, i) =>
@@ -2109,22 +2134,60 @@ ${palLines.length ? palLines.join('\n') + '\n' : ''}}
 // while empty so it never affects the height-fitted layouts.
 
 const PALETTE_MAX = 12;
-/** @type {string[]} lowercase '#rrggbb' */
+/** @type {{hex: string, role: 'fg'|'bg'}[]} hex is lowercase '#rrggbb'; role
+    records which picker the color was pinned from (fg = wheel, bg = custom)
+    so re-editing reopens it in the same picker */
 let palette = [];
 
 const paletteSection = /** @type {HTMLElement} */ (document.getElementById('palette-section'));
 const paletteRail    = /** @type {HTMLElement} */ (document.getElementById('palette-rail'));
-let _paletteDragIndex = null;
+const paletteToggle      = /** @type {HTMLButtonElement} */ (document.getElementById('palette-toggle'));
+const paletteToggleCount = /** @type {HTMLElement} */ (document.getElementById('palette-toggle-count'));
+
+let paletteOpen = false;
+
+function applyPaletteOpen() {
+  paletteSection.hidden = !paletteOpen;
+  document.body.classList.toggle('palette-open', paletteOpen);
+  paletteToggle.setAttribute('aria-expanded', String(paletteOpen));
+}
+
+function setPaletteOpen(open) {
+  paletteOpen = open;
+  applyPaletteOpen();
+  saveToStorage('palette-open', open ? '1' : '0');
+}
+
+paletteToggle.addEventListener('click', () => setPaletteOpen(!paletteOpen));
+document.getElementById('palette-close').addEventListener('click', () => setPaletteOpen(false));
+
+// Mobile: the toggle moves into the header, next to the Preferences button;
+// desktop: it sits at the right end of the "vs White & Black" row. Moving the
+// node keeps its listeners and count badge.
+const _paletteToggleHome = paletteToggle.parentElement;
+const _paletteToggleMq = window.matchMedia('(max-width: 860px)');
+function placePaletteToggle() {
+  if (_paletteToggleMq.matches) {
+    document.querySelector('.header-right').appendChild(paletteToggle);
+  } else {
+    _paletteToggleHome.appendChild(paletteToggle);
+  }
+}
+placePaletteToggle();
+if (_paletteToggleMq.addEventListener) _paletteToggleMq.addEventListener('change', placePaletteToggle);
+else if (_paletteToggleMq.addListener) _paletteToggleMq.addListener(placePaletteToggle);
 
 function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)); }
 
-function addToPalette(hex) {
+function addToPalette(hex, role) {
   hex = hex.toLowerCase();
   if (!/^#[0-9a-f]{6}$/.test(hex)) return;
-  if (palette.includes(hex) || palette.length >= PALETTE_MAX) return;
-  palette.push(hex);
+  if (palette.some(e => e.hex === hex && e.role === role) || palette.length >= PALETTE_MAX) return;
+  palette.push({ hex, role });
   savePalette();
   renderPalette();
+  // Pinning while the sidebar is closed opens it so the color visibly lands
+  if (!paletteOpen) setPaletteOpen(true);
 }
 
 function removeFromPalette(index) {
@@ -2133,10 +2196,113 @@ function removeFromPalette(index) {
   renderPalette();
 }
 
+// ─── Pointer-based reorder (iOS-home-screen style) ────────────────────────────
+// Mouse: a 5px move lifts the chip. Touch: a 300ms still hold lifts it (a
+// quicker vertical move stays a scroll). The lifted chip tracks the pointer
+// 1:1 while siblings slide out of the way with a transform transition; on
+// release it settles into its slot before the order is committed.
+let _chipDragActive = false;
+
+function attachChipDrag(chip, index) {
+  chip.addEventListener('contextmenu', e => e.preventDefault()); // long-press menu
+  chip.addEventListener('pointerdown', e => {
+    if (_chipDragActive || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const isTouch = e.pointerType !== 'mouse';
+    const startY = e.clientY, startX = e.clientX;
+    const chips = /** @type {HTMLElement[]} */ ([...paletteRail.querySelectorAll('.palette-chip')]);
+    const slot = chip.offsetHeight + (parseFloat(getComputedStyle(paletteRail).rowGap) || 0);
+    let lifted = false;
+    let targetIndex = index;
+    let holdTimer = null;
+
+    const blockScroll = ev => ev.preventDefault();
+
+    const lift = () => {
+      lifted = true;
+      _chipDragActive = true;
+      chip.setPointerCapture(e.pointerId);
+      chip.classList.add('palette-chip--lifted');
+      chip.style.transform = 'scale(1.03)';
+      // Unclip the sidebar so the chip stays visible outside the rail
+      paletteSection.classList.add('palette-section--dragging');
+      document.addEventListener('touchmove', blockScroll, { passive: false });
+    };
+
+    const cleanup = () => {
+      clearTimeout(holdTimer);
+      document.removeEventListener('touchmove', blockScroll);
+      chip.removeEventListener('pointermove', onMove);
+      chip.removeEventListener('pointerup', onUp);
+      chip.removeEventListener('pointercancel', onCancel);
+    };
+
+    const onMove = ev => {
+      const rawDy = ev.clientY - startY;
+      if (!lifted) {
+        // Touch before the hold fires = scroll intent; mouse needs a 5px move
+        if (isTouch) {
+          if (Math.hypot(ev.clientX - startX, rawDy) > 8) { cleanup(); }
+          return;
+        }
+        if (Math.hypot(ev.clientX - startX, rawDy) <= 5) return;
+        lift();
+      }
+      // Free movement — only the insertion target is clamped to the list span
+      chip.style.transform = `translateY(${rawDy}px) scale(1.03)`;
+      const ti = Math.max(0, Math.min(chips.length - 1, index + Math.round(rawDy / slot)));
+      if (ti === targetIndex) return;
+      targetIndex = ti;
+      chips.forEach((c, j) => {
+        if (c === chip) return;
+        let shift = 0;
+        if (index < targetIndex && j > index && j <= targetIndex) shift = -slot;
+        else if (index > targetIndex && j >= targetIndex && j < index) shift = slot;
+        c.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+
+    const settle = commit => {
+      cleanup();
+      if (!lifted) return;
+      chip.classList.remove('palette-chip--lifted');
+      chip.classList.add('palette-chip--settling');
+      chip.style.transform = commit && targetIndex !== index
+        ? `translateY(${(targetIndex - index) * slot}px)`
+        : '';
+      setTimeout(() => {
+        _chipDragActive = false;
+        paletteSection.classList.remove('palette-section--dragging');
+        if (commit && targetIndex !== index) {
+          const [moved] = palette.splice(index, 1);
+          palette.splice(targetIndex, 0, moved);
+          savePalette();
+        }
+        renderPalette(); // rebuild resets all inline transforms
+      }, 190);
+    };
+
+    const onUp = () => settle(true);
+    const onCancel = () => settle(false);
+
+    chip.addEventListener('pointermove', onMove);
+    chip.addEventListener('pointerup', onUp);
+    chip.addEventListener('pointercancel', onCancel);
+    if (isTouch) holdTimer = setTimeout(lift, 300);
+  });
+}
+
 function renderPalette() {
-  paletteSection.hidden = palette.length === 0;
+  paletteToggleCount.hidden = palette.length === 0;
+  paletteToggleCount.textContent = String(palette.length);
   paletteRail.innerHTML = '';
-  palette.forEach((hex, i) => {
+  if (palette.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'palette-empty';
+    empty.textContent = 'No colors yet — pin them with the tag icons on the swatches.';
+    paletteRail.appendChild(empty);
+    return;
+  }
+  palette.forEach(({ hex, role }, i) => {
     const [r, g, b] = hexToRgb(hex);
     const lum = relativeLuminance(r, g, b);
     const display = formatHex(toHex(r, g, b));
@@ -2145,15 +2311,25 @@ function renderPalette() {
     chip.className = 'palette-chip';
     chip.style.background = hex;
     chip.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
-    chip.draggable = true;
+
+    const roleTag = document.createElement('span');
+    roleTag.className = 'palette-chip-role';
+    roleTag.textContent = role === 'fg' ? 'TEXT' : 'BG';
+    roleTag.title = role === 'fg' ? 'Saved from the wheel (text color)' : 'Saved from the custom picker (background color)';
 
     const edit = document.createElement('button');
     edit.className = 'palette-chip-hex';
     edit.textContent = display;
-    edit.title = 'Edit this color (loads it into the custom color)';
+    edit.title = role === 'fg'
+      ? 'Edit this color on the wheel (text color)'
+      : 'Edit this color in the custom picker (background color)';
     edit.addEventListener('click', () => {
-      setCustomMode('color');
-      setCustomFromRgb(r, g, b);
+      if (role === 'fg') {
+        setWheelFromRgb(r, g, b);
+      } else {
+        setCustomMode('color');
+        setCustomFromRgb(r, g, b);
+      }
     });
 
     const copy = document.createElement('button');
@@ -2174,41 +2350,19 @@ function renderPalette() {
     remove.title = 'Remove from palette';
     remove.addEventListener('click', () => removeFromPalette(i));
 
-    // Drag & drop reorder
-    chip.addEventListener('dragstart', e => {
-      _paletteDragIndex = i;
-      e.dataTransfer.effectAllowed = 'move';
-      chip.classList.add('dragging');
-    });
-    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
-    chip.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      chip.classList.add('drag-over');
-    });
-    chip.addEventListener('dragleave', () => chip.classList.remove('drag-over'));
-    chip.addEventListener('drop', e => {
-      e.preventDefault();
-      chip.classList.remove('drag-over');
-      if (_paletteDragIndex === null || _paletteDragIndex === i) return;
-      const [moved] = palette.splice(_paletteDragIndex, 1);
-      palette.splice(i, 0, moved);
-      _paletteDragIndex = null;
-      savePalette();
-      renderPalette();
-    });
+    attachChipDrag(chip, i);
 
-    chip.append(edit, copy, remove);
+    chip.append(roleTag, edit, copy, remove);
     paletteRail.appendChild(chip);
   });
 }
 
 document.getElementById('pin-selected').addEventListener('click', () => {
   const l = findLightness(selHue, selSat, targetLum);
-  addToPalette(toHex(...hslToRgb(selHue, selSat, l)));
+  addToPalette(toHex(...hslToRgb(selHue, selSat, l)), 'fg');
 });
 document.getElementById('pin-custom').addEventListener('click', () => {
-  addToPalette(toHex(cR, cG, cB));
+  addToPalette(toHex(cR, cG, cB), 'bg');
 });
 document.getElementById('palette-clear').addEventListener('click', () => {
   palette = [];
@@ -2216,19 +2370,36 @@ document.getElementById('palette-clear').addEventListener('click', () => {
   renderPalette();
 });
 
-// Restore: localStorage first, then share-URL override
+// Restore: localStorage first, then share-URL override.
+// Legacy entries (plain hex strings / unprefixed URL tokens) predate the
+// fg/bg distinction; they were always edited in the custom picker, so 'bg'.
 try {
   const stored = JSON.parse(localStorage.getItem('palette-colors') || '[]');
   if (Array.isArray(stored)) {
-    palette = stored.filter(h => typeof h === 'string' && /^#[0-9a-f]{6}$/.test(h)).slice(0, PALETTE_MAX);
+    palette = stored.map(item => {
+      if (typeof item === 'string' && /^#[0-9a-f]{6}$/.test(item)) return { hex: item, role: 'bg' };
+      if (item && typeof item === 'object' && typeof item.hex === 'string' && /^#[0-9a-f]{6}$/.test(item.hex))
+        return { hex: item.hex, role: item.role === 'fg' ? 'fg' : 'bg' };
+      return null;
+    }).filter(Boolean).slice(0, PALETTE_MAX);
   }
 } catch (e) {}
 try {
   const pp = new URLSearchParams(location.search).get('p');
   if (pp !== null) {
-    const fromUrl = pp.split(',').map(h => '#' + h.toLowerCase())
-      .filter(h => /^#[0-9a-f]{6}$/.test(h)).slice(0, PALETTE_MAX);
+    const fromUrl = pp.split(',').map(tok => {
+      const t = tok.toLowerCase();
+      if (/^[fb][0-9a-f]{6}$/.test(t)) return { hex: '#' + t.slice(1), role: t[0] === 'f' ? 'fg' : 'bg' };
+      if (/^[0-9a-f]{6}$/.test(t)) return { hex: '#' + t, role: 'bg' };
+      return null;
+    }).filter(Boolean).slice(0, PALETTE_MAX);
     if (fromUrl.length) { palette = fromUrl; savePalette(); }
   }
 } catch (e) {}
 renderPalette();
+// Open state: explicit preference wins; otherwise open when colors exist
+try {
+  const po = localStorage.getItem('palette-open');
+  paletteOpen = po !== null ? po === '1' : palette.length > 0;
+} catch (e) { paletteOpen = palette.length > 0; }
+applyPaletteOpen();

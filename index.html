@@ -119,7 +119,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.16.0</span>
+    <span class="app-version">ver. 1.17.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -184,6 +184,7 @@
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
+        <div class="settings-divider"></div>
         <div class="settings-theme-row">
           <span class="settings-row-label">Vision</span>
           <div class="settings-theme-btns">
@@ -193,6 +194,7 @@
             <button class="settings-theme-btn" data-cvd="tritan" title="Tritanopia (blue-blind)">Trit</button>
           </div>
         </div>
+        <div class="settings-divider"></div>
         <div class="settings-theme-row">
           <span class="settings-row-label">Export</span>
           <div class="settings-theme-btns">
@@ -250,7 +252,7 @@
         <span class="swatch-hex copyable" id="swatch-hex">#808080</span>
         <div class="swatch-tools" id="swatch-tools">
           <button class="pin-btn" id="pin-selected" title="Add this color to the palette">
-            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg>
           </button>
         </div>
       </div>
@@ -279,7 +281,13 @@
   <div class="col-right">
 
     <div class="contrast-section">
-      <span class="section-label">vs White &amp; Black</span>
+      <div class="section-label-row">
+        <span class="section-label">vs White &amp; Black</span>
+        <button class="theme-toggle palette-toggle" id="palette-toggle" title="Palette" aria-label="Toggle palette sidebar" aria-expanded="false" aria-controls="palette-section">
+          <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 0 0 5.304 0l6.401-6.402M6.75 21A3.75 3.75 0 0 1 3 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 0 0 3.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008Z"/></svg>
+          <span class="palette-toggle-count" id="palette-toggle-count" hidden></span>
+        </button>
+      </div>
       <div class="preview-tiles">
         <!-- vs White -->
         <div class="preview-tile" id="preview-white">
@@ -467,13 +475,14 @@
       <!-- Col 1: small color wheel + hex input -->
       <div class="custom-wheel-col">
         <canvas id="custom-wheel" class="custom-wheel-canvas" width="148" height="148"></canvas>
-        <div class="custom-mini-swatch" id="custom-swatch-display"></div>
+        <div class="custom-mini-swatch" id="custom-swatch-display">
+          <button class="pin-btn pin-btn--mini" id="pin-custom" title="Add custom color to the palette">
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg>
+          </button>
+        </div>
         <div class="custom-hex-wrap">
           <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="7" spellcheck="false" placeholder="#000000">
           <span class="custom-hex-copy-icon" id="custom-hex-copy-icon" title="Copy hex"></span>
-          <button class="pin-btn pin-btn--panel" id="pin-custom" title="Add custom color to the palette">
-            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
         </div>
       </div>
       <!-- Col 2: Color / Gray sliders (tab-switched) -->
@@ -552,13 +561,14 @@
 
   </div>
 
-  <section class="palette-section" id="palette-section" hidden>
+  <aside class="palette-section" id="palette-section" aria-label="Saved palette" hidden>
     <div class="palette-head">
       <span class="section-label">Palette</span>
       <button class="palette-clear" id="palette-clear">Clear all</button>
+      <button class="palette-close" id="palette-close" title="Close palette" aria-label="Close palette sidebar">&#215;</button>
     </div>
     <div class="palette-rail" id="palette-rail"></div>
-  </section>
+  </aside>
 
 </main>
 
