@@ -1987,6 +1987,20 @@ function buildExport(format) {
 
 {
   const previewEl = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
+
+  // Hide with a short grace period so the cursor can travel from a format
+  // button into the preview (to scroll it) without the preview vanishing.
+  let _previewHideTimer = null;
+  const cancelHide = () => {
+    if (_previewHideTimer !== null) { clearTimeout(_previewHideTimer); _previewHideTimer = null; }
+  };
+  const scheduleHide = () => {
+    cancelHide();
+    _previewHideTimer = setTimeout(() => { previewEl.hidden = true; }, 150);
+  };
+  previewEl.addEventListener('mouseenter', cancelHide);
+  previewEl.addEventListener('mouseleave', scheduleHide);
+
   document.querySelectorAll('.export-option').forEach(btn => {
     const format = /** @type {HTMLElement} */ (btn).dataset.format;
     btn.addEventListener('click', async () => {
@@ -1999,14 +2013,14 @@ function buildExport(format) {
     });
     // Live preview of the exact string that would be copied
     const showPreview = () => {
+      cancelHide();
       previewEl.textContent = buildExport(format);
       previewEl.hidden = false;
     };
-    const hidePreview = () => { previewEl.hidden = true; };
     btn.addEventListener('mouseenter', showPreview);
     btn.addEventListener('focus', showPreview);
-    btn.addEventListener('mouseleave', hidePreview);
-    btn.addEventListener('blur', hidePreview);
+    btn.addEventListener('mouseleave', scheduleHide);
+    btn.addEventListener('blur', scheduleHide);
   });
 }
 
