@@ -32,6 +32,7 @@
   --pass:        #5dde8a;
   --pass-border: rgba(93,222,138,0.28);
   --pass-bg:     rgba(93,222,138,0.08);
+  --error:       #ff7076;
 }
 
 [data-theme="light"] {
@@ -46,6 +47,7 @@
   --pass:        #1a7a42;
   --pass-border: rgba(26,122,66,0.3);
   --pass-bg:     rgba(26,122,66,0.08);
+  --error:       #b3261e;
 }
 
 html, body {
@@ -848,6 +850,61 @@ input.custom-val:focus {
 .settings-theme-btn:hover  { background: var(--surface2); color: var(--text); }
 .settings-theme-btn:active { transform: scale(0.93); }
 .settings-theme-btn.active { background: var(--border); color: var(--text); }
+
+/* ── Contrast lock (Beta) ────────────────────────────────────────────────────── */
+.contrast-lock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin: 0.55rem 0 0.2rem;
+}
+.contrast-lock-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.beta-chip {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  padding: 0.08rem 0.32rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+}
+.contrast-lock-btns {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.contrast-lock-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.10em;
+  padding: 0.22rem 0.65rem;
+  text-transform: uppercase;
+  transition: background 0.12s, color 0.12s, transform 0.1s;
+}
+.contrast-lock-btn + .contrast-lock-btn { border-left: 1px solid var(--border); }
+.contrast-lock-btn:hover  { background: var(--surface2); color: var(--text); }
+.contrast-lock-btn:active { transform: scale(0.93); }
+.contrast-lock-btn.active { background: var(--border); color: var(--text); }
+.contrast-lock-error {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--error);
+  flex-basis: 100%;
+}
+.contrast-lock-error:empty { display: none; }
 
 .settings-panel-label {
   font-size: 0.65rem;

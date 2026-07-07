@@ -119,7 +119,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.8.1</span>
+    <span class="app-version">ver. 1.9.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -174,6 +174,13 @@
           <span class="settings-row-label">Theme in share link</span>
           <label class="toggle-switch">
             <input type="checkbox" id="share-theme-checkbox" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="settings-toggle-row">
+          <span class="settings-row-label">Beta features</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="beta-checkbox">
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
@@ -335,6 +342,15 @@
 
     <div class="contrast-section">
       <span class="section-label">vs Custom</span>
+      <div class="contrast-lock-row" id="contrast-lock-row" hidden>
+        <span class="contrast-lock-label">Target contrast<span class="beta-chip">Beta</span></span>
+        <div class="contrast-lock-btns">
+          <button class="contrast-lock-btn active" data-target="0">Off</button>
+          <button class="contrast-lock-btn" data-target="4.5">AA 4.5</button>
+          <button class="contrast-lock-btn" data-target="7">AAA 7</button>
+        </div>
+        <span class="contrast-lock-error" id="contrast-lock-error" role="alert"></span>
+      </div>
       <div class="preview-tiles">
         <!-- Custom: selected text on custom bg -->
         <div class="preview-tile" id="preview-a">

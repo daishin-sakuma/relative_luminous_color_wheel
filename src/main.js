@@ -641,6 +641,10 @@ let customLumSaved = null;
 let stripHash = false;
 let shareState = true;
 let shareTheme = true;
+let betaFeatures = false;
+
+// Contrast lock (Beta): 0 = off, 4.5 = AA, 7 = AAA
+let contrastLockTarget = 0;
 /** Format a #rrggbb hex string according to the current stripHash preference. */
 function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
 
@@ -655,9 +659,16 @@ let _pendingCustomSync = false;
 
 function _renderFrame() {
   _rafId = null;
+  const wheelChanged  = _pendingWheelDraw;
+  const customChanged = _pendingCustomSync;
   if (_pendingWheelDraw)  { drawWheel(targetLum); _pendingWheelDraw  = false; }
   if (_pendingCustomSync) { syncCustomUI();        _pendingCustomSync = false; }
   updateUI();
+  // Contrast lock (Beta): adjust the side the user did NOT touch. Renders
+  // scheduled by the enforcement itself are skipped to prevent ping-ponging.
+  if (_skipEnforceOnce) { _skipEnforceOnce = false; }
+  else if (customChanged) enforceContrastLock('bg');
+  else if (wheelChanged)  enforceContrastLock('fg');
 }
 
 function scheduleRender(redrawWheel, syncCustom) {
@@ -665,6 +676,76 @@ function scheduleRender(redrawWheel, syncCustom) {
   if (syncCustom)   _pendingCustomSync = true;
   if (_rafId !== null) return;
   _rafId = requestAnimationFrame(_renderFrame);
+}
+
+// ─── Contrast lock (Beta) ─────────────────────────────────────────────────────
+// When active, changing one side's luminance auto-adjusts the other side so
+// contrastRatio(fg, bg) meets the target. Hue/saturation are preserved; only
+// the luminance of the untouched side moves (via findLightness).
+
+let _skipEnforceOnce = false;
+
+/**
+ * Nearest luminance for the free side that reaches `ratio` against `fixedLum`,
+ * or null when neither direction can reach it (possible for 7:1 when
+ * 0.1 < fixedLum < 0.3, since max contrast is capped by white and black).
+ */
+function solveContrastLum(fixedLum, currentLum, ratio) {
+  const hi = ratio * (fixedLum + 0.05) - 0.05; // free side lighter than fixed
+  const lo = (fixedLum + 0.05) / ratio - 0.05; // free side darker than fixed
+  const canHi = hi <= 1, canLo = lo >= 0;
+  if (!canHi && !canLo) return null;
+  if (canHi && canLo) return Math.abs(hi - currentLum) <= Math.abs(currentLum - lo) ? hi : lo;
+  return canHi ? hi : lo;
+}
+
+function setContrastLockError(msg) {
+  const el = document.getElementById('contrast-lock-error');
+  if (el) el.textContent = msg;
+}
+
+function enforceContrastLock(changed) {
+  if (!betaFeatures || !contrastLockTarget) return;
+  const R = contrastLockTarget;
+  // Use the luminances of the actual rendered colors (RGB-quantized)
+  const l = findLightness(selHue, selSat, targetLum);
+  const fgLum = relativeLuminance(...hslToRgb(selHue, selSat, l));
+  const bgLum = relativeLuminance(cR, cG, cB);
+  if (contrastRatio(fgLum, bgLum) >= R) { setContrastLockError(''); return; }
+
+  // Overshoot slightly so integer-RGB rounding can't land just below target
+  const EPS = 0.004;
+
+  if (changed === 'fg') {
+    const solved = solveContrastLum(fgLum, bgLum, R);
+    if (solved === null) {
+      setContrastLockError(`${R}:1 is unreachable against this luminance — no background can satisfy it.`);
+      return;
+    }
+    const newLum = Math.max(0, Math.min(1, solved + (solved > bgLum ? EPS : -EPS)));
+    _skipEnforceOnce = true;
+    if (customMode === 'lum') {
+      setCustomFromLumHueSat(newLum, cuHue, cuSat);
+    } else if (customMode === 'gray') {
+      const v = Math.round(findLightness(0, 0, newLum) * 255);
+      setCustomFromRgb(v, v, v);
+    } else {
+      setCustomFromHsl(cH, cS, findLightness(cH, cS, newLum));
+    }
+  } else {
+    const solved = solveContrastLum(bgLum, fgLum, R);
+    if (solved === null) {
+      setContrastLockError(`${R}:1 is unreachable against this luminance — no wheel color can satisfy it.`);
+      return;
+    }
+    targetLum = Math.max(0, Math.min(1, solved + (solved > fgLum ? EPS : -EPS)));
+    lumSlider.value = String(Math.round(targetLum * 1000));
+    if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
+    saveToStorage('sel-lum', String(targetLum));
+    _skipEnforceOnce = true;
+    scheduleRender(true);
+  }
+  setContrastLockError('');
 }
 
 // ─── Custom color wheel ───────────────────────────────────────────────────────
@@ -1341,6 +1422,54 @@ document.addEventListener('click', e => {
 }
 
 {
+  const betaCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('beta-checkbox'));
+  const lockRow  = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-row'));
+  const lockBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.contrast-lock-btn')]);
+
+  function storedLockTarget() {
+    const t = parseFloat(localStorage.getItem('contrast-lock-target') ?? '0');
+    return t === 4.5 || t === 7 ? t : 0;
+  }
+
+  function setLockTarget(target, persist) {
+    contrastLockTarget = target;
+    lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === target));
+    setContrastLockError('');
+    if (persist) { try { localStorage.setItem('contrast-lock-target', String(target)); } catch(e) {} }
+    // The wheel side is authoritative on (re)activation: adjust the custom color
+    if (target > 0) enforceContrastLock('fg');
+  }
+
+  try {
+    betaFeatures = localStorage.getItem('pref-beta') === '1';
+    betaCheckbox.checked = betaFeatures;
+    if (betaFeatures) {
+      const t = storedLockTarget();
+      contrastLockTarget = t;
+      lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === t));
+    }
+  } catch(e) {}
+  lockRow.hidden = !betaFeatures;
+
+  betaCheckbox.addEventListener('change', () => {
+    betaFeatures = betaCheckbox.checked;
+    try { localStorage.setItem('pref-beta', betaFeatures ? '1' : '0'); } catch(e) {}
+    lockRow.hidden = !betaFeatures;
+    if (betaFeatures) {
+      setLockTarget(storedLockTarget(), false);
+    } else {
+      // Deactivate without forgetting the stored target
+      contrastLockTarget = 0;
+      setContrastLockError('');
+    }
+  });
+
+  lockBtns.forEach(btn => btn.addEventListener('click', () => {
+    setLockTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.target), true);
+  }));
+}
+
+{
   const DEFAULT_HUE = 240;
   const DEFAULT_SAT = 0; // achromatic
 
@@ -1618,6 +1747,9 @@ syncCustomUI();
 updateUI();
 renderCustomWheel();
 applyCustomModeTabs(customMode);
+// Contrast lock persisted from a previous session: enforce against the
+// (possibly URL-restored) state, treating the wheel side as authoritative
+if (betaFeatures && contrastLockTarget) enforceContrastLock('fg');
 
 // ─── Mobile slider touch fix ──────────────────────────────────────────────────
 // On touch devices the browser may start a page scroll before the native range
