@@ -1986,29 +1986,35 @@ function buildExport(format) {
 }
 
 {
-  const previewEl = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
+  const previewEl  = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
+  const previewCode = /** @type {HTMLElement} */ (document.getElementById('export-preview-code'));
+  const previewCopy = /** @type {HTMLButtonElement} */ (document.getElementById('export-preview-copy'));
   const exportBtns = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.export-option')]);
   const btnsRow = /** @type {HTMLElement} */ (exportBtns[0].closest('.settings-theme-btns'));
+  const panelEl = /** @type {HTMLElement} */ (btnsRow.closest('.settings-panel'));
 
-  // The preview stays while the cursor is anywhere inside the union bounding
-  // box of the format buttons row and the preview (the gap between them
-  // counts as inside); it hides once the cursor fully leaves that area.
+  let previewFormat = 'css';
+
+  // The preview stays while the cursor is inside the containment area: from
+  // the format buttons row's top edge down to the settings panel's bottom,
+  // spanning the panel's full width — i.e. below the Export row the whole
+  // popper counts as inside. It hides once the cursor fully leaves that area.
   const PAD = 4;
 
   const onMove = e => {
     const a = btnsRow.getBoundingClientRect();
-    const b = previewEl.getBoundingClientRect();
-    const left   = Math.min(a.left, b.left)     - PAD;
-    const right  = Math.max(a.right, b.right)   + PAD;
-    const top    = Math.min(a.top, b.top)       - PAD;
-    const bottom = Math.max(a.bottom, b.bottom) + PAD;
-    if (e.clientX < left || e.clientX > right || e.clientY < top || e.clientY > bottom) {
+    const p = panelEl.getBoundingClientRect();
+    if (
+      e.clientX < p.left - PAD || e.clientX > p.right + PAD ||
+      e.clientY < a.top  - PAD || e.clientY > p.bottom + PAD
+    ) {
       hidePreview();
     }
   };
 
   const showPreview = format => {
-    previewEl.textContent = buildExport(format);
+    previewFormat = format;
+    previewCode.textContent = buildExport(format);
     if (previewEl.hidden) {
       previewEl.hidden = false;
       document.addEventListener('mousemove', onMove);
@@ -2020,6 +2026,14 @@ function buildExport(format) {
     previewEl.hidden = true;
     document.removeEventListener('mousemove', onMove);
   };
+
+  previewCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(buildExport(previewFormat));
+      previewCopy.textContent = 'Copied!';
+      setTimeout(() => { previewCopy.textContent = 'Copy'; }, 1500);
+    } catch (_) { /* clipboard denied */ }
+  });
 
   exportBtns.forEach(btn => {
     const format = btn.dataset.format;
@@ -2034,9 +2048,11 @@ function buildExport(format) {
     btn.addEventListener('mouseenter', () => showPreview(format));
     btn.addEventListener('focus', () => showPreview(format));
     btn.addEventListener('blur', e => {
-      // Keyboard: hide unless focus moved to another format button
+      // Keyboard: hide unless focus moved to another format button or the
+      // preview's own copy button
       const next = /** @type {HTMLElement | null} */ (e.relatedTarget);
-      if (!next || !next.classList || !next.classList.contains('export-option')) {
+      if (!next || !next.classList ||
+          (!next.classList.contains('export-option') && next !== previewCopy)) {
         hidePreview();
       }
     });

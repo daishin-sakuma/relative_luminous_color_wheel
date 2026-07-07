@@ -786,11 +786,15 @@ input.custom-val:focus {
 
 /* ── Export preview (inside Preferences) ────────────────────────────────────── */
 .export-preview {
+  position: relative;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 0.5rem 0.6rem;
   margin-top: -0.35rem;
+}
+.export-preview-code {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
   font-family: ui-monospace, monospace;
   font-size: 0.6rem;
   line-height: 1.5;
@@ -799,6 +803,25 @@ input.custom-val:focus {
   overflow: auto;
   max-height: 220px;
 }
+.export-preview-copy {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.4rem;
+  z-index: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.4rem;
+  transition: color 0.12s, background 0.12s, transform 0.1s;
+}
+.export-preview-copy:hover  { color: var(--text); background: var(--surface2); }
+.export-preview-copy:active { transform: scale(0.93); }
 
 /* ── APCA readout (experimental, shown with Beta features) ──────────────────── */
 .preview-apca {
