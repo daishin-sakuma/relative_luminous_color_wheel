@@ -1985,16 +1985,30 @@ function buildExport(format) {
   }, null, 2) + '\n';
 }
 
-document.querySelectorAll('.export-option').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(buildExport(/** @type {HTMLElement} */ (btn).dataset.format));
-      const prev = btn.textContent;
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = prev; }, 1500);
-    } catch (_) { /* clipboard denied */ }
+{
+  const previewEl = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
+  document.querySelectorAll('.export-option').forEach(btn => {
+    const format = /** @type {HTMLElement} */ (btn).dataset.format;
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(buildExport(format));
+        const prev = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = prev; }, 1500);
+      } catch (_) { /* clipboard denied */ }
+    });
+    // Live preview of the exact string that would be copied
+    const showPreview = () => {
+      previewEl.textContent = buildExport(format);
+      previewEl.hidden = false;
+    };
+    const hidePreview = () => { previewEl.hidden = true; };
+    btn.addEventListener('mouseenter', showPreview);
+    btn.addEventListener('focus', showPreview);
+    btn.addEventListener('mouseleave', hidePreview);
+    btn.addEventListener('blur', hidePreview);
   });
-});
+}
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
 // Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html;

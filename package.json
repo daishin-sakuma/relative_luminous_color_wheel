@@ -1,6 +1,6 @@
 {
   "name": "relative-luminous-color-wheel",
-  "version": "1.13.1",
+  "version": "1.13.2",
   "description": "Accessible color picker & WCAG 2.2 contrast checker — every color on the wheel shares the same relative luminance, so you can explore hue and saturation without breaking AA/AAA contrast",
   "private": true,
   "type": "module",

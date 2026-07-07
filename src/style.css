@@ -784,6 +784,22 @@ input.custom-val:focus {
 .pin-btn--panel { color: var(--muted); font-size: 0.8rem; }
 .pin-btn--panel:hover { color: var(--text); }
 
+/* ── Export preview (inside Preferences) ────────────────────────────────────── */
+.export-preview {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  margin-top: -0.35rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre;
+  overflow: auto;
+  max-height: 220px;
+}
+
 /* ── APCA readout (experimental, shown with Beta features) ──────────────────── */
 .preview-apca {
   display: none;
