@@ -41,6 +41,28 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
   });
 }
 
+// ─── Debounced localStorage writes ────────────────────────────────────────────
+// Slider drags fire input events at up to display refresh rate, and
+// localStorage.setItem is synchronous I/O. Batch writes and flush shortly
+// after the last change; pagehide flush keeps state safe on tab close.
+const _lsPending = new Map();
+let _lsTimer = null;
+
+function flushStorage() {
+  if (_lsTimer !== null) { clearTimeout(_lsTimer); _lsTimer = null; }
+  for (const [k, v] of _lsPending) {
+    try { localStorage.setItem(k, v); } catch (e) {}
+  }
+  _lsPending.clear();
+}
+
+function saveToStorage(key, value) {
+  _lsPending.set(key, value);
+  if (_lsTimer === null) _lsTimer = setTimeout(flushStorage, 300);
+}
+
+window.addEventListener('pagehide', flushStorage);
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CSS_SZ   = 420;
@@ -319,8 +341,15 @@ function drawMarker(x, y) {
 }
 
 // ─── Slider track gradients ───────────────────────────────────────────────────
+// updateUI() runs every animation frame during drags, but each track only
+// depends on a subset of the selection — skip regeneration when its inputs
+// haven't changed (e.g. a hue drag leaves the hue track untouched).
 
+let _lumTrackKey = '';
 function updateLumSliderTrack() {
+  const key = selHue + '/' + selSat;
+  if (key === _lumTrackKey) return;
+  _lumTrackKey = key;
   const s = Math.max(selSat, 0.65);
   const stops = [0, 0.15, 0.35, 0.55, 0.75, 0.90, 1].map(t => {
     const l = findLightness(selHue, s, t);
@@ -329,7 +358,10 @@ function updateLumSliderTrack() {
   lumSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
+let _hueTrackKey = -1;
 function updateHueSliderTrack() {
+  if (targetLum === _hueTrackKey) return;
+  _hueTrackKey = targetLum;
   const stops = Array.from({ length: 13 }, (_, i) => {
     const h = i * 30;
     const l = findLightness(h, 1, targetLum);
@@ -338,7 +370,11 @@ function updateHueSliderTrack() {
   hueSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
+let _satTrackKey = '';
 function updateSatSliderTrack() {
+  const key = selHue + '/' + targetLum;
+  if (key === _satTrackKey) return;
+  _satTrackKey = key;
   const stops = [0, 0.25, 0.5, 0.75, 1].map(s => {
     const l = findLightness(selHue, s, targetLum);
     return `${toHex(...hslToRgb(selHue, s, l))} ${Math.round(s * 100)}%`;
@@ -346,25 +382,54 @@ function updateSatSliderTrack() {
   satSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
-// ─── Contrast row helpers ─────────────────────────────────────────────────────
-
-/**
- * Render AA / AAA pass-fail indicators into a `.cr-indicators` container.
- * @param {HTMLElement} el
- * @param {number} ratio
- */
-function renderIndicators(el, ratio) {
-  el.innerHTML = '';
-  for (const [label, threshold] of [['AA', 4.5], ['AAA', 7]]) {
-    const pass = ratio >= threshold;
-    const badge = document.createElement('span');
-    badge.className = `cr-ind ${pass ? 'cr-ind-pass' : 'cr-ind-fail'}`;
-    badge.textContent = label;
-    el.appendChild(badge);
-  }
-}
-
 // ─── Contrast preview ─────────────────────────────────────────────────────────
+
+// Badge DOM is built once per container and updated in place afterwards —
+// updateUI() runs every animation frame during drags, and rebuilding ~10
+// elements × 4 tiles per frame causes measurable GC/style-recalc churn on mobile.
+/** @type {WeakMap<HTMLElement, { ratioEl: HTMLElement | null, cats: HTMLElement[], badges: { el: HTMLElement, threshold: number }[] }>} */
+const _wcagDom = new WeakMap();
+
+function buildPreviewWcag(el) {
+  const rowsEl = document.createElement('div');
+  rowsEl.className = 'preview-wcag-rows';
+
+  const CATEGORIES = [
+    { label: 'Normal',     thresholds: [['AA', 4.5], ['AAA', 7]]   },
+    { label: 'Large · UI', thresholds: [['AA', 3],   ['AAA', 4.5]] },
+  ];
+
+  const cats = [], badges = [];
+  for (const { label, thresholds } of CATEGORIES) {
+    const row = document.createElement('div');
+    row.className = 'preview-wcag-row';
+
+    const catEl = document.createElement('span');
+    catEl.className   = 'preview-wcag-cat';
+    catEl.textContent = label;
+    row.appendChild(catEl);
+    cats.push(catEl);
+
+    for (const [badge, threshold] of thresholds) {
+      const b = document.createElement('span');
+      b.className = 'preview-badge';
+      b.textContent = badge;
+      row.appendChild(b);
+      badges.push({ el: b, threshold });
+    }
+
+    rowsEl.appendChild(row);
+  }
+
+  el.appendChild(rowsEl);
+  const dom = {
+    ratioEl: document.getElementById(el.id.replace('-wcag', '-ratio')),
+    cats,
+    badges,
+  };
+  _wcagDom.set(el, dom);
+  return dom;
+}
 
 /**
  * Render WCAG badges into a `.preview-wcag` container.
@@ -375,24 +440,15 @@ function renderIndicators(el, ratio) {
  * @param {number} bgLum   tile background luminance (for color adaptation)
  */
 function renderPreviewWcag(el, l1, l2, bgLum) {
-  el.innerHTML = '';
+  const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
   const isLight = bgLum > 0.179;
   const dim     = isLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
 
-  const ratioTarget = document.getElementById(el.id.replace('-wcag', '-ratio'));
-  if (ratioTarget) {
-    ratioTarget.textContent = ratio.toFixed(2) + ':1';
-    ratioTarget.style.color = dim;
+  if (dom.ratioEl) {
+    dom.ratioEl.textContent = ratio.toFixed(2) + ':1';
+    dom.ratioEl.style.color = dim;
   }
-
-  const rowsEl = document.createElement('div');
-  rowsEl.className = 'preview-wcag-rows';
-
-  const CATEGORIES = [
-    { label: 'Normal',     thresholds: [['AA', 4.5], ['AAA', 7]]   },
-    { label: 'Large · UI', thresholds: [['AA', 3],   ['AAA', 4.5]] },
-  ];
 
   // lum(#5dde8a) ≈ 0.586 (bright green),  lum(#1a7a42) ≈ 0.057 (dark green)
   const LUM_BRIGHT = 0.586, LUM_DARK = 0.057;
@@ -413,39 +469,21 @@ function renderPreviewWcag(el, l1, l2, bgLum) {
   const passBg     = useBrightStyle ? 'rgba(93,222,138,0.10)' : 'rgba(26,122,66,0.10)';
   const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
 
-  for (const { label, thresholds } of CATEGORIES) {
-    const row = document.createElement('div');
-    row.className = 'preview-wcag-row';
+  for (const catEl of dom.cats) catEl.style.color = dim;
 
-    const catEl = document.createElement('span');
-    catEl.className   = 'preview-wcag-cat';
-    catEl.style.color = dim;
-    catEl.textContent = label;
-    row.appendChild(catEl);
-
-    for (const [badge, threshold] of thresholds) {
-      const pass = ratio >= threshold;
-      const b = document.createElement('span');
-      b.className = 'preview-badge';
-      b.textContent = badge;
-      if (pass) {
-        b.style.color       = passColor;
-        b.style.borderColor = passBorder;
-        b.style.background  = passBg;
-        b.style.boxShadow   = passRing;
-      } else {
-        b.style.color       = isLight ? 'rgba(0,0,0,0.3)'   : 'rgba(255,255,255,0.3)';
-        b.style.borderColor = isLight ? 'rgba(0,0,0,0.12)'  : 'rgba(255,255,255,0.12)';
-        b.style.background  = isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)';
-        b.style.boxShadow   = 'none';
-      }
-      row.appendChild(b);
+  for (const { el: b, threshold } of dom.badges) {
+    if (ratio >= threshold) {
+      b.style.color       = passColor;
+      b.style.borderColor = passBorder;
+      b.style.background  = passBg;
+      b.style.boxShadow   = passRing;
+    } else {
+      b.style.color       = isLight ? 'rgba(0,0,0,0.3)'   : 'rgba(255,255,255,0.3)';
+      b.style.borderColor = isLight ? 'rgba(0,0,0,0.12)'  : 'rgba(255,255,255,0.12)';
+      b.style.background  = isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)';
+      b.style.boxShadow   = 'none';
     }
-
-    rowsEl.appendChild(row);
   }
-
-  el.appendChild(rowsEl);
 }
 
 /**
@@ -638,8 +676,10 @@ const customWheelCanvas = /** @type {HTMLCanvasElement} */ (document.getElementB
 customWheelCanvas.width = customWheelCanvas.height = CW_BUF;
 const cwCtx = /** @type {CanvasRenderingContext2D} */ (customWheelCanvas.getContext('2d'));
 
-// Cache for lum-mode wheel background (expensive to render; invalidated only when cuLum changes)
-let _cwLumCache = null; // { lum: number, imageData: ImageData }
+// Caches for wheel backgrounds (expensive to render; invalidated only when the
+// governing lightness/luminance changes — dragging H/S sliders reuses the cache)
+let _cwLumCache = null;   // { lum: number, imageData: ImageData }
+let _cwColorCache = null; // { l: number, imageData: ImageData }
 
 function renderCustomWheel() {
   const radius = CW_BUF / 2;
@@ -703,23 +743,26 @@ function renderCustomWheel() {
   }
 
   // ── Color mode: HSL wheel at current lightness (original behavior) ──────────
-  const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
-  const data = img.data;
-  for (let py = 0; py < CW_BUF; py++) {
-    for (let px = 0; px < CW_BUF; px++) {
-      const dx = px - radius, dy = py - radius;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > radius + 1) continue;
-      const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
-      const sat = Math.min(dist / radius, 1);
-      const [rr, gg, bb] = hslToRgb(hue, sat, cL);
-      const alpha = dist > radius - 0.5
-        ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
-      const idx = (py * CW_BUF + px) * 4;
-      data[idx] = rr; data[idx+1] = gg; data[idx+2] = bb; data[idx+3] = alpha;
+  if (!_cwColorCache || _cwColorCache.l !== cL) {
+    const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
+    const data = img.data;
+    for (let py = 0; py < CW_BUF; py++) {
+      for (let px = 0; px < CW_BUF; px++) {
+        const dx = px - radius, dy = py - radius;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius + 1) continue;
+        const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
+        const sat = Math.min(dist / radius, 1);
+        const [rr, gg, bb] = hslToRgb(hue, sat, cL);
+        const alpha = dist > radius - 0.5
+          ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
+        const idx = (py * CW_BUF + px) * 4;
+        data[idx] = rr; data[idx+1] = gg; data[idx+2] = bb; data[idx+3] = alpha;
+      }
     }
+    _cwColorCache = { l: cL, imageData: img };
   }
-  cwCtx.putImageData(img, 0, 0);
+  cwCtx.putImageData(_cwColorCache.imageData, 0, 0);
   const mAngle = cH * Math.PI / 180;
   const mDist  = cS * radius;
   const mx = radius + Math.cos(mAngle) * mDist;
@@ -786,7 +829,11 @@ function updateCustomSliderTracks() {
   lSl.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(cH,cS,0))},${toHex(...hslToRgb(cH,cS,0.5))},${toHex(...hslToRgb(cH,cS,1))})`;
 }
 
+let _cuTracksKey = '';
 function updateLumModeSliderTracks() {
+  const key = cuHue + '/' + cuSat + '/' + cuLum;
+  if (key === _cuTracksKey) return;
+  _cuTracksKey = key;
   const lumSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider'));
   const satSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-slider'));
   const hueSl = /** @type {HTMLInputElement} */ (document.getElementById('cu-hue-slider'));
@@ -815,21 +862,19 @@ function updateLumModeSliderTracks() {
 /** Sync all custom controls EXCEPT the hex text input (safe while user is typing). */
 function syncCustomControls() {
   customColor = toHex(cR, cG, cB);
-  try {
-    localStorage.setItem('sel-custom-color', customColor);
-    if (customMode === 'gray') {
-      customGraySaved = cR;
-      localStorage.setItem('custom-gray-v', String(customGraySaved));
-    } else {
-      // Color and Lum share the same color save slot
-      customColorSaved = { r: cR, g: cG, b: cB };
-      localStorage.setItem('custom-color-rgb', JSON.stringify(customColorSaved));
-      if (customMode === 'lum') {
-        customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
-        localStorage.setItem('custom-lum-v', JSON.stringify(customLumSaved));
-      }
+  saveToStorage('sel-custom-color', customColor);
+  if (customMode === 'gray') {
+    customGraySaved = cR;
+    saveToStorage('custom-gray-v', String(customGraySaved));
+  } else {
+    // Color and Lum share the same color save slot
+    customColorSaved = { r: cR, g: cG, b: cB };
+    saveToStorage('custom-color-rgb', JSON.stringify(customColorSaved));
+    if (customMode === 'lum') {
+      customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
+      saveToStorage('custom-lum-v', JSON.stringify(customLumSaved));
     }
-  } catch(e) {}
+  }
   /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display')).style.background = customColor;
 
   const grayVal = Math.round(cL * 255);
@@ -931,10 +976,8 @@ function handlePointer(e) {
 
   syncSliders();
   scheduleRender();
-  try {
-    localStorage.setItem('sel-hue', String(selHue));
-    localStorage.setItem('sel-sat', String(selSat));
-  } catch(e) {}
+  saveToStorage('sel-hue', String(selHue));
+  saveToStorage('sel-sat', String(selSat));
 }
 
 wheelCanvas.addEventListener('mousedown', e => { isDown = true; handlePointer(e); });
@@ -962,7 +1005,7 @@ lumSlider.addEventListener('input', () => {
   targetLum = lumSlider.value / 1000;
   if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
   scheduleRender(true);
-  try { localStorage.setItem('sel-lum', String(targetLum)); } catch(e) {}
+  saveToStorage('sel-lum', String(targetLum));
 });
 
 hueSlider.addEventListener('input', () => {
@@ -970,7 +1013,7 @@ hueSlider.addEventListener('input', () => {
   setUnitVal(hueValEl, Math.round(selHue), '°');
   updateMarkerPosition();
   scheduleRender();
-  try { localStorage.setItem('sel-hue', String(selHue)); } catch(e) {}
+  saveToStorage('sel-hue', String(selHue));
 });
 
 satSlider.addEventListener('input', () => {
@@ -978,7 +1021,7 @@ satSlider.addEventListener('input', () => {
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
   updateMarkerPosition();
   scheduleRender();
-  try { localStorage.setItem('sel-sat', String(selSat)); } catch(e) {}
+  saveToStorage('sel-sat', String(selSat));
 });
 
 // ─── Custom color panel event listeners ──────────────────────────────────────
@@ -1047,21 +1090,21 @@ wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
   targetLum = v;
   lumSlider.value = String(Math.round(v * 1000));
   scheduleRender(true);
-  try { localStorage.setItem('sel-lum', String(targetLum)); } catch(e) {}
+  saveToStorage('sel-lum', String(targetLum));
 });
 
 wireValInput(hueValEl, 0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°', v => {
   selHue = v;
   hueSlider.value = String(v);
   updateMarkerPosition(); scheduleRender();
-  try { localStorage.setItem('sel-hue', String(selHue)); } catch(e) {}
+  saveToStorage('sel-hue', String(selHue));
 }, true);
 
 wireValInput(satValEl, 0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%', v => {
   selSat = v / 100;
   satSlider.value = String(v);
   updateMarkerPosition(); scheduleRender();
-  try { localStorage.setItem('sel-sat', String(selSat)); } catch(e) {}
+  saveToStorage('sel-sat', String(selSat));
 });
 
 wireValInput(
@@ -1136,7 +1179,7 @@ function setCustomMode(mode) {
   // ── Color ↔ Lum: shared color, no save/restore ────────────────────────────
   if ((prev === 'color' && mode === 'lum') || (prev === 'lum' && mode === 'color')) {
     customMode = mode;
-    try { localStorage.setItem('custom-mode', mode); } catch(e) {}
+    saveToStorage('custom-mode', mode);
     if (mode === 'lum') {
       // Derive Lum-mode params from the current color
       cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
@@ -1151,14 +1194,14 @@ function setCustomMode(mode) {
   // ── Transitions involving Gray: save current, restore target ──────────────
   if (prev === 'gray') {
     customGraySaved = cR;
-    try { localStorage.setItem('custom-gray-v', String(customGraySaved)); } catch(e) {}
+    saveToStorage('custom-gray-v', String(customGraySaved));
   } else {
     // prev is 'color' or 'lum' — both save to the shared color slot
     customColorSaved = { r: cR, g: cG, b: cB };
-    try { localStorage.setItem('custom-color-rgb', JSON.stringify(customColorSaved)); } catch(e) {}
+    saveToStorage('custom-color-rgb', JSON.stringify(customColorSaved));
   }
   customMode = mode;
-  try { localStorage.setItem('custom-mode', mode); } catch(e) {}
+  saveToStorage('custom-mode', mode);
 
   if (mode === 'gray') {
     setCustomFromRgb(customGraySaved, customGraySaved, customGraySaved);
@@ -1340,7 +1383,7 @@ document.addEventListener('click', e => {
     const val   = +uiBrightnessSlider.value;
     setUnitVal(uiBrightnessVal, val, '%');
     document.documentElement.style.setProperty('--ui-ground-l', String(val));
-    try { localStorage.setItem(`ui-ground-l-${theme}`, String(val)); } catch(e) {}
+    saveToStorage(`ui-ground-l-${theme}`, String(val));
   });
 
   document.addEventListener('themechange', (/** @type {CustomEvent} */ e) => {
@@ -1370,14 +1413,14 @@ document.addEventListener('click', e => {
     setUnitVal(uiHueVal, h, '°');
     applyUiColors(h, s);
     updateSatSliderBg(h);
-    try { localStorage.setItem('ui-hue', String(h)); } catch(e) {}
+    saveToStorage('ui-hue', String(h));
   });
 
   uiSatSlider.addEventListener('input', () => {
     const h = +uiHueSlider.value, s = +uiSatSlider.value;
     setUnitVal(uiSatVal, s, '%');
     applyUiColors(h, s);
-    try { localStorage.setItem('ui-sat', String(s)); } catch(e) {}
+    saveToStorage('ui-sat', String(s));
   });
 
   recommendBtn.addEventListener('click', () => {
@@ -1404,7 +1447,7 @@ document.addEventListener('click', e => {
     setUnitVal(uiSatVal, 0, '%');
     applyUiColors(h, 0);
     updateSatSliderBg(h);
-    try { localStorage.setItem('ui-sat', '0'); } catch(e) {}
+    saveToStorage('ui-sat', '0');
   });
 
 }
