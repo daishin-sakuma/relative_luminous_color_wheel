@@ -1990,44 +1990,36 @@ function buildExport(format) {
   const exportBtns = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.export-option')]);
   const btnsRow = /** @type {HTMLElement} */ (exportBtns[0].closest('.settings-theme-btns'));
 
-  // Aim-aware hiding: after the cursor leaves a format button or the preview,
-  // keep the preview visible as long as the cursor keeps closing in on the
-  // target zone (buttons row + preview) — however slowly, pauses included.
-  // Hide only once it starts moving away (4px hysteresis).
-  let _aimActive = false;
-  let _aimDist = Infinity;
+  // The preview stays while the cursor is anywhere inside the union bounding
+  // box of the format buttons row and the preview (the gap between them
+  // counts as inside); it hides once the cursor fully leaves that area.
+  const PAD = 4;
 
-  const rectDist = (x, y, r) => {
-    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
-    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
-    return Math.hypot(dx, dy);
-  };
-  const zoneDist = (x, y) => Math.min(
-    rectDist(x, y, previewEl.getBoundingClientRect()),
-    rectDist(x, y, btnsRow.getBoundingClientRect()),
-  );
-  const stopAim = () => {
-    if (!_aimActive) return;
-    _aimActive = false;
-    document.removeEventListener('mousemove', onAimMove);
-  };
-  const onAimMove = e => {
-    const d = zoneDist(e.clientX, e.clientY);
-    if (d === 0) { stopAim(); return; }                              // reached the zone
-    if (d > _aimDist + 4) { previewEl.hidden = true; stopAim(); return; } // moving away
-    _aimDist = Math.min(_aimDist, d);
-  };
-  const startAim = e => {
-    if (previewEl.hidden) return;
-    _aimDist = zoneDist(e.clientX, e.clientY);
-    if (!_aimActive) {
-      _aimActive = true;
-      document.addEventListener('mousemove', onAimMove);
+  const onMove = e => {
+    const a = btnsRow.getBoundingClientRect();
+    const b = previewEl.getBoundingClientRect();
+    const left   = Math.min(a.left, b.left)     - PAD;
+    const right  = Math.max(a.right, b.right)   + PAD;
+    const top    = Math.min(a.top, b.top)       - PAD;
+    const bottom = Math.max(a.bottom, b.bottom) + PAD;
+    if (e.clientX < left || e.clientX > right || e.clientY < top || e.clientY > bottom) {
+      hidePreview();
     }
   };
 
-  previewEl.addEventListener('mouseenter', stopAim);
-  previewEl.addEventListener('mouseleave', startAim);
+  const showPreview = format => {
+    previewEl.textContent = buildExport(format);
+    if (previewEl.hidden) {
+      previewEl.hidden = false;
+      document.addEventListener('mousemove', onMove);
+    }
+  };
+
+  const hidePreview = () => {
+    if (previewEl.hidden) return;
+    previewEl.hidden = true;
+    document.removeEventListener('mousemove', onMove);
+  };
 
   exportBtns.forEach(btn => {
     const format = btn.dataset.format;
@@ -2039,21 +2031,13 @@ function buildExport(format) {
         setTimeout(() => { btn.textContent = prev; }, 1500);
       } catch (_) { /* clipboard denied */ }
     });
-    // Live preview of the exact string that would be copied
-    const showPreview = () => {
-      stopAim();
-      previewEl.textContent = buildExport(format);
-      previewEl.hidden = false;
-    };
-    btn.addEventListener('mouseenter', showPreview);
-    btn.addEventListener('focus', showPreview);
-    btn.addEventListener('mouseleave', startAim);
+    btn.addEventListener('mouseenter', () => showPreview(format));
+    btn.addEventListener('focus', () => showPreview(format));
     btn.addEventListener('blur', e => {
       // Keyboard: hide unless focus moved to another format button
       const next = /** @type {HTMLElement | null} */ (e.relatedTarget);
       if (!next || !next.classList || !next.classList.contains('export-option')) {
-        previewEl.hidden = true;
-        stopAim();
+        hidePreview();
       }
     });
   });
