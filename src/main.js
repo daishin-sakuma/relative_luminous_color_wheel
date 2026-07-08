@@ -2883,8 +2883,10 @@ function buildChipEditorDropdown() {
     it.setAttribute('role', 'option');
     it.setAttribute('aria-selected', String(i === _cePartner));
     const sw = document.createElement('span'); sw.className = 'chip-editor-dd-swatch'; sw.style.background = hex;
+    // The rank name (Primary / Secondary / …) leads; hex is a muted suffix.
+    const nm = document.createElement('span'); nm.className = 'chip-editor-dd-name'; nm.textContent = paletteRankLabel(i);
     const hx = document.createElement('span'); hx.className = 'chip-editor-dd-hex'; hx.textContent = formatHex(hex);
-    it.append(sw, hx);
+    it.append(sw, nm, hx);
     if (i === _cePartner) { const ck = document.createElement('span'); ck.className = 'chip-editor-dd-check'; ck.textContent = '✓'; it.appendChild(ck); }
     it.addEventListener('click', () => { _cePartner = i; chipEditorRenderPreview(); closeChipEditorDropdown(); });
     dd.appendChild(it);

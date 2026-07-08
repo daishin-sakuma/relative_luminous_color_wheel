@@ -1134,7 +1134,7 @@ input.custom-val:focus {
   top: calc(100% + 4px);
   right: 0;
   z-index: 6;
-  min-width: 8.5rem;
+  min-width: 11rem;
   max-height: 9rem;
   overflow-y: auto;
   padding: 0.25rem;
@@ -1162,8 +1162,9 @@ input.custom-val:focus {
 .chip-editor-dd-item[aria-selected="true"] { background: var(--border); }
 .chip-editor-dd-item[disabled] { cursor: default; color: var(--muted); }
 .chip-editor-dd-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(128, 128, 128, 0.35); }
-.chip-editor-dd-hex { font-family: ui-monospace, monospace; }
-.chip-editor-dd-check { margin-left: auto; color: var(--pass); }
+.chip-editor-dd-name { flex: 1; white-space: nowrap; }
+.chip-editor-dd-hex { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); }
+.chip-editor-dd-check { flex-shrink: 0; color: var(--pass); }
 .chip-editor-cmp {
   display: flex;
   align-items: center;
