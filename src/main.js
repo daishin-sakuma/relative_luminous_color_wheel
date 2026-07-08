@@ -2798,7 +2798,7 @@ function paletteRankLabel(pos) {
 }
 
 // Icons for the palette chips / group headers
-const EYEDROPPER_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 11.25l1.5 1.5.75-.75V8.758l2.276-.61a3 3 0 1 0-3.675-3.675l-.61 2.277H12l-.75.75 1.5 1.5M15 11.25l-8.47 8.47a2.25 2.25 0 0 1-1.591.659H3.75v-1.189c0-.597.237-1.17.659-1.591L12.75 9"/></svg>';
+const PENCIL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>';
 const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
 
 // ─── Inline palette-chip editor ───────────────────────────────────────────────
@@ -3240,7 +3240,7 @@ function renderPalette() {
 
     const edit = document.createElement('button');
     edit.className = 'palette-chip-edit';
-    edit.innerHTML = EYEDROPPER_SVG;
+    edit.innerHTML = PENCIL_SVG;
     edit.title = 'Edit this color';
     edit.setAttribute('aria-label', 'Edit this color');
     edit.addEventListener('click', e => {

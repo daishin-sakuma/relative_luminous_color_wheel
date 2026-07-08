@@ -1108,7 +1108,10 @@ input.custom-val:focus {
   border: 1px solid var(--border);
   border-radius: 5px;
 }
-.chip-editor-ag { display: flex; align-items: center; font-size: 1.5rem; line-height: 1; font-weight: 600; }
+/* NATS has tall, asymmetric vertical metrics (ascent 1294 / descent −756 per
+   970 upm), so even at line-height:1 the glyph ink sits ~0.10em below the box
+   centre. Nudge up by that amount so "Ag" is optically centred in the tile. */
+.chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; transform: translateY(-0.103em); }
 .chip-editor-cmp-btn {
   display: flex;
   align-items: center;
