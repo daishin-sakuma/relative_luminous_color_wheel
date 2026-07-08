@@ -2524,6 +2524,7 @@ function applyPaletteOpen() {
   if (paletteOpen) {
     paletteSection.classList.remove('palette-section--closing');
     paletteSection.hidden = false;
+    syncSidebarHeight(); // pin to the visible viewport now that it's showing
   } else if (!paletteSection.hidden) {
     // Mirror of the slide-in: play the slide-out, then actually hide
     paletteSection.classList.add('palette-section--closing');
@@ -2541,6 +2542,22 @@ function setPaletteOpen(open) {
   if (open) _paletteInteracted = false; // fresh open starts as "untouched"
   applyPaletteOpen();
   saveToStorage('palette-open', open ? '1' : '0');
+}
+
+// Pin the sidebar to the *visible* viewport. iOS Safari's 100dvh can briefly
+// report the toolbar-hidden (large) height while the toolbar is actually shown
+// — notably as the drawer opens — pushing the pinned-to-bottom export footer
+// under the toolbar so the bottom looks cut off. visualViewport.height is the
+// ground truth; the inline px height overrides the CSS 100dvh fallback.
+function syncSidebarHeight() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  if (h) paletteSection.style.height = h + 'px';
+}
+syncSidebarHeight();
+window.addEventListener('resize', syncSidebarHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', syncSidebarHeight);
+  window.visualViewport.addEventListener('scroll', syncSidebarHeight);
 }
 
 // Hovering the toggle opens the sidebar (mouse only — on touch, the tap's
@@ -2839,6 +2856,7 @@ function buildChipEditor() {
     groups: [..._ceEl.querySelectorAll('[data-egroup]')],
     wheel:  q('.chip-editor-wheel'),
     hex:    q('.chip-editor-hex'),
+    hexCopy: q('.chip-editor-hex-copy'),
     tile:   q('.chip-editor-tile'),
     ag:     q('.chip-editor-ag'),
     cmpBtn: q('.chip-editor-cmp-btn'),
@@ -2873,6 +2891,18 @@ function buildChipEditor() {
     const m = /^#?([0-9a-fA-F]{6})$/.exec(_ceRefs.hex.value.trim());
     if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
     else _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b);
+  });
+  // Match the main custom hex field: focusing/tapping selects all; the icon copies
+  _ceRefs.hex.addEventListener('focus', () => _ceRefs.hex.select());
+  _ceRefs.hex.addEventListener('click', () => _ceRefs.hex.select());
+  _ceRefs.hexCopy.addEventListener('click', () => {
+    copyToClipboard(formatHex(toHex(_ce.r, _ce.g, _ce.b)));
+    _ceRefs.hex.classList.add('hex-copied');
+    _ceRefs.hexCopy.classList.add('hex-copied');
+    setTimeout(() => {
+      _ceRefs.hex.classList.remove('hex-copied');
+      _ceRefs.hexCopy.classList.remove('hex-copied');
+    }, 1500);
   });
   _ceRefs.cmpBtn.addEventListener('click', toggleChipEditorDropdown);
   attachChipEditorWheel();

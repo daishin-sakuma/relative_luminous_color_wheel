@@ -1088,10 +1088,11 @@ input.custom-val:focus {
 }
 .chip-editor-wheel[hidden] { display: none; }
 .chip-editor .custom-slider-group { gap: 0.4rem; }
-.chip-editor-hexwrap { display: flex; }
+.chip-editor-hexwrap { position: relative; } /* anchors the absolute copy icon */
 .chip-editor-hex {
   width: 100%;
   text-align: left;
+  padding-right: 1.9rem; /* room for the copy icon */
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
 }
