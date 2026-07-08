@@ -2845,6 +2845,10 @@ function buildChipEditor() {
   };
   _ceEl.querySelectorAll('[data-ch]').forEach(inp => { _ceRefs.ranges[inp.dataset.ch] = inp; });
   _ceEl.querySelectorAll('[data-chv]').forEach(inp => { _ceRefs.vals[inp.dataset.chv] = inp; });
+  // Render at device resolution (CSS holds the display size at 132px) so the
+  // circle edge downsamples smoothly like the main wheels, not jagged.
+  const wdpr = Math.min(window.devicePixelRatio || 1, 2);
+  _ceRefs.wheel.width = _ceRefs.wheel.height = Math.round(132 * wdpr);
   _ceRefs.ctx = _ceRefs.wheel.getContext('2d');
 
   // Keep chip drag / outside-close from firing on editor interactions
@@ -3132,11 +3136,11 @@ function renderChipEditorWheel() {
   if (lumMode)                 { mh = _ce.lum[2]; ms = _ce.lum[1] / 100; }
   else if (_ce.mode === 'hsl') { mh = _ce.hsl[0]; ms = _ce.hsl[1] / 100; }
   else                         { const h = rgbToHsl(_ce.r, _ce.g, _ce.b); mh = h[0]; ms = h[1]; }
-  const a = mh * Math.PI / 180, dd = ms * R;
+  const a = mh * Math.PI / 180, dd = ms * R, scale = SZ / 132;
   ctx.beginPath();
-  ctx.arc(R + Math.cos(a) * dd, R + Math.sin(a) * dd, 5, 0, Math.PI * 2);
+  ctx.arc(R + Math.cos(a) * dd, R + Math.sin(a) * dd, 5 * scale, 0, Math.PI * 2);
   ctx.strokeStyle = relativeLuminance(_ce.r, _ce.g, _ce.b) > 0.35 ? '#000' : '#fff';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2 * scale;
   ctx.stroke();
 }
 

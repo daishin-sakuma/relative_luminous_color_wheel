@@ -916,12 +916,17 @@ input.custom-val:focus {
   position: fixed;
   top: 0;
   right: 0;
-  bottom: 0;
+  /* Height tracks the *visible* viewport. iOS Safari's fixed containing block
+     is the large (toolbar-hidden) viewport, so top:0/bottom:0 let the sidebar
+     run under the address/toolbar and leave the bottom strip unpainted; 100dvh
+     matches what's actually on screen. 100vh stays as the older-browser fallback. */
+  height: 100vh;
+  height: 100dvh;
   width: var(--palette-w);
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 1rem 0.9rem;
+  padding: 1rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px));
   border-left: 1px solid var(--border);
   background: var(--ground);
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);
