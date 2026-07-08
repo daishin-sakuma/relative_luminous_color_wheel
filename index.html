@@ -192,7 +192,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.22.0</span>
+    <span class="app-version">ver. 1.22.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -267,6 +267,13 @@
             <button class="settings-theme-btn export-option" data-format="css" title="Preview as CSS custom properties">CSS</button>
             <button class="settings-theme-btn export-option" data-format="tailwind" title="Preview as Tailwind @theme block">Tailwind</button>
             <button class="settings-theme-btn export-option" data-format="json" title="Preview as W3C design tokens JSON">JSON</button>
+          </div>
+        </div>
+        <div class="settings-theme-row">
+          <span class="settings-row-label">Color format</span>
+          <div class="settings-theme-btns">
+            <button class="settings-theme-btn export-colorfmt-btn" data-colorfmt="oklch" title="Export colors as OKLCH">OKLCH</button>
+            <button class="settings-theme-btn export-colorfmt-btn" data-colorfmt="hex" title="Export colors as hex">HEX</button>
           </div>
         </div>
         <div class="export-preview" id="export-preview" hidden>

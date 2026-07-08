@@ -2223,6 +2223,39 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
+// Color value format for exports: 'oklch' (default) or 'hex'. Shared by the
+// Preferences preview and the palette sidebar; toggled via any
+// .export-colorfmt-btn and persisted across sessions.
+let exportColorFmt = 'oklch';
+try {
+  const v = localStorage.getItem('export-color-fmt');
+  if (v === 'hex' || v === 'oklch') exportColorFmt = v;
+} catch (e) {}
+
+const _exportColorFmtListeners = [];
+/** Register a callback fired whenever the export color format changes. */
+function onExportColorFmtChange(fn) { _exportColorFmtListeners.push(fn); }
+
+function syncExportColorFmtButtons() {
+  document.querySelectorAll('.export-colorfmt-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.colorfmt === exportColorFmt));
+}
+
+function setExportColorFmt(fmt) {
+  if ((fmt !== 'hex' && fmt !== 'oklch') || fmt === exportColorFmt) return;
+  exportColorFmt = fmt;
+  try { localStorage.setItem('export-color-fmt', fmt); } catch (e) {}
+  syncExportColorFmtButtons();
+  _exportColorFmtListeners.forEach(fn => fn());
+}
+
+// Delegated so one handler covers both the static Preferences buttons and the
+// ones the palette sidebar builds later.
+document.addEventListener('click', e => {
+  const btn = e.target.closest?.('.export-colorfmt-btn');
+  if (btn) setExportColorFmt(btn.dataset.colorfmt);
+});
+
 function buildExport(format) {
   // Export the palette grouped by role. Each role's first pinned color is its
   // primary, the second its secondary, then plain ordinals. The color live in
@@ -2241,12 +2274,17 @@ function buildExport(format) {
   const key = pos => RANKS[pos] || String(pos + 1);
   const ratio = contrastRatio(text[0].lum, bg[0].lum); // text-primary vs bg-primary
 
+  // Color value in the chosen format; hex keeps the source, OKLCH is the modern
+  // CSS color space. The unused representation is kept in a comment for reference.
+  const isHex = exportColorFmt === 'hex';
+
   if (format === 'css') {
-    // OKLCH values (the modern CSS color space) with the source hex kept in a
-    // trailing comment as a human-readable sRGB fallback reference.
+    const cssLine = (name, c) => isHex
+      ? `  ${name}: ${c.hex.toLowerCase()};  /* ${oklchCss(c.hex)} — luminance ${c.lum.toFixed(4)} */`
+      : `  ${name}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} — luminance ${c.lum.toFixed(4)} */`;
     const lines = [
-      ...text.map((c, i) => `  --color-text-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} — luminance ${c.lum.toFixed(4)} */`),
-      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} — luminance ${c.lum.toFixed(4)} */`),
+      ...text.map((c, i) => cssLine(`--color-text-${key(i)}`, c)),
+      ...bg.map((c, i)   => cssLine(`--color-bg-${key(i)}`, c)),
     ];
     return `:root {
   /* text-primary vs bg-primary contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
@@ -2255,10 +2293,13 @@ ${lines.join('\n')}
 `;
   }
   if (format === 'tailwind') {
-    // Tailwind v4 @theme; its default palette is OKLCH, so emit oklch() too.
+    // Tailwind v4 @theme; its default palette is OKLCH, so OKLCH is idiomatic.
+    const twLine = (name, c) => isHex
+      ? `  ${name}: ${c.hex.toLowerCase()};  /* ${oklchCss(c.hex)} */`
+      : `  ${name}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} */`;
     const lines = [
-      ...text.map((c, i) => `  --color-text-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} */`),
-      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} */`),
+      ...text.map((c, i) => twLine(`--color-text-${key(i)}`, c)),
+      ...bg.map((c, i)   => twLine(`--color-bg-${key(i)}`, c)),
     ];
     return `@theme {
 ${lines.join('\n')}
@@ -2266,14 +2307,18 @@ ${lines.join('\n')}
 `;
   }
   // W3C Design Tokens (DTCG) 2025.10: color $value is an object with a
-  // colorSpace + components array; `hex` is the optional sRGB fallback. Emitting
-  // OKLCH components keeps the tokens gamut-wide and lossless for modern tools.
-  const colorToken = c => ({
-    $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex: c.hex.toLowerCase() },
-  });
+  // colorSpace + components array; `hex` is the optional sRGB fallback.
+  const colorToken = c => {
+    if (isHex) {
+      const [r, g, b] = hexToRgb(c.hex);
+      const comp = [r, g, b].map(v => +(v / 255).toFixed(4));
+      return { $value: { colorSpace: 'srgb', components: comp, alpha: 1, hex: c.hex.toLowerCase() } };
+    }
+    return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex: c.hex.toLowerCase() } };
+  };
   const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
   const json = {
-    $description: 'Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). Colors are OKLCH per the W3C Design Tokens format (2025.10); each carries an sRGB hex fallback.',
+    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). Colors are ${isHex ? 'sRGB' : 'OKLCH'} per the W3C Design Tokens format (2025.10); each carries an sRGB hex fallback.`,
     color: {
       $type: 'color',
       text: groupTokens(text),
@@ -2368,6 +2413,9 @@ function downloadExport(format) {
     if (pinnedFormat !== null) render(pinnedFormat);
   });
 
+  // Re-render the live preview when the OKLCH/HEX color format toggles.
+  onExportColorFmtChange(() => { if (pinnedFormat !== null) render(pinnedFormat); });
+
   sync();
 }
 
@@ -2380,6 +2428,26 @@ function downloadExport(format) {
   const FORMATS = [['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']];
 
   const flash = (btn, cls) => { btn.classList.add(cls); setTimeout(() => btn.classList.remove(cls), 1500); };
+
+  // OKLCH/HEX color-format toggle, shared with the Preferences export (a single
+  // delegated click handler drives every .export-colorfmt-btn on the page).
+  const fmtRow = document.createElement('div');
+  fmtRow.className = 'palette-export-row palette-colorfmt-row';
+  const fmtLabel = document.createElement('span');
+  fmtLabel.className = 'palette-export-fmt';
+  fmtLabel.textContent = 'Color format';
+  const fmtBtns = document.createElement('div');
+  fmtBtns.className = 'palette-colorfmt-btns';
+  for (const cf of ['oklch', 'hex']) {
+    const b = document.createElement('button');
+    b.className = 'palette-colorfmt-btn export-colorfmt-btn';
+    b.dataset.colorfmt = cf;
+    b.textContent = cf.toUpperCase();
+    b.title = `Export colors as ${cf.toUpperCase()}`;
+    fmtBtns.appendChild(b);
+  }
+  fmtRow.append(fmtLabel, fmtBtns);
+  host.appendChild(fmtRow);
 
   for (const [format, label] of FORMATS) {
     const row = document.createElement('div');
@@ -2410,6 +2478,9 @@ function downloadExport(format) {
     row.append(name, copy, dl);
     host.appendChild(row);
   }
+
+  // Reflect the persisted format on every toggle button now that they all exist.
+  syncExportColorFmtButtons();
 }
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
