@@ -2477,12 +2477,18 @@ function downloadExport(format) {
 
 {
   const cvdLayer = /** @type {HTMLElement} */ (document.getElementById('cvd-layer'));
+  const cvdSidebar = /** @type {HTMLElement} */ (document.getElementById('palette-section'));
   const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
   cvdBtns.forEach(btn => btn.addEventListener('click', () => {
     cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
     const v = btn.dataset.cvd;
     document.body.classList.toggle('cvd-active', !!v);
-    cvdLayer.style.filter = v ? `url(#cvd-${v})` : '';
+    const f = v ? `url(#cvd-${v})` : '';
+    cvdLayer.style.filter = f;
+    // The palette sidebar sits outside #cvd-layer (a fixed / compositing layer
+    // that iOS Safari won't rasterize through an ancestor filter), so filter it
+    // directly — this covers the saved colors, the inline editor and its preview.
+    cvdSidebar.style.filter = f;
     // iOS Safari doesn't re-run an SVG filter over the already-painted WebGL
     // wheel when the filter is (un)set, so the wheel keeps its unfiltered
     // pixels. Repaint it now that the filter state has changed so the fresh

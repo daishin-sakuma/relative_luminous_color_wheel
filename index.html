@@ -193,7 +193,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.23.7</span>
+    <span class="app-version">ver. 1.23.8</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -658,17 +658,6 @@
 
   </div>
 
-  <aside class="palette-section" id="palette-section" aria-label="Saved palette" hidden>
-    <div class="palette-head">
-      <span class="section-label">Palette</span>
-      <button class="palette-clear" id="palette-clear">Clear all</button>
-    </div>
-    <div class="palette-rail" id="palette-rail"></div>
-    <div class="palette-export" id="palette-export">
-      <span class="palette-export-label">Export</span>
-    </div>
-  </aside>
-
 </main>
 
 <section class="about">
@@ -759,6 +748,21 @@
 <footer class="copyright"><a href="https://fxx.huruike.com/projects/relative-luminous-color-wheel.html" target="_blank" rel="noopener noreferrer">MIT © Daishin Sakuma.</a></footer>
 
 </div><!-- /#cvd-layer -->
+
+<!-- Palette sidebar lives OUTSIDE #cvd-layer: iOS Safari doesn't apply an
+     ancestor SVG filter to fixed / compositing-layer descendants, so the CVD
+     filter is applied to this element directly (see the CVD toggle in main.js)
+     instead of inherited from #cvd-layer. -->
+<aside class="palette-section" id="palette-section" aria-label="Saved palette" hidden>
+  <div class="palette-head">
+    <span class="section-label">Palette</span>
+    <button class="palette-clear" id="palette-clear">Clear all</button>
+  </div>
+  <div class="palette-rail" id="palette-rail"></div>
+  <div class="palette-export" id="palette-export">
+    <span class="palette-export-label">Export</span>
+  </div>
+</aside>
 
 <!-- Color-vision-deficiency simulation filters (Machado et al. 2009, severity 1.0).
      feColorMatrix operates in linearRGB, matching the matrices' color space.
