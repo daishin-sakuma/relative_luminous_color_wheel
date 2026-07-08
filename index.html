@@ -109,7 +109,7 @@
       "Color palette sidebar with text/background roles and drag & drop reordering",
       "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with a live contrast preview",
       "Color blindness simulation (protanopia, deuteranopia, tritanopia)",
-      "Export OKLCH as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON with an sRGB hex fallback",
+      "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, in OKLCH or hex with an sRGB hex fallback",
       "Accessible color scheme and dark-mode palette builder",
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
@@ -166,7 +166,7 @@
         "name": "Can I export colors to CSS, Tailwind, or design tokens?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Export your palette as CSS custom properties, a Tailwind @theme block, or W3C design-tokens JSON. Your colors and palette also travel in a shareable URL."
+          "text": "Yes. Export your palette as CSS custom properties, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH or hex, always with an sRGB hex fallback. Your colors and palette also travel in a shareable URL."
         }
       },
       {
@@ -193,7 +193,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.23.4</span>
+    <span class="app-version">ver. 1.23.5</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -706,7 +706,7 @@
         <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
         <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker and a live contrast preview against a selectable opposite-role color, plus smooth drag &amp; drop reordering and one-tap hex copy</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
-        <li>Share your exact color state with a URL, or export everything — palette included — as OKLCH CSS variables, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, each with an sRGB hex fallback</li>
+        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH or hex (with an sRGB hex fallback)</li>
       </ul>
       <h3>Who it's for</h3>
       <p>
@@ -746,8 +746,9 @@
         contrast is held as a constraint, every color you can reach already passes — there is no
         pick-then-check-then-adjust loop.</p>
       <p><strong>Can I export colors to CSS, Tailwind, or design tokens?</strong><br>
-        Yes. Export your palette as CSS custom properties, a Tailwind <code>@theme</code> block, or
-        W3C design-tokens JSON. Your colors and palette also travel in a shareable URL.</p>
+        Yes. Export your palette as CSS custom properties, a Tailwind v4 <code>@theme</code> block,
+        or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH or hex, always with an
+        sRGB hex fallback. Your colors and palette also travel in a shareable URL.</p>
       <p><strong>Is it free and private?</strong><br>
         Yes. It is completely free with no account and no sign-up, and it is private by design —
         everything runs locally in your browser with nothing uploaded.</p>
