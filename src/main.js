@@ -186,6 +186,38 @@ function hexToRgb(hex) {
 }
 
 /**
+ * 8-bit sRGB → OKLCH, returning [L 0–1, C ≥ 0, H° 0–360].
+ * Linearizes via the shared LINEAR LUT, then applies Björn Ottosson's OKLab
+ * transform (linear-sRGB → LMS → OKLab) and converts OKLab a/b to chroma/hue.
+ * Used only for exports; the wheel/contrast math stays in sRGB.
+ */
+function rgbToOklch(r, g, b) {
+  const lr = LINEAR[r], lg = LINEAR[g], lb = LINEAR[b];
+  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  const a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  const C = Math.hypot(a, bb);
+  let H = Math.atan2(bb, a) * 180 / Math.PI;
+  if (H < 0) H += 360;
+  return [L, C, C < 1e-4 ? 0 : H]; // achromatic → hue undefined, normalize to 0
+}
+
+/** OKLCH as a CSS oklch() string, e.g. 'oklch(62.79% 0.2577 29.23)'. */
+function oklchCss(hex) {
+  const [L, C, H] = rgbToOklch(...hexToRgb(hex));
+  return `oklch(${(L * 100).toFixed(2)}% ${C.toFixed(4)} ${H.toFixed(2)})`;
+}
+
+/** OKLCH as a DTCG color-object `components` array [L, C, H] with tidy precision. */
+function oklchComponents(hex) {
+  const [L, C, H] = rgbToOklch(...hexToRgb(hex));
+  return [+L.toFixed(4), +C.toFixed(4), +H.toFixed(2)];
+}
+
+/**
  * Return a foreground color (near-black or near-white) that contrasts with bgLum.
  * Threshold ≈ 0.179 is where black and white have equal contrast ratio.
  */
@@ -2210,9 +2242,11 @@ function buildExport(format) {
   const ratio = contrastRatio(text[0].lum, bg[0].lum); // text-primary vs bg-primary
 
   if (format === 'css') {
+    // OKLCH values (the modern CSS color space) with the source hex kept in a
+    // trailing comment as a human-readable sRGB fallback reference.
     const lines = [
-      ...text.map((c, i) => `  --color-text-${key(i)}: ${c.hex};  /* relative luminance ${c.lum.toFixed(4)} */`),
-      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${c.hex};  /* relative luminance ${c.lum.toFixed(4)} */`),
+      ...text.map((c, i) => `  --color-text-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} — luminance ${c.lum.toFixed(4)} */`),
+      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} — luminance ${c.lum.toFixed(4)} */`),
     ];
     return `:root {
   /* text-primary vs bg-primary contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
@@ -2221,19 +2255,27 @@ ${lines.join('\n')}
 `;
   }
   if (format === 'tailwind') {
+    // Tailwind v4 @theme; its default palette is OKLCH, so emit oklch() too.
     const lines = [
-      ...text.map((c, i) => `  --color-text-${key(i)}: ${c.hex};`),
-      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${c.hex};`),
+      ...text.map((c, i) => `  --color-text-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} */`),
+      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} */`),
     ];
     return `@theme {
 ${lines.join('\n')}
 }
 `;
   }
-  const groupTokens = list => Object.fromEntries(
-    list.map((c, i) => [key(i), { $type: 'color', $value: c.hex }]));
+  // W3C Design Tokens (DTCG) 2025.10: color $value is an object with a
+  // colorSpace + components array; `hex` is the optional sRGB fallback. Emitting
+  // OKLCH components keeps the tokens gamut-wide and lossless for modern tools.
+  const colorToken = c => ({
+    $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex: c.hex.toLowerCase() },
+  });
+  const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
   const json = {
+    $description: 'Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). Colors are OKLCH per the W3C Design Tokens format (2025.10); each carries an sRGB hex fallback.',
     color: {
+      $type: 'color',
       text: groupTokens(text),
       bg:   groupTokens(bg),
     },

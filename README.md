@@ -20,7 +20,7 @@ The usual workflow treats accessibility as an afterthought: pick a color, run it
 - **Live contrast readouts** — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components against white, black, and a custom color, with APCA Lc values alongside every ratio
 - **Custom comparison color** — three modes: **Color** (RGB/HSL), **Lum** (relative luminance / saturation / hue), **Gray** (neutral grayscale)
 - **Palette sidebar** — pin up to 12 colors; each remembers whether it was saved as a text or a background color and reopens in the matching picker for re-editing; smooth drag & drop reordering; persists locally and travels in share links
-- **Export** — CSS custom properties, Tailwind `@theme` block, or W3C design-tokens JSON, palette included
+- **Export** — OKLCH values as CSS custom properties, a Tailwind v4 `@theme` block, or W3C Design Tokens (DTCG 2025.10) JSON, each with an sRGB hex fallback — palette included
 - **Color vision simulation** — protanopia / deuteranopia / tritanopia (Machado et al. 2009 matrices) applied to the entire app
 - **Shareable links** — colors, palette, and UI theme travel in the URL, so recipients see exactly what you see (each part can be opted out in Preferences)
 - **Copy-ready values** — click any hex, HSL, or RGB value to copy it
@@ -33,6 +33,7 @@ The usual workflow treats accessibility as an afterthought: pick a color, run it
 - WebGL fragment shader renders the luminance-locked wheel; chunked 2D canvas fallback
 - WCAG 2.2 relative luminance (`L = 0.2126R + 0.7152G + 0.0722B`) and contrast-ratio math
 - APCA-W3 0.0.98G-4g lightness contrast (reference values and lock targets; WCAG 2.2 remains normative)
+- OKLCH conversion (Björn Ottosson's OKLab transform) for exports; sRGB hex fallback retained
 - Font: [NATS](https://fonts.google.com/specimen/NATS)
 
 ## Contributing
