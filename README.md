@@ -19,7 +19,7 @@ The usual workflow treats accessibility as an afterthought: pick a color, run it
 - **Target contrast lock** — `Off / WCAG 2 / APCA` modes; WCAG 2.2 thresholds where text ratings change (3:1 large text & UI, 4.5:1 normal AA, 7:1 AAA), or experimental APCA Lc 45/60/75/90 (a newer perceptual method — WCAG 2.2 remains the normative default)
 - **Live contrast readouts** — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components against white, black, and a custom color, with APCA Lc values alongside every ratio
 - **Custom comparison color** — three modes: **Color** (RGB/HSL), **Lum** (relative luminance / saturation / hue), **Gray** (neutral grayscale)
-- **Palette sidebar** — pin colors as text or background roles; re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (mini wheel + sliders) and a live contrast preview against a swappable opposite-role color; smooth drag & drop reordering; persists locally and travels in share links
+- **Palette sidebar** — pin colors as text or background roles; re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (mini wheel + sliders) and a live contrast preview against a selectable opposite-role color; smooth drag & drop reordering; persists locally and travels in share links
 - **Export** — OKLCH values as CSS custom properties, a Tailwind v4 `@theme` block, or W3C Design Tokens (DTCG 2025.10) JSON, each with an sRGB hex fallback — palette included
 - **Color vision simulation** — protanopia / deuteranopia / tritanopia (Machado et al. 2009 matrices) applied to the entire app
 - **Shareable links** — colors, palette, and UI theme travel in the URL, so recipients see exactly what you see (each part can be opted out in Preferences)

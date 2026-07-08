@@ -193,7 +193,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.23.0</span>
+    <span class="app-version">ver. 1.23.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -704,7 +704,7 @@
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside</li>
         <li>Hold a target contrast (3:1 / 4.5:1 / 7:1 or APCA Lc 45–90) while freely exploring one side — the other side follows and never drops below the threshold</li>
         <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker and a live contrast preview against a swappable opposite-role color, plus smooth drag &amp; drop reordering and one-tap hex copy</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker and a live contrast preview against a selectable opposite-role color, plus smooth drag &amp; drop reordering and one-tap hex copy</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as OKLCH CSS variables, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, each with an sRGB hex fallback</li>
       </ul>
@@ -814,12 +814,13 @@
     <div class="chip-editor-preview">
       <div class="chip-editor-tile">
         <span class="chip-editor-ag">Ag</span>
-        <svg class="chip-editor-tile-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.9l-5.8 3.05 1.11-6.46-4.7-4.58 6.49-.94z"/></svg>
+        <button type="button" class="chip-editor-cmp-btn" title="Choose the color to compare against" aria-label="Choose the color to compare against" aria-haspopup="listbox" aria-expanded="false">
+          <svg xmlns="http://www.w3.org/2000/svg" class="chip-editor-tile-icon" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
+        </button>
+        <div class="chip-editor-dropdown" role="listbox" hidden></div>
       </div>
       <div class="chip-editor-cmp">
         <span class="chip-editor-cmp-role"></span>
-        <button type="button" class="chip-editor-swap" title="Compare against another saved color" aria-label="Compare against another saved color">⇄</button>
-        <span class="chip-editor-cmp-hex"></span>
         <span class="chip-editor-cmp-ratio"></span>
         <span class="chip-editor-badges"></span>
       </div>

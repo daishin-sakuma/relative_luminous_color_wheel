@@ -2830,10 +2830,9 @@ function buildChipEditor() {
     hex:    q('.chip-editor-hex'),
     tile:   q('.chip-editor-tile'),
     ag:     q('.chip-editor-ag'),
-    icon:   q('.chip-editor-tile-icon'),
+    cmpBtn: q('.chip-editor-cmp-btn'),
+    dropdown: q('.chip-editor-dropdown'),
     cmpRole: q('.chip-editor-cmp-role'),
-    swap:   q('.chip-editor-swap'),
-    cmpHex: q('.chip-editor-cmp-hex'),
     ratio:  q('.chip-editor-cmp-ratio'),
     badges: q('.chip-editor-badges'),
     ranges: {}, vals: {},
@@ -2855,11 +2854,61 @@ function buildChipEditor() {
     if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
     else _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b);
   });
-  _ceRefs.swap.addEventListener('click', () => {
-    const list = partnerList();
-    if (list.length > 1) { _cePartner = (_cePartner + 1) % list.length; chipEditorRenderPreview(); }
-  });
+  _ceRefs.cmpBtn.addEventListener('click', toggleChipEditorDropdown);
   attachChipEditorWheel();
+}
+
+// ── Compare-color dropdown (single-select) ────────────────────────────────────
+function toggleChipEditorDropdown() {
+  if (_ceRefs.dropdown.hidden) openChipEditorDropdown();
+  else closeChipEditorDropdown();
+}
+
+function buildChipEditorDropdown() {
+  const dd = _ceRefs.dropdown;
+  dd.innerHTML = '';
+  const list = partnerList();
+  if (!list.length) {
+    const info = document.createElement('div');
+    info.className = 'chip-editor-dd-item';
+    info.setAttribute('disabled', '');
+    info.textContent = `No saved ${chipEditorOppRole() === 'fg' ? 'text' : 'background'} colors`;
+    dd.appendChild(info);
+    return;
+  }
+  list.forEach((hex, i) => {
+    const it = document.createElement('button');
+    it.type = 'button';
+    it.className = 'chip-editor-dd-item';
+    it.setAttribute('role', 'option');
+    it.setAttribute('aria-selected', String(i === _cePartner));
+    const sw = document.createElement('span'); sw.className = 'chip-editor-dd-swatch'; sw.style.background = hex;
+    const hx = document.createElement('span'); hx.className = 'chip-editor-dd-hex'; hx.textContent = formatHex(hex);
+    it.append(sw, hx);
+    if (i === _cePartner) { const ck = document.createElement('span'); ck.className = 'chip-editor-dd-check'; ck.textContent = '✓'; it.appendChild(ck); }
+    it.addEventListener('click', () => { _cePartner = i; chipEditorRenderPreview(); closeChipEditorDropdown(); });
+    dd.appendChild(it);
+  });
+}
+
+function openChipEditorDropdown() {
+  buildChipEditorDropdown();
+  _ceRefs.dropdown.hidden = false;
+  _ceRefs.cmpBtn.setAttribute('aria-expanded', 'true');
+  // capture phase so the editor's own stopPropagation doesn't hide these clicks
+  document.addEventListener('pointerdown', _ceDropdownOutside, true);
+}
+
+function closeChipEditorDropdown() {
+  if (!_ceRefs || _ceRefs.dropdown.hidden) return;
+  _ceRefs.dropdown.hidden = true;
+  _ceRefs.cmpBtn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', _ceDropdownOutside, true);
+}
+
+function _ceDropdownOutside(e) {
+  const t = e.target;
+  if (!_ceRefs.dropdown.contains(t) && !_ceRefs.cmpBtn.contains(t)) closeChipEditorDropdown();
 }
 
 function reseedSubstates() {
@@ -3074,12 +3123,11 @@ function chipEditorRenderPreview() {
 
   _ceRefs.tile.style.background = bgHex;
   _ceRefs.ag.style.color = textHex;
-  _ceRefs.icon.style.color = textHex;
+  _ceRefs.cmpBtn.style.color = textHex; // icon stroke = currentColor
 
   const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
   _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
-  _ceRefs.cmpRole.textContent = cmpRole;
-  _ceRefs.cmpHex.textContent = formatHex(partner) + (list.length ? '' : ' (picker)');
+  _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
   _ceRefs.badges.innerHTML = '';
   for (const [lbl, thr] of [['AA', 4.5], ['AAA', 7]]) {
     const b = document.createElement('span');
@@ -3087,7 +3135,6 @@ function chipEditorRenderPreview() {
     b.textContent = lbl;
     _ceRefs.badges.appendChild(b);
   }
-  _ceRefs.swap.disabled = list.length < 2;
 }
 
 function openChipEditor(idx) {
@@ -3111,6 +3158,7 @@ function openChipEditor(idx) {
 
 function closeChipEditor(skipRender) {
   if (_ceIdx === null) return;
+  closeChipEditorDropdown();
   const idx = _ceIdx;
   _ceIdx = null;
   _ce = null;
