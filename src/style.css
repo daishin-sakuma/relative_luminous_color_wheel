@@ -1301,11 +1301,14 @@ input.custom-val:focus {
   .contrast-lock-btn { padding: 0.18rem 0.44rem; font-size: 0.62rem; letter-spacing: 0.04em; }
 }
 @media (max-width: 480px) {
-  /* the mode switch (Off / WCAG 2 / APCA) makes the row self-explanatory */
-  .contrast-lock-label { display: none; }
   .contrast-lock-row { gap: 0.32rem; }
   .contrast-lock-btn { padding: 0.16rem 0.36rem; font-size: 0.58rem; }
   .contrast-lock-error { font-size: 0.62rem; }
+}
+/* Only on the very smallest screens does even the short label get dropped —
+   the mode switch (Off / WCAG 2 / APCA) still conveys the row's purpose */
+@media (max-width: 360px) {
+  .contrast-lock-label { display: none; }
 }
 .contrast-lock-label {
   font-size: 0.68rem;
