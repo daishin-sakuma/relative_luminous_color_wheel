@@ -1,6 +1,6 @@
 # Relative Luminous Color Wheel
 
-**Accessible color picker with a contrast lock.** Every color on the wheel shares the same WCAG 2.2 relative luminance, so you can explore hue and saturation freely while the contrast against your background never breaks — and a target lock (WCAG 2.2 ratios or APCA Lc levels from the WCAG 3 working draft) keeps a color pair pinned to a threshold in real time.
+**Accessible color picker and WCAG 2.2 contrast checker with a contrast lock.** Every color on the wheel shares the same WCAG 2.2 relative luminance, so you can explore hue and saturation freely while the contrast against your background never breaks — and a target lock (WCAG 2.2 ratios, or an experimental APCA Lc target) keeps a color pair pinned to a threshold in real time. Meet WCAG 2.1/2.2 AA — the standard referenced by the ADA and the European Accessibility Act — *by construction*, not by after-the-fact auditing.
 
 **Live:** https://relative-luminous-color-wheel.vercel.app/
 
@@ -16,7 +16,7 @@ The usual workflow treats accessibility as an afterthought: pick a color, run it
 ## Features
 
 - **Luminance-locked wheel** — rendered by a WebGL fragment shader (per-pixel lightness search), with a chunked 2D canvas fallback
-- **Target contrast lock** — `Off / WCAG 2 / APCA` modes; WCAG 2.2 thresholds where text ratings change (3:1 large text & UI, 4.5:1 normal AA, 7:1 AAA) or APCA Lc 45/60/75/90 following the WCAG 3 working draft's Bronze Simple Mode levels
+- **Target contrast lock** — `Off / WCAG 2 / APCA` modes; WCAG 2.2 thresholds where text ratings change (3:1 large text & UI, 4.5:1 normal AA, 7:1 AAA), or experimental APCA Lc 45/60/75/90 (a newer perceptual method — WCAG 2.2 remains the normative default)
 - **Live contrast readouts** — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components against white, black, and a custom color, with APCA Lc values alongside every ratio
 - **Custom comparison color** — three modes: **Color** (RGB/HSL), **Lum** (relative luminance / saturation / hue), **Gray** (neutral grayscale)
 - **Palette sidebar** — pin up to 12 colors; each remembers whether it was saved as a text or a background color and reopens in the matching picker for re-editing; smooth drag & drop reordering; persists locally and travels in share links

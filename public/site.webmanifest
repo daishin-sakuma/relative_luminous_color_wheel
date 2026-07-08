@@ -1,7 +1,7 @@
 {
   "name": "Relative Luminous Color Wheel",
   "short_name": "Color Wheel",
-  "description": "Accessible color picker with a contrast lock — hold a WCAG 2.2 ratio or APCA Lc target while exploring hue and saturation; every color on the wheel shares one relative luminance.",
+  "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock — hold a WCAG 2.2 ratio (or an experimental APCA Lc target) while exploring hue and saturation; every color on the wheel shares one relative luminance.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d0e17",

@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Luminance Color Wheel — Accessible Color Picker with WCAG 2.2 &amp; APCA Contrast Lock</title>
+  <title>Accessible Color Picker &amp; WCAG Contrast Checker — Luminance Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Accessible color picker with a contrast lock: hold a WCAG 2.2 ratio (3:1 / 4.5:1 / 7:1) or APCA Lc target (WCAG 3 draft) while exploring hue and saturation. Palettes, color-blindness preview, CSS / Tailwind / design-token export — free.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG contrast checker, WCAG contrast ratio checker, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, WCAG 3 contrast, perceptual contrast, design tokens export, W3C design tokens, Tailwind colors">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock a contrast ratio (3:1 / 4.5:1 / 7:1) or an experimental APCA Lc target, then explore hue and saturation without ever breaking AA/AAA. Build accessible palettes, preview color blindness, and export CSS, Tailwind, or W3C design tokens.">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, Tailwind colors">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -21,7 +21,7 @@
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
   <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta property="og:description"  content="Lock a WCAG 2.2 ratio or APCA Lc target and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Palettes, color-blindness preview, CSS/Tailwind/token export.">
+  <meta property="og:description"  content="Lock a WCAG 2.2 ratio (or an experimental APCA Lc target) and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Accessible palettes, color-blindness preview, CSS/Tailwind/token export.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
@@ -31,7 +31,7 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio or APCA Lc target and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Palettes, color-blindness preview, CSS/Tailwind/token export.">
+  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio (or an experimental APCA Lc target) and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Accessible palettes, color-blindness preview, CSS/Tailwind/token export.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
@@ -88,9 +88,13 @@
     "@type": "WebApplication",
     "name": "Relative Luminous Color Wheel",
     "url": "https://relative-luminous-color-wheel.vercel.app/",
-    "description": "Accessible color picker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) or an APCA Lc target (WCAG 3 working draft) while exploring hue and saturation — every color on the wheel shares one relative luminance, so the contrast never breaks.",
+    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks.",
     "applicationCategory": "DesignApplication",
+    "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
+    "browserRequirements": "Requires JavaScript and WebGL",
+    "inLanguage": "en",
+    "isAccessibleForFree": true,
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -99,7 +103,7 @@
     "featureList": [
       "Equal relative luminance color wheel",
       "Target contrast lock for WCAG 2.2 ratios (3:1, 4.5:1, 7:1)",
-      "APCA lightness contrast (Lc 45–90) targets per the WCAG 3 working draft",
+      "Experimental APCA perceptual lightness-contrast targets (Lc 45–90)",
       "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color",
       "APCA Lc readouts alongside every contrast ratio",
       "Color palette sidebar with text/background roles and drag & drop reordering",
@@ -109,11 +113,70 @@
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
     ],
+    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color blindness simulator, design tokens",
     "author": {
       "@type": "Person",
       "name": "Daishin Sakuma"
     },
     "image": "https://relative-luminous-color-wheel.vercel.app/ogp.png"
+  }
+  </script>
+
+  <!-- FAQ structured data (mirrors the "What is this?" FAQ below) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What contrast ratio do I need for accessibility?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "WCAG 2.2 — the basis for the ADA in the US and the European Accessibility Act — requires a contrast ratio of at least 4.5:1 for normal text and 3:1 for large text and UI components at level AA, rising to 7:1 for normal text at AAA. This tool locks any of these targets so your colors meet them by construction."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is APCA part of WCAG 3?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Not currently. APCA (Advanced Perceptual Contrast Algorithm) is a newer perceptual method that was explored for WCAG 3 but removed from the draft in 2023; WCAG 3's contrast method is still undecided. WCAG 2.2 remains the normative, legally-referenced standard, so this tool uses it by default and offers APCA Lc as an experimental, forward-looking option."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is relative luminance?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Relative luminance is the perceived brightness of a color, computed as L = 0.2126·R + 0.7152·G + 0.0722·B on linearized channels. WCAG contrast ratios depend only on the two colors' relative luminance, so every color on this wheel shares one luminance and keeps the same contrast against your background."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I pick accessible colors without trial and error?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Set a target contrast (or a target luminance) first, then move around the wheel. Because contrast is held as a constraint, every color you can reach already passes — there is no pick-then-check-then-adjust loop."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I export colors to CSS, Tailwind, or design tokens?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Export your palette as CSS custom properties, a Tailwind @theme block, or W3C design-tokens JSON. Your colors and palette also travel in a shareable URL."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is it free and private?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. It is completely free with no account and no sign-up, and it is private by design — everything runs locally in your browser with nothing uploaded."
+        }
+      }
+    ]
   }
   </script>
 </head>
@@ -129,7 +192,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.21.1</span>
+    <span class="app-version">ver. 1.21.2</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -622,9 +685,9 @@
       <h3>Lock a contrast target</h3>
       <p>
         Beyond checking, the picker can enforce. Choose a WCAG 2.2 threshold — 3:1 for large text
-        and UI components, 4.5:1 for normal text AA, 7:1 for AAA — or an APCA lightness-contrast
-        target (Lc 45–90, following the WCAG 3 working draft), and whichever side you are not
-        touching adjusts itself automatically, pinning the pair precisely at the threshold while
+        and UI components, 4.5:1 for normal text AA, 7:1 for AAA — or an experimental APCA
+        lightness-contrast target (Lc 45–90, a newer perceptual method), and whichever side you are
+        not touching adjusts itself automatically, pinning the pair precisely at the threshold while
         you explore hue, saturation, and luminance on the other side.
       </p>
       <h3>What you can do here</h3>
@@ -643,6 +706,43 @@
         tokens, and accessibility specialists auditing color contrast. Everything runs locally in
         your browser — no account, no upload, free to use.
       </p>
+      <h3>Accessibility standards &amp; compliance</h3>
+      <p>
+        Color contrast is a legal requirement in a growing number of places. WCAG 2.2 (and 2.1)
+        level AA is the standard referenced by the Americans with Disabilities Act (ADA) and by the
+        European Accessibility Act, whose obligations began on 28 June 2025 (EN 301 549 points to
+        WCAG 2.1 AA). AA asks for a contrast ratio of at least 4.5:1 for normal text and 3:1 for
+        large text and non-text UI, and AAA raises normal text to 7:1. This tool targets those exact
+        thresholds, so the colors you ship meet the requirement <strong>by construction</strong>
+        rather than by after-the-fact auditing. APCA is provided as a forward-looking, experimental
+        option; WCAG 2.2 remains the normative basis.
+      </p>
+      <h3>Frequently asked questions</h3>
+      <p><strong>What contrast ratio do I need for accessibility?</strong><br>
+        WCAG 2.2 — the basis for the ADA and the European Accessibility Act — requires a contrast
+        ratio of at least 4.5:1 for normal text and 3:1 for large text and UI components at level
+        AA, rising to 7:1 for normal text at AAA. This tool locks any of these targets so your
+        colors meet them by construction.</p>
+      <p><strong>Is APCA part of WCAG 3?</strong><br>
+        Not currently. APCA (Advanced Perceptual Contrast Algorithm) is a newer perceptual method
+        that was explored for WCAG 3 but removed from the draft in 2023; WCAG 3's contrast method is
+        still undecided. WCAG 2.2 remains the normative, legally-referenced standard, so this tool
+        uses it by default and offers APCA Lc as an experimental, forward-looking option.</p>
+      <p><strong>What is relative luminance?</strong><br>
+        Relative luminance is the perceived brightness of a color, computed as
+        L = 0.2126·R + 0.7152·G + 0.0722·B on linearized channels. WCAG contrast ratios depend only
+        on the two colors' relative luminance, so every color on this wheel shares one luminance and
+        keeps the same contrast against your background.</p>
+      <p><strong>How do I pick accessible colors without trial and error?</strong><br>
+        Set a target contrast (or a target luminance) first, then move around the wheel. Because
+        contrast is held as a constraint, every color you can reach already passes — there is no
+        pick-then-check-then-adjust loop.</p>
+      <p><strong>Can I export colors to CSS, Tailwind, or design tokens?</strong><br>
+        Yes. Export your palette as CSS custom properties, a Tailwind <code>@theme</code> block, or
+        W3C design-tokens JSON. Your colors and palette also travel in a shareable URL.</p>
+      <p><strong>Is it free and private?</strong><br>
+        Yes. It is completely free with no account and no sign-up, and it is private by design —
+        everything runs locally in your browser with nothing uploaded.</p>
     </div>
   </details>
 </section>
