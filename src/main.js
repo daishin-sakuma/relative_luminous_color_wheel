@@ -2407,12 +2407,11 @@ function applyPaletteOpen() {
     paletteSection.hidden = false;
   } else if (!paletteSection.hidden) {
     // Mirror of the slide-in: play the slide-out, then actually hide
-    // (timeout matches the 0.34s palette-slide-out animation)
     paletteSection.classList.add('palette-section--closing');
     _paletteCloseTimer = setTimeout(() => {
       paletteSection.classList.remove('palette-section--closing');
       paletteSection.hidden = true;
-    }, 340);
+    }, 220);
   }
   document.body.classList.toggle('palette-open', paletteOpen);
   paletteToggle.setAttribute('aria-expanded', String(paletteOpen));

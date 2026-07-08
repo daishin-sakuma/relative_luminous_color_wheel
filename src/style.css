@@ -905,21 +905,13 @@ input.custom-val:focus {
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);
   overflow: hidden; /* the rail scrolls, not the sidebar */
   z-index: 5;
-  /* Gentle slide + fade; the soft-landing curve reads calmer than plain ease,
-     especially on mobile where the drawer is a large surface */
-  animation: palette-slide-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: palette-slide-in 0.22s ease;
 }
-@keyframes palette-slide-in {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
-}
+@keyframes palette-slide-in { from { transform: translateX(100%); } }
 /* Closing plays the mirror animation; JS sets [hidden] when it finishes.
    `forwards` holds the off-screen pose until display:none lands. */
-.palette-section--closing { animation: palette-slide-out 0.34s cubic-bezier(0.55, 0, 0.78, 0) forwards; }
-@keyframes palette-slide-out {
-  from { transform: translateX(0);    opacity: 1; }
-  to   { transform: translateX(100%); opacity: 0; }
-}
+.palette-section--closing { animation: palette-slide-out 0.22s ease forwards; }
+@keyframes palette-slide-out { to { transform: translateX(100%); } }
 /* display:flex beats the UA [hidden] rule — restore it explicitly */
 .palette-section[hidden] { display: none; }
 /* While a chip is being dragged, lift the clipping so it can travel outside
@@ -1219,10 +1211,10 @@ input.custom-val:focus {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
-  display: flex;
+  padding: 0.9rem 1rem;
+  display: none;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.9rem 1rem;
   z-index: 200;
   /* The always-on export preview can make the panel taller than short
      viewports — scroll inside instead of getting cut off at the fold */
@@ -1230,17 +1222,6 @@ input.custom-val:focus {
   overflow-y: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;
-  /* Gentle show/hide that animates BOTH ways (open and close), on mouse and
-     touch alike. Kept in the DOM and faded via opacity/transform; `visibility`
-     is delayed on close so the fade can finish before it stops taking hits. */
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px) scale(0.99);
-  transform-origin: top right;
-  pointer-events: none;
-  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-              visibility 0s linear 0.28s;
 }
 .settings-panel::-webkit-scrollbar { width: 8px; }
 .settings-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -1259,12 +1240,13 @@ input.custom-val:focus {
 }
 
 .settings-wrap:hover .settings-panel {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  display: flex;
+  animation: panel-in 0.14s ease-out;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .settings-theme-row {
@@ -1659,7 +1641,10 @@ input.custom-val:focus {
   .app-body { gap: 2rem; }
 }
 
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* Note: the app's animations (panel and sidebar fades/slides, button presses)
+   are intentionally NOT suppressed under prefers-reduced-motion. They are kept
+   short and subtle; the previous blanket suppression made panels appear
+   abruptly on devices with a reduced-motion setting. */
 
 
 /* Short wide windows: compress both columns back into the height budget */
