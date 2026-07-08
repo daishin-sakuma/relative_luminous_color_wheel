@@ -119,10 +119,17 @@
 </head>
 <body>
 
+<!-- Wraps all app content so the color-vision-deficiency filter can be applied
+     one level below <body>. iOS Safari doesn't apply a body-level SVG filter to
+     compositing layers (the WebGL wheel, the animated Preferences popup); a
+     regular wrapper element rasterizes them into the filter correctly. Normally
+     display:contents, so it has zero layout effect until the filter turns on. -->
+<div id="cvd-layer">
+
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.19.0</span>
+    <span class="app-version">ver. 1.20.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -200,6 +207,9 @@
           </div>
         </div>
         <div class="export-preview" id="export-preview" hidden>
+          <button class="export-preview-dl" id="export-preview-dl" title="Download as a file" aria-label="Download as a file">
+            <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>
+          </button>
           <button class="export-preview-copy" id="export-preview-copy" title="Copy to clipboard" aria-label="Copy to clipboard"></button>
           <pre class="export-preview-code" id="export-preview-code"></pre>
         </div>
@@ -575,6 +585,9 @@
       <button class="palette-clear" id="palette-clear">Clear all</button>
     </div>
     <div class="palette-rail" id="palette-rail"></div>
+    <div class="palette-export" id="palette-export">
+      <span class="palette-export-label">Export</span>
+    </div>
   </aside>
 
 </main>
@@ -628,17 +641,21 @@
 
 <footer class="copyright"><a href="https://fxx.huruike.com/projects/relative-luminous-color-wheel.html" target="_blank" rel="noopener noreferrer">MIT © Daishin Sakuma.</a></footer>
 
+</div><!-- /#cvd-layer -->
+
 <!-- Color-vision-deficiency simulation filters (Machado et al. 2009, severity 1.0).
-     feColorMatrix operates in linearRGB, matching the matrices' color space. -->
+     feColorMatrix operates in linearRGB, matching the matrices' color space.
+     A generous filterRegion keeps the fixed palette sidebar and the Preferences
+     popup — which sit outside #cvd-layer's border box — from being clipped. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <defs>
-    <filter id="cvd-protan" color-interpolation-filters="linearRGB">
+    <filter id="cvd-protan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
       <feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0"/>
     </filter>
-    <filter id="cvd-deutan" color-interpolation-filters="linearRGB">
+    <filter id="cvd-deutan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
       <feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0"/>
     </filter>
-    <filter id="cvd-tritan" color-interpolation-filters="linearRGB">
+    <filter id="cvd-tritan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
       <feColorMatrix type="matrix" values="1.255528 -0.076749 -0.178779 0 0  -0.078411 0.930809 0.147602 0 0  0.004733 0.691367 0.303900 0 0  0 0 0 1 0"/>
     </filter>
   </defs>

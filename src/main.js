@@ -833,6 +833,11 @@ function solveContrastLum(fixedLum, ratio) {
 function setContrastLockError(msg, full) {
   const el = document.getElementById('contrast-lock-error');
   if (el) { el.textContent = msg; el.title = full ?? msg; }
+  // Also flag the row so the selected target chip turns red — the text alone
+  // gets truncated to nothing on narrow screens, so the chip is the reliable
+  // "target unreachable" signal there.
+  const row = document.getElementById('contrast-lock-row');
+  if (row) row.classList.toggle('has-error', !!msg);
 }
 
 /** Move the free side to the desired WCAG luminance, preserving its hue/sat.
@@ -2233,10 +2238,32 @@ ${palLines.length ? palLines.join('\n') + '\n' : ''}}
   return JSON.stringify(json, null, 2) + '\n';
 }
 
+// Filename + MIME per export format (all plain text; extensions match syntax)
+const EXPORT_FILE = {
+  css:      { name: 'color-palette.css',          mime: 'text/css' },
+  tailwind: { name: 'color-palette.tailwind.css', mime: 'text/css' },
+  json:     { name: 'color-palette.tokens.json',  mime: 'application/json' },
+};
+
+/** Save the given export format as a downloaded file. */
+function downloadExport(format) {
+  const f = EXPORT_FILE[format] || EXPORT_FILE.css;
+  const blob = new Blob([buildExport(format)], { type: f.mime + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = f.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 {
   const previewEl  = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
   const previewCode = /** @type {HTMLElement} */ (document.getElementById('export-preview-code'));
   const previewCopy = /** @type {HTMLButtonElement} */ (document.getElementById('export-preview-copy'));
+  const previewDl  = /** @type {HTMLButtonElement} */ (document.getElementById('export-preview-dl'));
   const exportBtns = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.export-option')]);
   const wrapEl = /** @type {HTMLElement} */ (previewEl.closest('.settings-wrap'));
 
@@ -2267,6 +2294,12 @@ ${palLines.length ? palLines.join('\n') + '\n' : ''}}
     } catch (_) { /* clipboard denied */ }
   });
 
+  previewDl.addEventListener('click', () => {
+    downloadExport(previewFormat);
+    previewDl.classList.add('done');
+    setTimeout(() => { previewDl.classList.remove('done'); }, 1500);
+  });
+
   exportBtns.forEach(btn => {
     const format = btn.dataset.format;
     btn.addEventListener('click', () => {
@@ -2286,17 +2319,64 @@ ${palLines.length ? palLines.join('\n') + '\n' : ''}}
   sync();
 }
 
+// ─── Palette sidebar export ───────────────────────────────────────────────────
+// The sidebar surfaces the same export formats as Preferences (palette colors
+// are included), so users can copy or download straight from the palette.
+{
+  const host = /** @type {HTMLElement} */ (document.getElementById('palette-export'));
+  const DL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>';
+  const FORMATS = [['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']];
+
+  const flash = (btn, cls) => { btn.classList.add(cls); setTimeout(() => btn.classList.remove(cls), 1500); };
+
+  for (const [format, label] of FORMATS) {
+    const row = document.createElement('div');
+    row.className = 'palette-export-row';
+
+    const name = document.createElement('span');
+    name.className = 'palette-export-fmt';
+    name.textContent = label;
+
+    const copy = document.createElement('button');
+    copy.className = 'palette-export-act palette-export-copy';
+    copy.title = `Copy ${label}`;
+    copy.setAttribute('aria-label', `Copy ${label}`);
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(buildExport(format));
+        flash(copy, 'copied');
+      } catch (_) { /* clipboard denied */ }
+    });
+
+    const dl = document.createElement('button');
+    dl.className = 'palette-export-act palette-export-dl';
+    dl.title = `Download ${label}`;
+    dl.setAttribute('aria-label', `Download ${label}`);
+    dl.innerHTML = DL_SVG;
+    dl.addEventListener('click', () => { downloadExport(format); flash(dl, 'done'); });
+
+    row.append(name, copy, dl);
+    host.appendChild(row);
+  }
+}
+
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
-// Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html;
-// applying the filter to <body> simulates the whole app, wheel included.
+// Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html.
+// The filter goes on #cvd-layer (a wrapper around all app content), not <body>:
+// iOS Safari won't apply a body-level SVG filter to compositing layers such as
+// the WebGL wheel or the animated Preferences popup, but a regular wrapper
+// element rasterizes them into the filter correctly. body.cvd-active switches
+// the wrapper from display:contents to a real (filterable) box.
 // Intentionally not persisted: a simulation surviving reload would look broken.
 
 {
+  const cvdLayer = /** @type {HTMLElement} */ (document.getElementById('cvd-layer'));
   const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
   cvdBtns.forEach(btn => btn.addEventListener('click', () => {
     cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
     const v = btn.dataset.cvd;
-    document.body.style.filter = v ? `url(#cvd-${v})` : '';
+    document.body.classList.toggle('cvd-active', !!v);
+    cvdLayer.style.filter = v ? `url(#cvd-${v})` : '';
   }));
 }
 
@@ -2327,11 +2407,12 @@ function applyPaletteOpen() {
     paletteSection.hidden = false;
   } else if (!paletteSection.hidden) {
     // Mirror of the slide-in: play the slide-out, then actually hide
+    // (timeout matches the 0.34s palette-slide-out animation)
     paletteSection.classList.add('palette-section--closing');
     _paletteCloseTimer = setTimeout(() => {
       paletteSection.classList.remove('palette-section--closing');
       paletteSection.hidden = true;
-    }, 220);
+    }, 340);
   }
   document.body.classList.toggle('palette-open', paletteOpen);
   paletteToggle.setAttribute('aria-expanded', String(paletteOpen));
@@ -2366,6 +2447,18 @@ paletteToggle.addEventListener('click', () => {
 // it closes only through the explicit routes (outside press, ×, toggle).
 paletteSection.addEventListener('pointerdown', () => { _paletteInteracted = true; });
 paletteSection.addEventListener('wheel', () => { _paletteInteracted = true; }, { passive: true });
+
+// The sidebar is a fixed overlay: a touch-drag on it (reordering a chip, or
+// just a stray move before the long-press lifts) would otherwise scroll the
+// page behind it. Keep every in-sidebar touch inside the sidebar — allow only
+// the rail's own scroll, and only when it actually overflows. Non-passive so
+// preventDefault can cancel the page scroll.
+paletteSection.addEventListener('touchmove', e => {
+  if (_chipDragActive) { e.preventDefault(); return; } // lifted reorder: pin the page
+  const railScrolls = paletteRail.scrollHeight > paletteRail.clientHeight
+    && paletteRail.contains(/** @type {Node} */ (e.target));
+  if (!railScrolls) e.preventDefault();
+}, { passive: false });
 
 const _paletteMaybeAutoClose = e => {
   if (e.pointerType !== 'mouse' || !paletteOpen || _paletteInteracted) return;

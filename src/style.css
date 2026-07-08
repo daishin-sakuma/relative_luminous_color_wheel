@@ -65,6 +65,20 @@ body {
   gap: 1rem;
 }
 
+/* CVD-simulation wrapper. Normally transparent to layout (display:contents),
+   so body's flex rules — including every responsive padding/gap tier — keep
+   applying to header/main/about/footer unchanged. When a simulation turns on,
+   it becomes a real flex box carrying the color-vision filter; `gap: inherit`
+   preserves body's current inter-section spacing at whatever breakpoint. */
+#cvd-layer { display: contents; }
+body.cvd-active #cvd-layer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: inherit;
+}
+
 /* ── Header ─────────────────────────────────────────────────────────────────── */
 header {
   width: 100%;
@@ -840,6 +854,26 @@ input.custom-val:focus {
 .export-preview-copy:hover { opacity: 0.8; }
 .export-preview-copy.copied { opacity: 1; color: var(--pass); }
 .export-preview-copy.copied::after { content: '✓'; }
+/* Download button — sits just left of the copy button, same affordance */
+.export-preview-dl {
+  position: absolute;
+  top: 0.35rem;
+  right: calc(0.45rem + 10px + 1.5rem);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0.1rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  opacity: 0.4;
+  cursor: pointer;
+  color: var(--text);
+  transition: opacity 0.15s, color 0.15s;
+}
+.export-preview-dl:hover { opacity: 0.8; }
+.export-preview-dl.done { opacity: 1; color: var(--pass); }
 
 /* ── APCA readout (WCAG 3 draft reference value) ──────────────────────────────
    Typography mirrors .preview-ratio-label so the two readouts form one unit. */
@@ -871,13 +905,21 @@ input.custom-val:focus {
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);
   overflow: hidden; /* the rail scrolls, not the sidebar */
   z-index: 5;
-  animation: palette-slide-in 0.22s ease;
+  /* Gentle slide + fade; the soft-landing curve reads calmer than plain ease,
+     especially on mobile where the drawer is a large surface */
+  animation: palette-slide-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
-@keyframes palette-slide-in { from { transform: translateX(100%); } }
+@keyframes palette-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
 /* Closing plays the mirror animation; JS sets [hidden] when it finishes.
    `forwards` holds the off-screen pose until display:none lands. */
-.palette-section--closing { animation: palette-slide-out 0.22s ease forwards; }
-@keyframes palette-slide-out { to { transform: translateX(100%); } }
+.palette-section--closing { animation: palette-slide-out 0.34s cubic-bezier(0.55, 0, 0.78, 0) forwards; }
+@keyframes palette-slide-out {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
 /* display:flex beats the UA [hidden] rule — restore it explicitly */
 .palette-section[hidden] { display: none; }
 /* While a chip is being dragged, lift the clipping so it can travel outside
@@ -935,14 +977,63 @@ input.custom-val:focus {
   transition: color 0.12s;
 }
 .palette-clear:hover { color: var(--text); }
+
+/* Export footer — same formats as Preferences, pinned below the rail */
+.palette-export {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+}
+.palette-export-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.palette-export-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.palette-export-fmt {
+  flex: 1;
+  font-size: 0.72rem;
+  color: var(--text);
+}
+.palette-export-act {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0.15rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  opacity: 0.5;
+  cursor: pointer;
+  color: var(--text);
+  transition: opacity 0.15s, color 0.15s;
+}
+.palette-export-act:hover { opacity: 1; }
+.palette-export-copy::after { content: '⧉'; }
+.palette-export-copy.copied { opacity: 1; color: var(--pass); }
+.palette-export-copy.copied::after { content: '✓'; }
+.palette-export-dl.done { opacity: 1; color: var(--pass); }
 .palette-rail {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1; /* fill the space above the export footer, which pins to the bottom */
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
   scrollbar-width: thin;
+  /* keep the rail's own scroll from chaining out to the page behind the
+     fixed sidebar (a JS touchmove guard covers the non-overflowing case) */
+  overscroll-behavior: contain;
   /* breathing room so a lifted (scaled) chip isn't clipped at the edges */
   padding: 3px;
   margin: -3px;
@@ -1128,10 +1219,10 @@ input.custom-val:focus {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 0.9rem 1rem;
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 0.9rem 1rem;
   z-index: 200;
   /* The always-on export preview can make the panel taller than short
      viewports — scroll inside instead of getting cut off at the fold */
@@ -1139,6 +1230,17 @@ input.custom-val:focus {
   overflow-y: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;
+  /* Gentle show/hide that animates BOTH ways (open and close), on mouse and
+     touch alike. Kept in the DOM and faded via opacity/transform; `visibility`
+     is delayed on close so the fade can finish before it stops taking hits. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(0.99);
+  transform-origin: top right;
+  pointer-events: none;
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              visibility 0s linear 0.28s;
 }
 .settings-panel::-webkit-scrollbar { width: 8px; }
 .settings-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -1157,13 +1259,12 @@ input.custom-val:focus {
 }
 
 .settings-wrap:hover .settings-panel {
-  display: flex;
-  animation: panel-in 0.14s ease-out;
-}
-
-@keyframes panel-in {
-  from { opacity: 0; transform: translateY(-5px); }
-  to   { opacity: 1; transform: translateY(0); }
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .settings-theme-row {
@@ -1200,18 +1301,29 @@ input.custom-val:focus {
 /* ── Contrast lock ───────────────────────────────────────────────────────────── */
 .contrast-lock-row {
   display: flex;
+  flex-wrap: nowrap; /* always one line — the error truncates, never wraps */
   align-items: center;
   gap: 0.7rem;
   margin: 0.55rem 0 0.2rem;
 }
+/* Controls keep their size; only the error flexes and truncates */
 .contrast-lock-label,
 .contrast-lock-btns { flex-shrink: 0; }
 /* inline-flex above beats the UA [hidden] rule — restore it explicitly
    (the WCAG 2 / APCA mode switch and target groups toggle via [hidden]) */
 .contrast-lock-btns[hidden] { display: none; }
-/* With the mode switch + Lc targets the row can outgrow narrow screens */
+/* Narrow screens: compact the controls so label + switch + targets + a
+   (truncating) error all still fit on the single line */
 @media (max-width: 639px) {
-  .contrast-lock-row { flex-wrap: wrap; }
+  .contrast-lock-row { gap: 0.4rem; }
+  .contrast-lock-btn { padding: 0.18rem 0.44rem; font-size: 0.62rem; letter-spacing: 0.04em; }
+}
+@media (max-width: 480px) {
+  /* the mode switch (Off / WCAG 2 / APCA) makes the row self-explanatory */
+  .contrast-lock-label { display: none; }
+  .contrast-lock-row { gap: 0.32rem; }
+  .contrast-lock-btn { padding: 0.16rem 0.36rem; font-size: 0.58rem; }
+  .contrast-lock-error { font-size: 0.62rem; }
 }
 .contrast-lock-label {
   font-size: 0.68rem;
@@ -1244,12 +1356,20 @@ input.custom-val:focus {
 .contrast-lock-btn:hover  { background: var(--surface2); color: var(--text); }
 .contrast-lock-btn:active { transform: scale(0.93); }
 .contrast-lock-btn.active { background: var(--border); color: var(--text); }
-/* Shares the row's single line; truncates instead of wrapping */
+/* Target unreachable: paint the selected target chip red (the mode switch is
+   excluded). Visible at any width, unlike the truncating error text. */
+.contrast-lock-row.has-error .contrast-lock-btns:not(.contrast-lock-mode) .contrast-lock-btn.active {
+  background: var(--error);
+  color: #fff;
+}
+/* Takes the leftover width on the row's single line and truncates with an
+   ellipsis (full text stays in its title tooltip); flex-basis 0 lets it
+   shrink as far as needed so the row never wraps or overflows */
 .contrast-lock-error {
   font-size: 0.7rem;
   letter-spacing: 0.04em;
   color: var(--error);
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
