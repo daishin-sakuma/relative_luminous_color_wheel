@@ -107,6 +107,7 @@
       "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color",
       "APCA Lc readouts alongside every contrast ratio",
       "Color palette sidebar with text/background roles and drag & drop reordering",
+      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with a live contrast preview",
       "Color blindness simulation (protanopia, deuteranopia, tritanopia)",
       "Export OKLCH as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON with an sRGB hex fallback",
       "Accessible color scheme and dark-mode palette builder",
@@ -192,7 +193,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.22.1</span>
+    <span class="app-version">ver. 1.23.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -703,7 +704,7 @@
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside</li>
         <li>Hold a target contrast (3:1 / 4.5:1 / 7:1 or APCA Lc 45–90) while freely exploring one side — the other side follows and never drops below the threshold</li>
         <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
-        <li>Pin up to 12 colors to the palette sidebar — each remembers whether it was saved as a text or background color and reopens in the matching picker for re-editing, with smooth drag &amp; drop reordering and one-tap hex copy</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker and a live contrast preview against a swappable opposite-role color, plus smooth drag &amp; drop reordering and one-tap hex copy</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as OKLCH CSS variables, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, each with an sRGB hex fallback</li>
       </ul>
@@ -775,6 +776,56 @@
     </filter>
   </defs>
 </svg>
+
+<!-- Inline palette-chip editor (cloned once, inserted under the chip being edited).
+     Reuses the custom picker's slider/tab classes; hooks are data-* to avoid id clashes. -->
+<template id="chip-editor-tpl">
+  <div class="chip-editor" role="group" aria-label="Edit saved color">
+    <div class="custom-mode-tabs chip-editor-tabs">
+      <button type="button" class="custom-mode-tab" data-emode="rgb">RGB</button>
+      <button type="button" class="custom-mode-tab" data-emode="hsl">HSL</button>
+      <button type="button" class="custom-mode-tab" data-emode="lum">Lum</button>
+      <button type="button" class="custom-mode-tab" data-emode="gray">Gray</button>
+    </div>
+    <canvas class="custom-wheel-canvas chip-editor-wheel" width="132" height="132"></canvas>
+    <div class="chip-editor-sliders">
+      <div class="custom-slider-group" data-egroup="rgb">
+        <div class="custom-slider-row"><span class="custom-ch" style="color:#d07070">R</span><input type="range" data-ch="r" min="0" max="255"><input type="text" class="custom-val" data-chv="r" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch" style="color:#70b070">G</span><input type="range" data-ch="g" min="0" max="255"><input type="text" class="custom-val" data-chv="g" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch" style="color:#7090d0">B</span><input type="range" data-ch="b" min="0" max="255"><input type="text" class="custom-val" data-chv="b" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="custom-slider-group" data-egroup="hsl">
+        <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-ch="h" min="0" max="359"><input type="text" class="custom-val" data-chv="h" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-ch="s" min="0" max="100"><input type="text" class="custom-val" data-chv="s" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-ch="l" min="0" max="100"><input type="text" class="custom-val" data-chv="l" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="custom-slider-group" data-egroup="lum">
+        <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-ch="clum" min="0" max="1000" step="1"><input type="text" class="custom-val" data-chv="clum" inputmode="decimal" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-ch="csat" min="0" max="100"><input type="text" class="custom-val" data-chv="csat" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-ch="chue" min="0" max="359"><input type="text" class="custom-val" data-chv="chue" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="custom-slider-group" data-egroup="gray">
+        <div class="custom-slider-row"><span class="custom-ch"></span><input type="range" data-ch="gray" min="0" max="255" class="custom-gray-slider"><input type="text" class="custom-val" data-chv="gray" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+      </div>
+    </div>
+    <div class="custom-hex-wrap chip-editor-hexwrap">
+      <input type="text" class="custom-hex-input chip-editor-hex" maxlength="7" spellcheck="false" placeholder="#000000">
+    </div>
+    <div class="chip-editor-preview">
+      <div class="chip-editor-tile">
+        <span class="chip-editor-ag">Ag</span>
+        <svg class="chip-editor-tile-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.9l-5.8 3.05 1.11-6.46-4.7-4.58 6.49-.94z"/></svg>
+      </div>
+      <div class="chip-editor-cmp">
+        <span class="chip-editor-cmp-role"></span>
+        <button type="button" class="chip-editor-swap" title="Compare against another saved color" aria-label="Compare against another saved color">⇄</button>
+        <span class="chip-editor-cmp-hex"></span>
+        <span class="chip-editor-cmp-ratio"></span>
+        <span class="chip-editor-badges"></span>
+      </div>
+    </div>
+  </div>
+</template>
 
 <script type="module" src="/src/main.js"></script>
 </body>

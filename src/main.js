@@ -1325,23 +1325,6 @@ function syncSliders() {
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
 }
 
-/** Load an RGB color into the wheel (foreground) picker: its hue/sat becomes
-    the marker position and its relative luminance the target luminance. */
-function setWheelFromRgb(r, g, b) {
-  const [h, s] = rgbToHsl(r, g, b);
-  selHue = h;
-  selSat = s;
-  targetLum = relativeLuminance(r, g, b);
-  lumSlider.value = String(Math.round(targetLum * 1000));
-  if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-  saveToStorage('sel-hue', String(selHue));
-  saveToStorage('sel-sat', String(selSat));
-  saveToStorage('sel-lum', String(targetLum));
-  updateMarkerPosition();
-  syncSliders();
-  scheduleRender(true);
-}
-
 // ─── Pointer interaction ──────────────────────────────────────────────────────
 
 function handlePointer(e) {
@@ -2628,6 +2611,7 @@ else if (_paletteToggleMq.addListener) _paletteToggleMq.addListener(placePalette
 function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)); }
 
 function addToPalette(hex, role) {
+  if (_ceIdx !== null) closeChipEditor(true); // structural change → close the inline editor
   hex = hex.toLowerCase();
   if (!/^#[0-9a-f]{6}$/.test(hex)) return;
   // Duplicates within a role are ignored; each role holds up to four colors
@@ -2642,6 +2626,7 @@ function addToPalette(hex, role) {
 }
 
 function removeFromPalette(index) {
+  if (_ceIdx !== null) closeChipEditor(true); // indices shift → close the inline editor
   palette.splice(index, 1);
   savePalette();
   renderPalette();
@@ -2697,6 +2682,7 @@ function attachChipDrag(chip, index, role, listEl) {
     const lift = () => {
       lifted = true;
       _chipDragActive = true;
+      if (_ceIdx !== null) closeChipEditor(true); // don't drag with an editor open
       try { chip.setPointerCapture(e.pointerId); } catch (_) {}
       chip.classList.add('palette-chip--lifted');
       chip.style.transform = 'scale(1.03)';
@@ -2815,6 +2801,335 @@ function paletteRankLabel(pos) {
 const EYEDROPPER_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 11.25l1.5 1.5.75-.75V8.758l2.276-.61a3 3 0 1 0-3.675-3.675l-.61 2.277H12l-.75.75 1.5 1.5M15 11.25l-8.47 8.47a2.25 2.25 0 0 1-1.591.659H3.75v-1.189c0-.597.237-1.17.659-1.591L12.75 9"/></svg>';
 const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
 
+// ─── Inline palette-chip editor ───────────────────────────────────────────────
+// Re-editing a saved swatch happens in place, inside the sidebar: the edit
+// button expands an editor under the chip with RGB / HSL / Lum / Gray modes, a
+// mini wheel, and a live contrast preview against one swappable opposite-role
+// color. Self-contained — it uses only the pure color helpers and never touches
+// the main picker globals or the contrast lock.
+const _chipEditorTpl = /** @type {HTMLTemplateElement} */ (document.getElementById('chip-editor-tpl'));
+let _ceEl = null;      // the single cloned editor element (reused across chips)
+let _ceRefs = null;    // cached inner element references
+let _ceIdx = null;     // flat palette index being edited, or null
+let _ce = null;        // working state { role, r, g, b, mode, hsl, lum, gray }
+let _cePartner = 0;    // partner-color cycle index
+let _ceRaf = 0;        // rAF gate for wheel + preview repaint
+let _ceWheelCache = null;
+
+const _ceClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function chipEditorActiveIdx() { return _ceIdx; }
+
+function buildChipEditor() {
+  _ceEl = /** @type {HTMLElement} */ (_chipEditorTpl.content.firstElementChild.cloneNode(true));
+  const q = sel => _ceEl.querySelector(sel);
+  _ceRefs = {
+    tabs:   [..._ceEl.querySelectorAll('[data-emode]')],
+    groups: [..._ceEl.querySelectorAll('[data-egroup]')],
+    wheel:  q('.chip-editor-wheel'),
+    hex:    q('.chip-editor-hex'),
+    tile:   q('.chip-editor-tile'),
+    ag:     q('.chip-editor-ag'),
+    icon:   q('.chip-editor-tile-icon'),
+    cmpRole: q('.chip-editor-cmp-role'),
+    swap:   q('.chip-editor-swap'),
+    cmpHex: q('.chip-editor-cmp-hex'),
+    ratio:  q('.chip-editor-cmp-ratio'),
+    badges: q('.chip-editor-badges'),
+    ranges: {}, vals: {},
+  };
+  _ceEl.querySelectorAll('[data-ch]').forEach(inp => { _ceRefs.ranges[inp.dataset.ch] = inp; });
+  _ceEl.querySelectorAll('[data-chv]').forEach(inp => { _ceRefs.vals[inp.dataset.chv] = inp; });
+  _ceRefs.ctx = _ceRefs.wheel.getContext('2d');
+
+  // Keep chip drag / outside-close from firing on editor interactions
+  _ceEl.addEventListener('pointerdown', e => e.stopPropagation());
+  _ceEl.addEventListener('click', e => e.stopPropagation());
+  _ceEl.addEventListener('wheel', e => e.stopPropagation());
+
+  _ceRefs.tabs.forEach(t => t.addEventListener('click', () => setChipEditorMode(t.dataset.emode)));
+  Object.values(_ceRefs.ranges).forEach(inp => inp.addEventListener('input', onChipEditorSlider));
+  Object.values(_ceRefs.vals).forEach(inp => inp.addEventListener('change', onChipEditorValInput));
+  _ceRefs.hex.addEventListener('change', () => {
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(_ceRefs.hex.value.trim());
+    if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
+    else _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b);
+  });
+  _ceRefs.swap.addEventListener('click', () => {
+    const list = partnerList();
+    if (list.length > 1) { _cePartner = (_cePartner + 1) % list.length; chipEditorRenderPreview(); }
+  });
+  attachChipEditorWheel();
+}
+
+function reseedSubstates() {
+  const { r, g, b } = _ce;
+  const [h, s, l] = rgbToHsl(r, g, b);
+  _ce.hsl  = [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
+  _ce.lum  = [Math.round(relativeLuminance(r, g, b) * 1000), Math.round(s * 100), Math.round(h)];
+  _ce.gray = Math.round((r + g + b) / 3);
+}
+
+function applyChipEditorMode(mode) {
+  _ce.mode = mode;
+  _ceRefs.tabs.forEach(t => t.classList.toggle('active', t.dataset.emode === mode));
+  _ceRefs.groups.forEach(gr => gr.classList.toggle('active', gr.dataset.egroup === mode));
+  _ceRefs.wheel.hidden = (mode === 'gray');
+}
+
+function setChipEditorMode(mode) {
+  reseedSubstates();
+  applyChipEditorMode(mode);
+  _ceWheelCache = null;
+  syncChipEditorControls();
+}
+
+function readChipEditorInputs() {
+  const R = _ceRefs.ranges;
+  if (_ce.mode === 'rgb') {
+    _ce.r = +R.r.value; _ce.g = +R.g.value; _ce.b = +R.b.value;
+  } else if (_ce.mode === 'hsl') {
+    const h = +R.h.value, s = +R.s.value, l = +R.l.value;
+    _ce.hsl = [h, s, l];
+    [_ce.r, _ce.g, _ce.b] = hslToRgb(h, s / 100, l / 100);
+  } else if (_ce.mode === 'lum') {
+    const lm = +R.clum.value, s = +R.csat.value, h = +R.chue.value;
+    _ce.lum = [lm, s, h];
+    const L = findLightness(h, s / 100, lm / 1000);
+    [_ce.r, _ce.g, _ce.b] = hslToRgb(h, s / 100, L);
+  } else {
+    const v = +R.gray.value; _ce.gray = v; _ce.r = _ce.g = _ce.b = v;
+  }
+}
+
+function syncChipEditorRanges() {
+  const R = _ceRefs.ranges;
+  if (_ce.mode === 'rgb')      { R.r.value = _ce.r; R.g.value = _ce.g; R.b.value = _ce.b; }
+  else if (_ce.mode === 'hsl') { R.h.value = _ce.hsl[0]; R.s.value = _ce.hsl[1]; R.l.value = _ce.hsl[2]; }
+  else if (_ce.mode === 'lum') { R.clum.value = _ce.lum[0]; R.csat.value = _ce.lum[1]; R.chue.value = _ce.lum[2]; }
+  else                         { R.gray.value = _ce.gray; }
+}
+
+function syncChipEditorVals() {
+  const V = _ceRefs.vals;
+  if (_ce.mode === 'rgb')      { V.r.value = _ce.r; V.g.value = _ce.g; V.b.value = _ce.b; }
+  else if (_ce.mode === 'hsl') { V.h.value = _ce.hsl[0] + '°'; V.s.value = _ce.hsl[1] + '%'; V.l.value = _ce.hsl[2] + '%'; }
+  else if (_ce.mode === 'lum') { V.clum.value = (_ce.lum[0] / 1000).toFixed(3); V.csat.value = _ce.lum[1] + '%'; V.chue.value = _ce.lum[2] + '°'; }
+  else                         { V.gray.value = _ce.gray; }
+}
+
+function syncChipEditorHex() { _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b); }
+
+function syncChipEditorControls() {
+  syncChipEditorRanges();
+  syncChipEditorVals();
+  syncChipEditorHex();
+  scheduleChipEditorPaint();
+}
+
+function scheduleChipEditorPaint() {
+  if (_ceRaf) return;
+  _ceRaf = requestAnimationFrame(() => { _ceRaf = 0; renderChipEditorWheel(); chipEditorRenderPreview(); });
+}
+
+function chipEditorWriteThrough() {
+  const hex = toHex(_ce.r, _ce.g, _ce.b).toLowerCase();
+  if (_ceIdx != null && palette[_ceIdx]) {
+    palette[_ceIdx].hex = hex;
+    updateChipVisual(_ceIdx, hex);
+    savePalette(); // saveToStorage is debounced, so per-tick calls are cheap
+  }
+}
+
+function updateChipVisual(idx, hex) {
+  const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
+  if (!chipEl) return;
+  const [r, g, b] = hexToRgb(hex);
+  const lum = relativeLuminance(r, g, b);
+  chipEl.style.background = hex;
+  chipEl.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
+  const hx = chipEl.querySelector('.palette-chip-hex');
+  if (hx) hx.textContent = formatHex(toHex(r, g, b));
+}
+
+function onChipEditorSlider() {
+  readChipEditorInputs();
+  chipEditorWriteThrough();
+  syncChipEditorVals();
+  syncChipEditorHex();
+  scheduleChipEditorPaint();
+}
+
+function onChipEditorValInput() {
+  const R = _ceRefs.ranges, V = _ceRefs.vals;
+  const n = s => { const x = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return Number.isFinite(x) ? x : 0; };
+  const set = (rng, v, lo, hi) => { rng.value = String(_ceClamp(Math.round(v), lo, hi)); };
+  if (_ce.mode === 'rgb')      { set(R.r, n(V.r.value), 0, 255); set(R.g, n(V.g.value), 0, 255); set(R.b, n(V.b.value), 0, 255); }
+  else if (_ce.mode === 'hsl') { set(R.h, n(V.h.value), 0, 359); set(R.s, n(V.s.value), 0, 100); set(R.l, n(V.l.value), 0, 100); }
+  else if (_ce.mode === 'lum') { set(R.clum, n(V.clum.value) * 1000, 0, 1000); set(R.csat, n(V.csat.value), 0, 100); set(R.chue, n(V.chue.value), 0, 359); }
+  else                         { set(R.gray, n(V.gray.value), 0, 255); }
+  onChipEditorSlider();
+}
+
+function chipEditorSetRgb(r, g, b) {
+  _ce.r = _ceClamp(Math.round(r), 0, 255);
+  _ce.g = _ceClamp(Math.round(g), 0, 255);
+  _ce.b = _ceClamp(Math.round(b), 0, 255);
+  reseedSubstates();
+  chipEditorWriteThrough();
+  syncChipEditorControls();
+}
+
+function attachChipEditorWheel() {
+  const cv = _ceRefs.wheel;
+  let down = false;
+  const move = e => { if (down) { handleChipEditorWheel(e); e.preventDefault(); } };
+  cv.addEventListener('pointerdown', e => {
+    if (_ce.mode === 'gray') return;
+    down = true;
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    handleChipEditorWheel(e);
+  });
+  cv.addEventListener('pointermove', move);
+  cv.addEventListener('pointerup',   () => { down = false; });
+  cv.addEventListener('pointercancel', () => { down = false; });
+}
+
+function handleChipEditorWheel(e) {
+  const rect = _ceRefs.wheel.getBoundingClientRect();
+  const R = rect.width / 2;
+  const dx = e.clientX - rect.left - R, dy = e.clientY - rect.top - R;
+  let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360;
+  const sat = Math.min(1, Math.hypot(dx, dy) / R);
+  let rgb;
+  if (_ce.mode === 'lum') {
+    rgb = hslToRgb(hue, sat, findLightness(hue, sat, _ce.lum[0] / 1000));
+  } else {
+    const L = _ce.mode === 'hsl' ? _ce.hsl[2] / 100 : rgbToHsl(_ce.r, _ce.g, _ce.b)[2];
+    rgb = hslToRgb(hue, sat, L);
+  }
+  chipEditorSetRgb(...rgb);
+}
+
+function renderChipEditorWheel() {
+  if (!_ceEl || _ce.mode === 'gray') return;
+  const cv = _ceRefs.wheel, ctx = _ceRefs.ctx, SZ = cv.width, R = SZ / 2;
+  const lumMode = _ce.mode === 'lum';
+  const L    = lumMode ? 0 : (_ce.mode === 'hsl' ? _ce.hsl[2] / 100 : rgbToHsl(_ce.r, _ce.g, _ce.b)[2]);
+  const lumT = lumMode ? _ce.lum[0] / 1000 : 0;
+  const key  = _ce.mode + '|' + (lumMode ? lumT.toFixed(3) : L.toFixed(3));
+  if (!_ceWheelCache || _ceWheelCache.key !== key) {
+    const img = ctx.createImageData(SZ, SZ), d = img.data;
+    for (let y = 0; y < SZ; y++) {
+      for (let x = 0; x < SZ; x++) {
+        const dx = x - R + 0.5, dy = y - R + 0.5, dist = Math.hypot(dx, dy), idx = (y * SZ + x) * 4;
+        if (dist > R) { d[idx + 3] = 0; continue; }
+        let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360;
+        const sat = Math.min(1, dist / R);
+        const rgb = lumMode ? hslToRgb(hue, sat, findLightness(hue, sat, lumT)) : hslToRgb(hue, sat, L);
+        d[idx] = rgb[0]; d[idx + 1] = rgb[1]; d[idx + 2] = rgb[2]; d[idx + 3] = 255;
+      }
+    }
+    _ceWheelCache = { key, img };
+  }
+  ctx.putImageData(_ceWheelCache.img, 0, 0);
+  // marker at current hue/sat
+  let mh, ms;
+  if (lumMode)                 { mh = _ce.lum[2]; ms = _ce.lum[1] / 100; }
+  else if (_ce.mode === 'hsl') { mh = _ce.hsl[0]; ms = _ce.hsl[1] / 100; }
+  else                         { const h = rgbToHsl(_ce.r, _ce.g, _ce.b); mh = h[0]; ms = h[1]; }
+  const a = mh * Math.PI / 180, dd = ms * R;
+  ctx.beginPath();
+  ctx.arc(R + Math.cos(a) * dd, R + Math.sin(a) * dd, 5, 0, Math.PI * 2);
+  ctx.strokeStyle = relativeLuminance(_ce.r, _ce.g, _ce.b) > 0.35 ? '#000' : '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function chipEditorOppRole() { return _ce.role === 'fg' ? 'bg' : 'fg'; }
+
+function partnerList() {
+  const opp = chipEditorOppRole();
+  return palette.filter((e, i) => e.role === opp && i !== _ceIdx).map(e => e.hex);
+}
+
+function partnerHex() {
+  const list = partnerList();
+  if (list.length) return list[_cePartner % list.length];
+  // Nothing saved in the opposite role → fall back to that role's main picker
+  return _ce.role === 'fg'
+    ? toHex(cR, cG, cB)               // editing text → compare against main background
+    : toHex(...selectedRgbBiased());  // editing background → compare against main wheel text
+}
+
+function chipEditorRenderPreview() {
+  if (!_ceEl || !_ce) return;
+  const editedHex = toHex(_ce.r, _ce.g, _ce.b);
+  const list = partnerList();
+  if (_cePartner >= Math.max(1, list.length)) _cePartner = 0;
+  const partner = partnerHex();
+  let bgHex, textHex, cmpRole;
+  if (_ce.role === 'bg') { bgHex = editedHex; textHex = partner; cmpRole = 'Text'; }
+  else                   { textHex = editedHex; bgHex = partner; cmpRole = 'BG'; }
+
+  _ceRefs.tile.style.background = bgHex;
+  _ceRefs.ag.style.color = textHex;
+  _ceRefs.icon.style.color = textHex;
+
+  const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
+  _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
+  _ceRefs.cmpRole.textContent = cmpRole;
+  _ceRefs.cmpHex.textContent = formatHex(partner) + (list.length ? '' : ' (picker)');
+  _ceRefs.badges.innerHTML = '';
+  for (const [lbl, thr] of [['AA', 4.5], ['AAA', 7]]) {
+    const b = document.createElement('span');
+    b.className = 'chip-editor-badge' + (ratio >= thr ? ' pass' : '');
+    b.textContent = lbl;
+    _ceRefs.badges.appendChild(b);
+  }
+  _ceRefs.swap.disabled = list.length < 2;
+}
+
+function openChipEditor(idx) {
+  if (_ceIdx === idx) { closeChipEditor(); return; } // toggle off
+  if (_ceIdx !== null) closeChipEditor(true);
+  if (!palette[idx]) return;
+  if (!_ceEl) buildChipEditor();
+  _ceIdx = idx;
+  _cePartner = 0;
+  _ceWheelCache = null;
+  const entry = palette[idx];
+  const [r, g, b] = hexToRgb(entry.hex);
+  _ce = { role: entry.role, r, g, b, mode: 'rgb', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0 };
+  reseedSubstates();
+  applyChipEditorMode('rgb');
+  syncChipEditorControls();
+  chipEditorRenderPreview();
+  const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
+  if (chipEl) { chipEl.classList.add('editing'); chipEl.after(_ceEl); }
+}
+
+function closeChipEditor(skipRender) {
+  if (_ceIdx === null) return;
+  const idx = _ceIdx;
+  _ceIdx = null;
+  _ce = null;
+  savePalette();
+  if (_ceEl && _ceEl.parentNode) _ceEl.parentNode.removeChild(_ceEl);
+  const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
+  if (chipEl) chipEl.classList.remove('editing');
+  if (!skipRender) renderPalette();
+}
+
+/** Re-attach the open editor after a renderPalette() rebuild (used as a safety
+    net; structural edits close the editor outright). */
+function reinsertChipEditor() {
+  if (_ceIdx === null) return;
+  const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${_ceIdx}"]`);
+  if (chipEl && _ceEl) { chipEl.classList.add('editing'); chipEl.after(_ceEl); }
+  else { _ceIdx = null; _ce = null; }
+}
+
 function renderPalette() {
   paletteToggleCount.hidden = palette.length === 0;
   paletteToggleCount.textContent = String(palette.length);
@@ -2862,6 +3177,7 @@ function renderPalette() {
 
     const chip = document.createElement('div');
     chip.className = 'palette-chip';
+    chip.dataset.idx = String(flatIdx);
     chip.style.background = hex;
     chip.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
 
@@ -2877,17 +3193,11 @@ function renderPalette() {
     const edit = document.createElement('button');
     edit.className = 'palette-chip-edit';
     edit.innerHTML = EYEDROPPER_SVG;
-    edit.title = role === 'fg'
-      ? 'Load this color back into the wheel (text) picker'
-      : 'Load this color back into the custom (background) picker';
-    edit.setAttribute('aria-label', edit.title);
-    edit.addEventListener('click', () => {
-      if (role === 'fg') {
-        setWheelFromRgb(r, g, b);
-      } else {
-        setCustomMode('color');
-        setCustomFromRgb(r, g, b);
-      }
+    edit.title = 'Edit this color';
+    edit.setAttribute('aria-label', 'Edit this color');
+    edit.addEventListener('click', e => {
+      e.stopPropagation();
+      openChipEditor(flatIdx);
     });
 
     const copy = document.createElement('button');
@@ -2917,6 +3227,7 @@ function renderPalette() {
     paletteRail.appendChild(group);
   });
 
+  reinsertChipEditor();
   renderPalettePreviews();
 }
 

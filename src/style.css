@@ -1055,6 +1055,94 @@ input.custom-val:focus {
 .palette-colorfmt-btn:hover  { color: var(--text); }
 .palette-colorfmt-btn:active { transform: scale(0.93); }
 .palette-colorfmt-btn.active { background: var(--border); color: var(--text); }
+
+/* ── Inline palette-chip editor ─────────────────────────────────────────────── */
+.chip-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.1rem 0 0.15rem;
+  padding: 0.6rem 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2, var(--surface));
+  animation: chip-editor-in 0.16s ease;
+}
+@keyframes chip-editor-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.chip-editor .custom-mode-tabs { margin-bottom: 0; }
+.chip-editor-wheel {
+  width: 132px;
+  height: 132px;
+  align-self: center;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.chip-editor-wheel[hidden] { display: none; }
+.chip-editor .custom-slider-group { gap: 0.4rem; }
+.chip-editor-hexwrap { display: flex; }
+.chip-editor-hex {
+  width: 100%;
+  text-align: left;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+.chip-editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+.chip-editor-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 54px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; }
+.chip-editor-tile-icon { display: block; flex-shrink: 0; }
+.chip-editor-cmp {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+.chip-editor-cmp-role { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.chip-editor-swap {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.12rem 0.32rem;
+  transition: background 0.12s;
+}
+.chip-editor-swap:hover:not(:disabled) { background: var(--border); }
+.chip-editor-swap:disabled { opacity: 0.35; cursor: default; }
+.chip-editor-cmp-hex { font-family: ui-monospace, monospace; color: var(--text); }
+.chip-editor-cmp-ratio { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); }
+.chip-editor-badges { display: inline-flex; gap: 0.25rem; }
+.chip-editor-badge {
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.chip-editor-badge.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 45%, transparent); }
+.palette-chip.editing { outline: 1px solid var(--accent); outline-offset: 1px; }
 .palette-rail {
   display: flex;
   flex-direction: column;
