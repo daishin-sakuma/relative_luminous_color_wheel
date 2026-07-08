@@ -2553,10 +2553,18 @@ function reorderRole(role, from, to) {
 // 1:1 while siblings slide out of the way with a transform transition; on
 // release it settles into its slot before the order is committed.
 let _chipDragActive = false;
+// Hard-reset hook for a wedged drag. A dropped pointerup (mouse released
+// off-window, capture lost mid-transform) can otherwise leave a drag stuck in
+// its lifted state and _chipDragActive latched true; the next press calls this
+// to recover synchronously before starting fresh.
+let _forceEndActiveDrag = null;
 
 function attachChipDrag(chip, index, role, listEl) {
   chip.addEventListener('contextmenu', e => e.preventDefault()); // long-press menu
   chip.addEventListener('pointerdown', e => {
+    // Recover any drag that never received its pointerup so it can't block this
+    // press (previously the user had to click repeatedly to jog it loose).
+    if (_forceEndActiveDrag) _forceEndActiveDrag();
     if (_chipDragActive || (e.pointerType === 'mouse' && e.button !== 0)) return;
     // Buttons (edit / copy / remove) own their clicks — everything else on
     // the chip is a drag handle, so the two gestures never compete
@@ -2569,13 +2577,14 @@ function attachChipDrag(chip, index, role, listEl) {
     let lifted = false;
     let targetIndex = index;
     let holdTimer = null;
+    let ended = false; // guards against a second end event (up + lostcapture)
 
     const blockScroll = ev => ev.preventDefault();
 
     const lift = () => {
       lifted = true;
       _chipDragActive = true;
-      chip.setPointerCapture(e.pointerId);
+      try { chip.setPointerCapture(e.pointerId); } catch (_) {}
       chip.classList.add('palette-chip--lifted');
       chip.style.transform = 'scale(1.03)';
       // Unclip the sidebar so the chip stays visible outside the rail
@@ -2583,28 +2592,40 @@ function attachChipDrag(chip, index, role, listEl) {
       document.addEventListener('touchmove', blockScroll, { passive: false });
     };
 
-    const cleanup = () => {
+    // End listeners live on window (not the chip) so a pointerup that lands
+    // off the chip — or after pointer capture is lost — still ends the drag.
+    const removeListeners = () => {
       clearTimeout(holdTimer);
       document.removeEventListener('touchmove', blockScroll);
-      chip.removeEventListener('pointermove', onMove);
-      chip.removeEventListener('pointerup', onUp);
-      chip.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      chip.removeEventListener('lostpointercapture', onCancel);
+      try { if (chip.hasPointerCapture(e.pointerId)) chip.releasePointerCapture(e.pointerId); } catch (_) {}
     };
 
-    const onMove = ev => {
-      const rawDy = ev.clientY - startY;
-      if (!lifted) {
-        // Touch before the hold fires = scroll intent; mouse needs a 5px move
-        if (isTouch) {
-          if (Math.hypot(ev.clientX - startX, rawDy) > 8) { cleanup(); }
-          return;
-        }
-        if (Math.hypot(ev.clientX - startX, rawDy) <= 5) return;
-        lift();
-      }
-      // Free movement — only the insertion target is clamped to the list span
-      chip.style.transform = `translateY(${rawDy}px) scale(1.03)`;
-      const ti = Math.max(0, Math.min(chips.length - 1, index + Math.round(rawDy / slot)));
+    // Synchronous teardown used when a stale drag is recovered by a fresh press.
+    // Clears the global lock and every chip's inline transform immediately
+    // (renderPalette can't run here: it would detach the chip the new
+    // pointerdown is firing on).
+    const forceEnd = () => {
+      if (ended) return;
+      ended = true;
+      removeListeners();
+      _forceEndActiveDrag = null;
+      _chipDragActive = false;
+      paletteSection.classList.remove('palette-section--dragging');
+      chips.forEach(c => {
+        c.classList.remove('palette-chip--lifted', 'palette-chip--settling');
+        c.style.transform = '';
+      });
+    };
+
+    // Insertion slot for a given pointer Y, clamped to the list span
+    const targetForY = clientY =>
+      Math.max(0, Math.min(chips.length - 1, index + Math.round((clientY - startY) / slot)));
+
+    const applyTarget = ti => {
       if (ti === targetIndex) return;
       targetIndex = ti;
       chips.forEach((c, j) => {
@@ -2616,30 +2637,56 @@ function attachChipDrag(chip, index, role, listEl) {
       });
     };
 
-    const settle = commit => {
-      cleanup();
-      if (!lifted) return;
-      chip.classList.remove('palette-chip--lifted');
-      chip.classList.add('palette-chip--settling');
-      chip.style.transform = commit && targetIndex !== index
-        ? `translateY(${(targetIndex - index) * slot}px)`
-        : '';
-      setTimeout(() => {
-        _chipDragActive = false;
-        paletteSection.classList.remove('palette-section--dragging');
-        if (commit && targetIndex !== index) {
-          reorderRole(role, index, targetIndex);
+    const onMove = ev => {
+      const rawDy = ev.clientY - startY;
+      if (!lifted) {
+        // Touch before the hold fires = scroll intent; mouse needs a 5px move
+        if (isTouch) {
+          if (Math.hypot(ev.clientX - startX, rawDy) > 8) forceEnd();
+          return;
         }
-        renderPalette(); // rebuild resets all inline transforms
-      }, 190);
+        if (Math.hypot(ev.clientX - startX, rawDy) <= 5) return;
+        lift();
+      }
+      // Free movement — only the insertion target is clamped to the list span
+      chip.style.transform = `translateY(${rawDy}px) scale(1.03)`;
+      applyTarget(targetForY(ev.clientY));
     };
 
-    const onUp = () => settle(true);
+    // Commit on release in a single tick: reorder the data, re-render, and drop
+    // the drag lock together. (A deferred settle animation used to hold the lock
+    // ~190ms; a quick second grab landing in that window was swallowed, so the
+    // reorder looked like it silently failed / sprang back.)
+    const settle = commit => {
+      if (ended) return;
+      ended = true;
+      removeListeners();
+      _forceEndActiveDrag = null;
+      _chipDragActive = false;
+      paletteSection.classList.remove('palette-section--dragging');
+      if (!lifted) return;
+      if (commit && targetIndex !== index) reorderRole(role, index, targetIndex);
+      renderPalette(); // rebuild resets every chip's inline transform + rank labels
+    };
+
+    // Snap the target to the release point. A fast flick can reach pointerup
+    // before its final pointermove arrives (targetIndex left stale near the
+    // start), or outrun the 5px lift threshold entirely — so recompute from the
+    // release Y and, for mouse, treat a past-threshold release as a lift so the
+    // reorder still commits instead of springing back.
+    const onUp = ev => {
+      const y = ev && typeof ev.clientY === 'number' ? ev.clientY : startY;
+      if (!lifted && !isTouch && Math.abs(y - startY) > 5) lift();
+      if (lifted) applyTarget(targetForY(y));
+      settle(true);
+    };
     const onCancel = () => settle(false);
 
-    chip.addEventListener('pointermove', onMove);
-    chip.addEventListener('pointerup', onUp);
-    chip.addEventListener('pointercancel', onCancel);
+    _forceEndActiveDrag = forceEnd;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    chip.addEventListener('lostpointercapture', onCancel);
     if (isTouch) holdTimer = setTimeout(lift, 300);
   });
 }
