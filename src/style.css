@@ -666,6 +666,28 @@ input.custom-val:focus {
   gap: 0.55rem;
   flex-wrap: wrap;
 }
+/* Saved-palette mini strip inside the vs-Custom tiles: text colors as small
+   colored glyphs, background colors as filled squares */
+.preview-palette {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.45rem;
+  cursor: pointer; /* clicking the strip opens the palette sidebar */
+}
+.preview-palette-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.preview-palette-bg {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  flex-shrink: 0;
+}
 .preview-share-btn {
   display: inline-flex;
   align-items: center;
@@ -887,7 +909,7 @@ input.custom-val:focus {
 }
 
 /* ── Palette sidebar ────────────────────────────────────────────────────────── */
-:root { --palette-w: 200px; }
+:root { --palette-w: 248px; } /* wide enough for the "Quaternary" chip row */
 
 /* An overlay layer above the app: opening/closing never moves the content */
 .palette-section {
@@ -943,14 +965,9 @@ input.custom-val:focus {
   justify-content: space-between;
 }
 @media (max-width: 520px) {
-  :root { --palette-w: min(230px, 80vw); }
+  :root { --palette-w: min(260px, 85vw); }
 }
 
-.palette-empty {
-  color: var(--muted);
-  font-size: 0.7rem;
-  line-height: 1.55;
-}
 .palette-head {
   display: flex;
   align-items: center;
@@ -1054,18 +1071,62 @@ input.custom-val:focus {
   cursor: grabbing;
 }
 .palette-chip--settling { position: relative; z-index: 3; }
-/* fg/bg origin marker — mirrors the TEXT / BG vocabulary of the preview tiles */
-.palette-chip-role {
-  font-size: 0.52rem;
-  letter-spacing: 0.1em;
-  opacity: 0.65;
-  padding-left: 0.55rem;
-  min-width: 2.6em;
+/* Role groups (Text / Background) */
+.palette-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.palette-group + .palette-group { margin-top: 0.2rem; }
+.palette-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.palette-group-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* "Add the current color" button in each group header */
+.palette-group-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.1rem;
+  font-size: 0.82rem;
   flex-shrink: 0;
+  transition: color 0.12s, opacity 0.12s;
+}
+.palette-group-add:hover { color: var(--text); }
+.palette-group-add:active { transform: scale(0.9); }
+.palette-group-add:disabled { opacity: 0.3; cursor: default; }
+.palette-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+/* Primary / Secondary / ordinal rank within a group */
+.palette-chip-rank {
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  padding-left: 0.55rem;
+  min-width: 5.4em; /* aligns hex across rows; fits "Quaternary" */
+  flex-shrink: 0;
+  white-space: nowrap;
   user-select: none;
 }
-/* Plain label — editing happens via the dedicated ✎ button, and the rest of
-   the chip surface (label included) is the drag handle */
+/* Plain label — loading a color back into a picker happens via the dedicated
+   eyedropper button, and the rest of the chip surface (label included) is the
+   drag handle */
 .palette-chip-hex {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
@@ -1074,18 +1135,19 @@ input.custom-val:focus {
   text-align: left;
 }
 .palette-chip-edit {
+  display: flex;
+  align-items: center;
   background: none;
   border: none;
   color: inherit;
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   line-height: 1;
   opacity: 0.55;
   padding: 0.5rem 0.25rem;
   transition: opacity 0.15s;
-  user-select: none;
 }
-.palette-chip-edit::after { content: '\270E'; }
+.palette-chip-edit svg { display: block; }
 .palette-chip-edit:hover { opacity: 1; }
 /* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
 .palette-chip-copy {

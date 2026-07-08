@@ -2192,49 +2192,59 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
 function buildExport(format) {
-  const [r, g, b] = selectedRgbBiased();
-  const sel    = { hex: toHex(r, g, b).toLowerCase(),    lum: relativeLuminance(r, g, b) };
-  const custom = { hex: toHex(cR, cG, cB).toLowerCase(), lum: relativeLuminance(cR, cG, cB) };
-  const ratio  = contrastRatio(sel.lum, custom.lum);
-  const pal = palette.map(({ hex }) => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
+  // Export the palette grouped by role. Each role's first pinned color is its
+  // primary, the second its secondary, then plain ordinals. The color live in
+  // the main picker (wheel for text, custom for background) is always included
+  // too, appended unless that role already holds it.
+  const wheelHex  = toHex(...selectedRgbBiased()).toLowerCase();
+  const customHex = toHex(cR, cG, cB).toLowerCase();
+  const roleColors = (role, liveHex) => {
+    const hexes = palette.filter(e => e.role === role).map(e => e.hex);
+    if (!hexes.includes(liveHex)) hexes.push(liveHex);
+    return hexes.map(hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
+  };
+  const text = roleColors('fg', wheelHex);
+  const bg   = roleColors('bg', customHex);
+  const RANKS = ['primary', 'secondary', 'tertiary', 'quaternary'];
+  const key = pos => RANKS[pos] || String(pos + 1);
+  const ratio = contrastRatio(text[0].lum, bg[0].lum); // text-primary vs bg-primary
 
   if (format === 'css') {
-    const palLines = pal.map((c, i) =>
-      `  --color-palette-${i + 1}: ${c.hex};  /* relative luminance ${c.lum.toFixed(4)} */`);
+    const lines = [
+      ...text.map((c, i) => `  --color-text-${key(i)}: ${c.hex};  /* relative luminance ${c.lum.toFixed(4)} */`),
+      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${c.hex};  /* relative luminance ${c.lum.toFixed(4)} */`),
+    ];
     return `:root {
-  /* contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
-  --color-primary: ${sel.hex};    /* relative luminance ${sel.lum.toFixed(4)} */
-  --color-secondary: ${custom.hex}; /* relative luminance ${custom.lum.toFixed(4)} */
-${palLines.length ? palLines.join('\n') + '\n' : ''}}
+  /* text-primary vs bg-primary contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
+${lines.join('\n')}
+}
 `;
   }
   if (format === 'tailwind') {
-    const palLines = pal.map((c, i) => `  --color-palette-${i + 1}: ${c.hex};`);
+    const lines = [
+      ...text.map((c, i) => `  --color-text-${key(i)}: ${c.hex};`),
+      ...bg.map((c, i)   => `  --color-bg-${key(i)}: ${c.hex};`),
+    ];
     return `@theme {
-  --color-primary: ${sel.hex};
-  --color-secondary: ${custom.hex};
-${palLines.length ? palLines.join('\n') + '\n' : ''}}
+${lines.join('\n')}
+}
 `;
   }
+  const groupTokens = list => Object.fromEntries(
+    list.map((c, i) => [key(i), { $type: 'color', $value: c.hex }]));
   const json = {
     color: {
-      primary:   { $type: 'color', $value: sel.hex },
-      secondary: { $type: 'color', $value: custom.hex },
+      text: groupTokens(text),
+      bg:   groupTokens(bg),
     },
     $extensions: {
       'relative-luminous-color-wheel': {
-        primaryLuminance:   +sel.lum.toFixed(4),
-        secondaryLuminance: +custom.lum.toFixed(4),
-        contrastRatio:      +ratio.toFixed(2),
+        textBgContrastRatio: +ratio.toFixed(2),
+        textLuminances: text.map(c => +c.lum.toFixed(4)),
+        bgLuminances:   bg.map(c => +c.lum.toFixed(4)),
       },
     },
   };
-  if (pal.length) {
-    json.color.palette = Object.fromEntries(
-      pal.map((c, i) => [String(i + 1), { $type: 'color', $value: c.hex }]));
-    json.$extensions['relative-luminous-color-wheel'].paletteLuminances =
-      pal.map(c => +c.lum.toFixed(4));
-  }
   return JSON.stringify(json, null, 2) + '\n';
 }
 
@@ -2385,7 +2395,9 @@ function downloadExport(format) {
 // governed by the "Color in share link" preference). The section is hidden
 // while empty so it never affects the height-fitted layouts.
 
-const PALETTE_MAX = 12;
+// Per role: only the first four get names (primary / secondary / tertiary /
+// quaternary); further colors are still storable up to this reasonable cap.
+const PALETTE_ROLE_MAX = 10;
 /** @type {{hex: string, role: 'fg'|'bg'}[]} hex is lowercase '#rrggbb'; role
     records which picker the color was pinned from (fg = wheel, bg = custom)
     so re-editing reopens it in the same picker */
@@ -2478,7 +2490,9 @@ document.addEventListener('pointerdown', e => {
   if (!paletteOpen) return;
   const t = /** @type {HTMLElement} */ (e.target);
   if (paletteSection.contains(t) || paletteToggle.contains(t)) return;
-  if (t.closest && t.closest('.pin-btn')) return;
+  // Pin buttons and the preview strips both open the sidebar on click, so
+  // don't let this close it first (that would flicker close→open)
+  if (t.closest && (t.closest('.pin-btn') || t.closest('.preview-palette'))) return;
   setPaletteOpen(false);
 });
 
@@ -2503,7 +2517,10 @@ function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)
 function addToPalette(hex, role) {
   hex = hex.toLowerCase();
   if (!/^#[0-9a-f]{6}$/.test(hex)) return;
-  if (palette.some(e => e.hex === hex && e.role === role) || palette.length >= PALETTE_MAX) return;
+  // Duplicates within a role are ignored; each role holds up to four colors
+  // (primary / secondary / tertiary / quaternary)
+  if (palette.some(e => e.hex === hex && e.role === role)) return;
+  if (palette.filter(e => e.role === role).length >= PALETTE_ROLE_MAX) return;
   palette.push({ hex, role });
   savePalette();
   renderPalette();
@@ -2517,6 +2534,19 @@ function removeFromPalette(index) {
   renderPalette();
 }
 
+/** Reorder within one role (fg/bg) — moving `from`→`to` among that role's
+    entries while leaving the other role's entries untouched. The top entry of
+    each role is its "primary", the second its "secondary". */
+function reorderRole(role, from, to) {
+  const flatIdx = [];
+  palette.forEach((e, i) => { if (e.role === role) flatIdx.push(i); });
+  const items = flatIdx.map(i => palette[i]);
+  const [moved] = items.splice(from, 1);
+  items.splice(to, 0, moved);
+  flatIdx.forEach((fi, k) => { palette[fi] = items[k]; });
+  savePalette();
+}
+
 // ─── Pointer-based reorder (iOS-home-screen style) ────────────────────────────
 // Mouse: a 5px move lifts the chip. Touch: a 300ms still hold lifts it (a
 // quicker vertical move stays a scroll). The lifted chip tracks the pointer
@@ -2524,7 +2554,7 @@ function removeFromPalette(index) {
 // release it settles into its slot before the order is committed.
 let _chipDragActive = false;
 
-function attachChipDrag(chip, index) {
+function attachChipDrag(chip, index, role, listEl) {
   chip.addEventListener('contextmenu', e => e.preventDefault()); // long-press menu
   chip.addEventListener('pointerdown', e => {
     if (_chipDragActive || (e.pointerType === 'mouse' && e.button !== 0)) return;
@@ -2533,8 +2563,9 @@ function attachChipDrag(chip, index) {
     if (/** @type {HTMLElement} */ (e.target).closest('button')) return;
     const isTouch = e.pointerType !== 'mouse';
     const startY = e.clientY, startX = e.clientX;
-    const chips = /** @type {HTMLElement[]} */ ([...paletteRail.querySelectorAll('.palette-chip')]);
-    const slot = chip.offsetHeight + (parseFloat(getComputedStyle(paletteRail).rowGap) || 0);
+    // Reorder is scoped to this role's list, so a Text chip stays among Text
+    const chips = /** @type {HTMLElement[]} */ ([...listEl.querySelectorAll('.palette-chip')]);
+    const slot = chip.offsetHeight + (parseFloat(getComputedStyle(listEl).rowGap) || 0);
     let lifted = false;
     let targetIndex = index;
     let holdTimer = null;
@@ -2597,9 +2628,7 @@ function attachChipDrag(chip, index) {
         _chipDragActive = false;
         paletteSection.classList.remove('palette-section--dragging');
         if (commit && targetIndex !== index) {
-          const [moved] = palette.splice(index, 1);
-          palette.splice(targetIndex, 0, moved);
-          savePalette();
+          reorderRole(role, index, targetIndex);
         }
         renderPalette(); // rebuild resets all inline transforms
       }, 190);
@@ -2615,18 +2644,58 @@ function attachChipDrag(chip, index) {
   });
 }
 
+/** Rank name by position within a role group: 0 → Primary, 1 → Secondary,
+    then the plain ordinal. Shared by the sidebar badges and the export. */
+const PALETTE_RANKS = ['Primary', 'Secondary', 'Tertiary', 'Quaternary'];
+function paletteRankLabel(pos) {
+  return PALETTE_RANKS[pos] || String(pos + 1);
+}
+
+// Icons for the palette chips / group headers
+const EYEDROPPER_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 11.25l1.5 1.5.75-.75V8.758l2.276-.61a3 3 0 1 0-3.675-3.675l-.61 2.277H12l-.75.75 1.5 1.5M15 11.25l-8.47 8.47a2.25 2.25 0 0 1-1.591.659H3.75v-1.189c0-.597.237-1.17.659-1.591L12.75 9"/></svg>';
+const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
+
 function renderPalette() {
   paletteToggleCount.hidden = palette.length === 0;
   paletteToggleCount.textContent = String(palette.length);
   paletteRail.innerHTML = '';
-  if (palette.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'palette-empty';
-    empty.textContent = 'No colors yet — pin them with the tag icons on the swatches.';
-    paletteRail.appendChild(empty);
-    return;
-  }
-  palette.forEach(({ hex, role }, i) => {
+
+  // Two role groups (Text = wheel colors, Background = custom colors), always
+  // shown so each has an "add the current color" button — even when empty.
+  // Within a group the top chip is primary, the second secondary.
+  [{ role: 'fg', label: 'Text' }, { role: 'bg', label: 'Background' }].forEach(({ role, label }) => {
+    const entries = palette
+      .map((e, flatIdx) => ({ hex: e.hex, flatIdx }))
+      .filter((_, i) => palette[i].role === role);
+
+    const group = document.createElement('div');
+    group.className = 'palette-group';
+
+    const head = document.createElement('div');
+    head.className = 'palette-group-head';
+    const title = document.createElement('span');
+    title.className = 'palette-group-label';
+    title.textContent = label;
+
+    const add = document.createElement('button');
+    add.className = 'palette-group-add';
+    add.innerHTML = PLUS_SVG;
+    add.title = role === 'fg'
+      ? 'Add the current wheel color (text)'
+      : 'Add the current custom color (background)';
+    add.setAttribute('aria-label', add.title);
+    add.disabled = entries.length >= PALETTE_ROLE_MAX;
+    add.addEventListener('click', () => {
+      if (role === 'fg') addToPalette(toHex(...selectedRgbBiased()), 'fg');
+      else addToPalette(toHex(cR, cG, cB), 'bg');
+    });
+    head.append(title, add);
+
+    const list = document.createElement('div');
+    list.className = 'palette-group-list';
+    group.append(head, list);
+
+    entries.forEach(({ hex, flatIdx }, pos) => {
     const [r, g, b] = hexToRgb(hex);
     const lum = relativeLuminance(r, g, b);
     const display = formatHex(toHex(r, g, b));
@@ -2636,10 +2705,10 @@ function renderPalette() {
     chip.style.background = hex;
     chip.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
 
-    const roleTag = document.createElement('span');
-    roleTag.className = 'palette-chip-role';
-    roleTag.textContent = role === 'fg' ? 'TEXT' : 'BG';
-    roleTag.title = role === 'fg' ? 'Saved from the wheel (text color)' : 'Saved from the custom picker (background color)';
+    const rank = document.createElement('span');
+    rank.className = 'palette-chip-rank';
+    rank.textContent = paletteRankLabel(pos);
+    rank.title = `${label} ${paletteRankLabel(pos).toLowerCase()} — used in export`;
 
     const hexLabel = document.createElement('span');
     hexLabel.className = 'palette-chip-hex';
@@ -2647,10 +2716,11 @@ function renderPalette() {
 
     const edit = document.createElement('button');
     edit.className = 'palette-chip-edit';
+    edit.innerHTML = EYEDROPPER_SVG;
     edit.title = role === 'fg'
-      ? 'Edit this color on the wheel (text color)'
-      : 'Edit this color in the custom picker (background color)';
-    edit.setAttribute('aria-label', 'Edit this color');
+      ? 'Load this color back into the wheel (text) picker'
+      : 'Load this color back into the custom (background) picker';
+    edit.setAttribute('aria-label', edit.title);
     edit.addEventListener('click', () => {
       if (role === 'fg') {
         setWheelFromRgb(r, g, b);
@@ -2676,14 +2746,59 @@ function renderPalette() {
     remove.className = 'palette-chip-remove';
     remove.textContent = '\u00d7';
     remove.title = 'Remove from palette';
-    remove.addEventListener('click', () => removeFromPalette(i));
+    remove.addEventListener('click', () => removeFromPalette(flatIdx));
 
-    attachChipDrag(chip, i);
+    attachChipDrag(chip, pos, role, list);
 
-    chip.append(roleTag, hexLabel, edit, copy, remove);
-    paletteRail.appendChild(chip);
+    chip.append(rank, hexLabel, edit, copy, remove);
+    list.appendChild(chip);
+    });
+
+    paletteRail.appendChild(group);
   });
+
+  renderPalettePreviews();
 }
+
+/** Mirror the saved palette into the two vs-Custom preview tiles as a compact
+    strip, shown against each tile's own background. Text-role colors render as
+    a small colored "Ag" glyph; background-role colors as a filled square — so
+    the two kinds are distinguishable at a glance. */
+function renderPalettePreviews() {
+  const textColors = palette.filter(e => e.role === 'fg');
+  const bgColors   = palette.filter(e => e.role === 'bg');
+  for (const id of ['pa', 'pb']) {
+    const section = document.getElementById(id + '-palette-section');
+    const host    = document.getElementById(id + '-palette');
+    if (!section || !host) continue;
+    host.innerHTML = '';
+    section.hidden = palette.length === 0;
+    if (!palette.length) continue;
+    textColors.forEach(({ hex }) => {
+      const el = document.createElement('span');
+      el.className = 'preview-palette-text';
+      el.textContent = 'Ag';
+      el.style.color = hex;
+      el.title = `Text color ${formatHex(hex.toUpperCase())} — open palette`;
+      host.appendChild(el);
+    });
+    bgColors.forEach(({ hex }) => {
+      const el = document.createElement('span');
+      el.className = 'preview-palette-bg';
+      el.style.background = hex;
+      el.title = `Background color ${formatHex(hex.toUpperCase())} — open palette`;
+      host.appendChild(el);
+    });
+  }
+}
+
+// Clicking a preview strip opens the palette sidebar (the strips just mirror
+// the saved colors; the sidebar is where you manage them). Delegated once —
+// the host elements persist across renderPalettePreviews() rebuilds.
+['pa-palette', 'pb-palette'].forEach(id => {
+  const host = document.getElementById(id);
+  if (host) host.addEventListener('click', () => setPaletteOpen(true));
+});
 
 document.getElementById('pin-selected').addEventListener('click', () => {
   addToPalette(toHex(...selectedRgbBiased()), 'fg');
@@ -2700,26 +2815,36 @@ document.getElementById('palette-clear').addEventListener('click', () => {
 // Restore: localStorage first, then share-URL override.
 // Legacy entries (plain hex strings / unprefixed URL tokens) predate the
 // fg/bg distinction; they were always edited in the custom picker, so 'bg'.
+// Cap at four entries per role (legacy palettes could hold more).
+function capPaletteRoles(list) {
+  const kept = [], count = { fg: 0, bg: 0 };
+  for (const e of list) {
+    if (count[e.role] >= PALETTE_ROLE_MAX) continue;
+    count[e.role]++;
+    kept.push(e);
+  }
+  return kept;
+}
 try {
   const stored = JSON.parse(localStorage.getItem('palette-colors') || '[]');
   if (Array.isArray(stored)) {
-    palette = stored.map(item => {
+    palette = capPaletteRoles(stored.map(item => {
       if (typeof item === 'string' && /^#[0-9a-f]{6}$/.test(item)) return { hex: item, role: 'bg' };
       if (item && typeof item === 'object' && typeof item.hex === 'string' && /^#[0-9a-f]{6}$/.test(item.hex))
         return { hex: item.hex, role: item.role === 'fg' ? 'fg' : 'bg' };
       return null;
-    }).filter(Boolean).slice(0, PALETTE_MAX);
+    }).filter(Boolean));
   }
 } catch (e) {}
 try {
   const pp = new URLSearchParams(location.search).get('p');
   if (pp !== null) {
-    const fromUrl = pp.split(',').map(tok => {
+    const fromUrl = capPaletteRoles(pp.split(',').map(tok => {
       const t = tok.toLowerCase();
       if (/^[fb][0-9a-f]{6}$/.test(t)) return { hex: '#' + t.slice(1), role: t[0] === 'f' ? 'fg' : 'bg' };
       if (/^[0-9a-f]{6}$/.test(t)) return { hex: '#' + t, role: 'bg' };
       return null;
-    }).filter(Boolean).slice(0, PALETTE_MAX);
+    }).filter(Boolean));
     if (fromUrl.length) { palette = fromUrl; savePalette(); }
   }
 } catch (e) {}

@@ -1,6 +1,6 @@
 {
   "name": "relative-luminous-color-wheel",
-  "version": "1.20.2",
+  "version": "1.21.0",
   "description": "Accessible color picker with a contrast lock — every color on the wheel shares the same WCAG 2.2 relative luminance, and a target lock (WCAG 2.2 ratios or APCA Lc per the WCAG 3 draft) keeps color pairs pinned to a threshold while you explore hue and saturation",
   "private": true,
   "type": "module",
