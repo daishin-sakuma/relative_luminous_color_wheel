@@ -2549,16 +2549,16 @@ function setPaletteOpen(open) {
 // — notably as the drawer opens — pushing the pinned-to-bottom export footer
 // under the toolbar so the bottom looks cut off. visualViewport.height is the
 // ground truth; the inline px height overrides the CSS 100dvh fallback.
+// Only mutate while the sidebar is showing, and NOT on every visualViewport
+// scroll tick: resizing a fixed overlay each scroll frame made iOS drop the
+// paint of the content behind it (the preview tiles vanished while open).
 function syncSidebarHeight() {
+  if (paletteSection.hidden) return;
   const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   if (h) paletteSection.style.height = h + 'px';
 }
-syncSidebarHeight();
 window.addEventListener('resize', syncSidebarHeight);
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', syncSidebarHeight);
-  window.visualViewport.addEventListener('scroll', syncSidebarHeight);
-}
+if (window.visualViewport) window.visualViewport.addEventListener('resize', syncSidebarHeight);
 
 // Hovering the toggle opens the sidebar (mouse only — on touch, the tap's
 // synthesized pointerenter would open it just before click toggled it shut).

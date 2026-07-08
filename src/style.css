@@ -932,6 +932,12 @@ input.custom-val:focus {
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);
   overflow: hidden; /* the rail scrolls, not the sidebar */
   z-index: 5;
+  /* Force a stable compositing layer. Without it, iOS Safari re-rasterises this
+     fixed overlay (with its blurred shadow) into the layer shared with the app
+     behind it, dropping the paint of content there — the color-preview tiles
+     went blank while the sidebar was open. Coexists with the slide animation
+     (its keyframes override transform while running). */
+  transform: translateZ(0);
   animation: palette-slide-in 0.22s ease;
 }
 @keyframes palette-slide-in { from { transform: translateX(100%); } }
