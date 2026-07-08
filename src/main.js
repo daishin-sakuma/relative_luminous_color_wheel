@@ -3239,10 +3239,28 @@ function openChipEditor(idx) {
   chipEditorRenderPreview();
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) { chipEl.classList.add('editing'); chipEl.after(_ceEl); }
+  // A press anywhere outside the editor finishes editing (capture phase so the
+  // editor's own stopPropagation doesn't hide it).
+  document.addEventListener('pointerdown', _ceOutsideClose, true);
+}
+
+// Close when a tap / mouse press lands outside the editor. The chip being edited
+// is treated as "inside" so its pencil still toggles the editor rather than
+// reopening it; skipRender avoids tearing chips down mid-event so a press on
+// another chip's edit button still opens that chip.
+function _ceOutsideClose(e) {
+  if (_ceIdx === null) return;
+  const t = /** @type {Node} */ (e.target);
+  if (_ceEl && _ceEl.contains(t)) return;
+  const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${_ceIdx}"]`);
+  if (chipEl && chipEl.contains(t)) return;
+  closeChipEditor(true);
+  renderPalettePreviews();
 }
 
 function closeChipEditor(skipRender) {
   if (_ceIdx === null) return;
+  document.removeEventListener('pointerdown', _ceOutsideClose, true);
   closeChipEditorDropdown();
   const idx = _ceIdx;
   _ceIdx = null;
