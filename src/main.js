@@ -2876,17 +2876,19 @@ function buildChipEditorDropdown() {
     dd.appendChild(info);
     return;
   }
+  const roleLabel = chipEditorOppRole() === 'fg' ? 'TEXT' : 'BG';
   list.forEach((hex, i) => {
     const it = document.createElement('button');
     it.type = 'button';
     it.className = 'chip-editor-dd-item';
     it.setAttribute('role', 'option');
     it.setAttribute('aria-selected', String(i === _cePartner));
+    // Role type (TEXT / BG) leads, then the rank name; hex is a muted suffix.
+    const rl = document.createElement('span'); rl.className = 'chip-editor-dd-role'; rl.textContent = roleLabel;
     const sw = document.createElement('span'); sw.className = 'chip-editor-dd-swatch'; sw.style.background = hex;
-    // The rank name (Primary / Secondary / …) leads; hex is a muted suffix.
     const nm = document.createElement('span'); nm.className = 'chip-editor-dd-name'; nm.textContent = paletteRankLabel(i);
     const hx = document.createElement('span'); hx.className = 'chip-editor-dd-hex'; hx.textContent = formatHex(hex);
-    it.append(sw, nm, hx);
+    it.append(rl, sw, nm, hx);
     if (i === _cePartner) { const ck = document.createElement('span'); ck.className = 'chip-editor-dd-check'; ck.textContent = '✓'; it.appendChild(ck); }
     it.addEventListener('click', () => { _cePartner = i; chipEditorRenderPreview(); closeChipEditorDropdown(); });
     dd.appendChild(it);
