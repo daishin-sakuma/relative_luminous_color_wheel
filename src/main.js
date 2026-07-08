@@ -2483,6 +2483,11 @@ function downloadExport(format) {
     const v = btn.dataset.cvd;
     document.body.classList.toggle('cvd-active', !!v);
     cvdLayer.style.filter = v ? `url(#cvd-${v})` : '';
+    // iOS Safari doesn't re-run an SVG filter over the already-painted WebGL
+    // wheel when the filter is (un)set, so the wheel keeps its unfiltered
+    // pixels. Repaint it now that the filter state has changed so the fresh
+    // canvas rasterizes through the filter.
+    scheduleRender(true);
   }));
 }
 
@@ -2835,6 +2840,7 @@ function buildChipEditor() {
     cmpRole: q('.chip-editor-cmp-role'),
     ratio:  q('.chip-editor-cmp-ratio'),
     badges: q('.chip-editor-badges'),
+    done:   q('.chip-editor-done'),
     ranges: {}, vals: {},
   };
   _ceEl.querySelectorAll('[data-ch]').forEach(inp => { _ceRefs.ranges[inp.dataset.ch] = inp; });
@@ -2847,8 +2853,12 @@ function buildChipEditor() {
   _ceEl.addEventListener('wheel', e => e.stopPropagation());
 
   _ceRefs.tabs.forEach(t => t.addEventListener('click', () => setChipEditorMode(t.dataset.emode)));
-  Object.values(_ceRefs.ranges).forEach(inp => inp.addEventListener('input', onChipEditorSlider));
+  Object.values(_ceRefs.ranges).forEach(inp => {
+    inp.addEventListener('input', onChipEditorSlider);
+    addSliderTouchFix(inp); // cloned after the initial pass, so wire touch dragging here
+  });
   Object.values(_ceRefs.vals).forEach(inp => inp.addEventListener('change', onChipEditorValInput));
+  _ceRefs.done.addEventListener('click', () => closeChipEditor());
   _ceRefs.hex.addEventListener('change', () => {
     const m = /^#?([0-9a-fA-F]{6})$/.exec(_ceRefs.hex.value.trim());
     if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
@@ -2982,7 +2992,38 @@ function syncChipEditorControls() {
 
 function scheduleChipEditorPaint() {
   if (_ceRaf) return;
-  _ceRaf = requestAnimationFrame(() => { _ceRaf = 0; renderChipEditorWheel(); chipEditorRenderPreview(); });
+  _ceRaf = requestAnimationFrame(() => {
+    _ceRaf = 0;
+    renderChipEditorWheel();
+    renderChipEditorSliderTracks();
+    chipEditorRenderPreview();
+  });
+}
+
+// Colour the active mode's slider tracks, mirroring the main custom picker so
+// each slider previews the color it produces.
+function renderChipEditorSliderTracks() {
+  if (!_ceEl) return;
+  const R = _ceRefs.ranges, { r, g, b } = _ce;
+  if (_ce.mode === 'rgb') {
+    R.r.style.backgroundImage = `linear-gradient(to right,${toHex(0, g, b)},${toHex(255, g, b)})`;
+    R.g.style.backgroundImage = `linear-gradient(to right,${toHex(r, 0, b)},${toHex(r, 255, b)})`;
+    R.b.style.backgroundImage = `linear-gradient(to right,${toHex(r, g, 0)},${toHex(r, g, 255)})`;
+  } else if (_ce.mode === 'hsl') {
+    const [h, s, l] = _ce.hsl, sf = s / 100, lf = l / 100;
+    const hStops = Array.from({ length: 13 }, (_, i) => `${toHex(...hslToRgb(i * 30, sf, lf))} ${Math.round(i / 12 * 100)}%`);
+    R.h.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
+    R.s.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(h, 0, lf))},${toHex(...hslToRgb(h, 1, lf))})`;
+    R.l.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(h, sf, 0))},${toHex(...hslToRgb(h, sf, 0.5))},${toHex(...hslToRgb(h, sf, 1))})`;
+  } else if (_ce.mode === 'lum') {
+    const [lm, s, h] = _ce.lum, sf = s / 100, lumT = lm / 1000;
+    const lumStops = [0, 0.04, 0.18, 0.40, 0.65, 1.0].map(x => `${toHex(...hslToRgb(h, sf, findLightness(h, sf, x)))} ${Math.round(x * 100)}%`);
+    R.clum.style.backgroundImage = `linear-gradient(to right,${lumStops.join(',')})`;
+    R.csat.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(h, 0, findLightness(h, 0, lumT)))},${toHex(...hslToRgb(h, 1, findLightness(h, 1, lumT)))})`;
+    const hStops = Array.from({ length: 13 }, (_, i) => `${toHex(...hslToRgb(i * 30, sf, findLightness(i * 30, sf, lumT)))} ${Math.round(i / 12 * 100)}%`);
+    R.chue.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
+  }
+  // Gray uses the static black→white .custom-gray-slider gradient.
 }
 
 function chipEditorWriteThrough() {

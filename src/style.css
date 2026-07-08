@@ -1185,6 +1185,21 @@ input.custom-val:focus {
   color: var(--muted);
 }
 .chip-editor-badge.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 45%, transparent); }
+.chip-editor-done {
+  width: 100%;
+  padding: 0.4rem;
+  background: var(--border);
+  border: none;
+  border-radius: 5px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: opacity 0.12s, transform 0.08s;
+}
+.chip-editor-done:hover  { opacity: 0.85; }
+.chip-editor-done:active { transform: scale(0.98); }
 .palette-chip.editing { outline: 1px solid var(--accent); outline-offset: 1px; }
 .palette-rail {
   display: flex;
