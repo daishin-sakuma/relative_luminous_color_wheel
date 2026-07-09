@@ -24,7 +24,7 @@ The app is intentionally small — three files, no runtime dependencies:
 - **Keep it dependency-free** — this project intentionally uses no runtime libraries
 - **Match the existing code style** — vanilla JS, CSS custom properties, comments explain constraints rather than restate code
 - **The math is the product** — WCAG 2.2 relative luminance / contrast ratio and APCA-W3 formulas must stay correct; when touching them, cite the spec or source in a comment
-- **Test before submitting** — both light and dark themes, a short desktop viewport (≤720px tall), a mobile width, palette edit/cancel/reorder flows, palette preview strips in the white/black/custom contrast tiles, and color vision simulation (including Safari/WebKit)
+- **Test before submitting** — both light and dark themes, a short desktop viewport (≤720px tall), a mobile width, palette edit/done/tap-away-save/cancel/reorder flows, mobile long-press drag start, swipe-to-close sidebar, palette preview strips in the white/black/custom contrast tiles, and color vision simulation (including Safari/WebKit)
 
 ## Reporting issues
 

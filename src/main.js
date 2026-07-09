@@ -2619,6 +2619,31 @@ paletteSection.addEventListener('touchmove', e => {
   if (!railScrolls) e.preventDefault();
 }, { passive: false });
 
+// A rightward swipe on the drawer closes it. Keep this lightweight and
+// directional so vertical rail scrolling and chip reordering keep their feel.
+let _paletteSwipe = null;
+const _PALETTE_SWIPE_DIST = 52;
+const _PALETTE_SWIPE_ANGLE = 1.35;
+paletteSection.addEventListener('pointerdown', e => {
+  if (!paletteOpen || e.pointerType === 'mouse' || (e.button != null && e.button !== 0)) return;
+  _paletteSwipe = { x: e.clientX, y: e.clientY, id: e.pointerId, closing: false };
+}, true);
+paletteSection.addEventListener('pointermove', e => {
+  if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id || _paletteSwipe.closing) return;
+  const dx = e.clientX - _paletteSwipe.x;
+  const dy = e.clientY - _paletteSwipe.y;
+  if (dx > _PALETTE_SWIPE_DIST && dx > Math.abs(dy) * _PALETTE_SWIPE_ANGLE) {
+    _paletteSwipe.closing = true;
+    if (_ceIdx !== null) closeChipEditor(true);
+    setPaletteOpen(false);
+  }
+}, true);
+const _paletteSwipeEnd = e => {
+  if (_paletteSwipe && e.pointerId === _paletteSwipe.id) _paletteSwipe = null;
+};
+paletteSection.addEventListener('pointerup', _paletteSwipeEnd, true);
+paletteSection.addEventListener('pointercancel', _paletteSwipeEnd, true);
+
 const _paletteMaybeAutoClose = e => {
   if (e.pointerType !== 'mouse' || !paletteOpen || _paletteInteracted) return;
   const to = /** @type {Node | null} */ (e.relatedTarget);
@@ -2717,11 +2742,13 @@ function reorderAcrossRoles(srcRole, from, dstRole, to) {
 }
 
 // ─── Pointer-based reorder (iOS-home-screen style) ────────────────────────────
-// Mouse: a 5px move lifts the chip. Touch: a 300ms still hold lifts it (a
-// quicker vertical move stays a scroll). The lifted chip tracks the pointer
+// Mouse: a 5px move lifts the chip. Touch: a short, slightly forgiving hold
+// lifts it (a quicker vertical move stays a scroll). The lifted chip tracks the pointer
 // 1:1 while siblings slide out of the way with a transform transition; on
 // release it settles into its slot before the order is committed.
 let _chipDragActive = false;
+const CHIP_TOUCH_HOLD_MS = 220;
+const CHIP_TOUCH_HOLD_SLOP = 16;
 // Hard-reset hook for a wedged drag. A dropped pointerup (mouse released
 // off-window, capture lost mid-transform) can otherwise leave a drag stuck in
 // its lifted state and _chipDragActive latched true; the next press calls this
@@ -2874,7 +2901,7 @@ function attachChipDrag(chip, index, role, listEl) {
       if (!lifted) {
         // Touch before the hold fires = scroll intent; mouse needs a 5px move
         if (isTouch) {
-          if (Math.hypot(ev.clientX - startX, rawDy) > 8) forceEnd();
+          if (Math.hypot(ev.clientX - startX, rawDy) > CHIP_TOUCH_HOLD_SLOP) forceEnd();
           return;
         }
         if (Math.hypot(ev.clientX - startX, rawDy) <= 5) return;
@@ -2924,7 +2951,7 @@ function attachChipDrag(chip, index, role, listEl) {
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
     chip.addEventListener('lostpointercapture', onCancel);
-    if (isTouch) holdTimer = setTimeout(lift, 300);
+    if (isTouch) holdTimer = setTimeout(lift, CHIP_TOUCH_HOLD_MS);
   });
 }
 
@@ -3389,11 +3416,10 @@ const _CE_TAP_TIME  = 400; // ms — max duration to still count as a tap
 function _ceOutsideDown(e) {
   if (_ceIdx === null) return;
   const t = /** @type {Node} */ (e.target);
-  // Interactions inside the editor or sidebar are not outside taps.
+  // Interactions inside the editor itself are not outside taps. The rest of
+  // the sidebar is outside the editing section, so a deliberate tap there
+  // should behave like Done: save the live edits and leave edit mode.
   if (_ceEl && _ceEl.contains(t)) { _ceDownEvt = null; return; }
-  if (paletteSection.contains(t)) { _ceDownEvt = null; return; }
-  const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${_ceIdx}"]`);
-  if (chipEl && chipEl.contains(t)) { _ceDownEvt = null; return; }
   // Stash for the matching pointerup to measure distance/time.
   _ceDownEvt = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
 }
