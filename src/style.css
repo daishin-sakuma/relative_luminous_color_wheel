@@ -58,13 +58,18 @@ html, body {
   margin: 0;
   padding: 0;
 }
-/* When the sidebar is open, mobile browsers (iOS Safari) may show their
-   toolbar — eating ~49 px from the bottom. Pad the page so the SATURATION
-   slider (and anything else near the bottom) stays scrollable into view.
-   We do NOT lock scroll or set a fixed height (that caused the toolbar to
-   dock higher and shrink the viewport — making things worse). */
-body.palette-open #app-wrapper {
-  padding-bottom: calc(75px + env(safe-area-inset-bottom, 0px));
+/* On mobile, when the browser toolbar appears (e.g. after tapping the palette
+   toggle), it steals ~49 px from the bottom. calc(100vh - 100dvh) measures that
+   gap exactly: 100vh is the large (toolbar-hidden) viewport; 100dvh is the
+   current visual viewport. Adding that gap as extra padding lets the page scroll
+   far enough that SATURATION (and any other bottom content) sits above the bar.
+   We do NOT lock scroll or set a fixed height — that causes the bar to dock
+   higher, making things worse. Only applied on mobile widths to avoid side-effects
+   on desktop. */
+@media (max-width: 860px) {
+  body.palette-open #app-wrapper {
+    padding-bottom: calc(100vh - 100dvh + 2rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 #app-wrapper {
@@ -990,11 +995,7 @@ input.custom-val:focus {
   align-items: center;
   justify-content: space-between;
 }
-@media (max-width: 860px) {
-  .palette-section {
-    padding-bottom: calc(75px + env(safe-area-inset-bottom, 0px));
-  }
-}
+
 @media (max-width: 520px) {
   :root { --palette-w: min(260px, 85vw); }
 }
