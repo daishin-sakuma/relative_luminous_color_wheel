@@ -6,7 +6,7 @@
   <title>Accessible Color Picker &amp; WCAG Contrast Checker — Luminance Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock a contrast ratio (3:1 / 4.5:1 / 7:1) or an experimental APCA Lc target, then explore hue and saturation without ever breaking AA/AAA. Build accessible palettes, preview color blindness, and export CSS, Tailwind, or W3C design tokens.">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast, explore luminance-stable hues, edit accessible palettes inline, preview full-app color vision simulation, and export CSS, Tailwind, or W3C design tokens.">
   <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
@@ -21,7 +21,7 @@
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
   <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta property="og:description"  content="Lock a WCAG 2.2 ratio (or an experimental APCA Lc target) and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Accessible palettes, color-blindness preview, CSS/Tailwind/token export.">
+  <meta property="og:description"  content="Lock a WCAG 2.2 ratio (or experimental APCA Lc), explore luminance-stable hues, edit accessible palettes inline, preview full-app color vision simulation, and export CSS/Tailwind/tokens.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
@@ -31,7 +31,7 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio (or an experimental APCA Lc target) and explore hue and saturation freely — every color on the wheel shares one relative luminance, so the contrast never breaks. Accessible palettes, color-blindness preview, CSS/Tailwind/token export.">
+  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio (or experimental APCA Lc), explore luminance-stable hues, edit accessible palettes inline, preview full-app color vision simulation, and export CSS/Tailwind/tokens.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
@@ -106,15 +106,15 @@
       "Experimental APCA perceptual lightness-contrast targets (Lc 45–90)",
       "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color",
       "APCA Lc readouts alongside every contrast ratio",
-      "Color palette sidebar with text/background roles and drag & drop reordering",
-      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with a live contrast preview",
-      "Color blindness simulation (protanopia, deuteranopia, tritanopia)",
+      "Color palette sidebar with text/background roles, smooth in-place editing, and drag & drop reordering",
+      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview and selectable opposite-role comparison",
+      "Full-app color vision simulation (protanopia, deuteranopia, tritanopia)",
       "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, in OKLCH or hex with an sRGB hex fallback",
       "Accessible color scheme and dark-mode palette builder",
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
     ],
-    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color blindness simulator, design tokens",
+    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color blindness simulator, color vision simulation, design tokens",
     "author": {
       "@type": "Person",
       "name": "Daishin Sakuma"
@@ -193,7 +193,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.23.13</span>
+    <span class="app-version">ver. 1.23.14</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -693,8 +693,8 @@
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside</li>
         <li>Hold a target contrast (3:1 / 4.5:1 / 7:1 or APCA Lc 45–90) while freely exploring one side — the other side follows and never drops below the threshold</li>
         <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker and a live contrast preview against a selectable opposite-role color, plus smooth drag &amp; drop reordering and one-tap hex copy</li>
-        <li>Simulate protanopia, deuteranopia, and tritanopia to preview your colors under color vision deficiencies</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker, a live contrast preview against a selectable opposite-role color, smooth open/close transitions, automatic centering in the sidebar, drag &amp; drop reordering, and one-tap hex copy</li>
+        <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app to preview your colors under color vision deficiencies</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH or hex (with an sRGB hex fallback)</li>
       </ul>
       <h3>Who it's for</h3>
@@ -749,10 +749,9 @@
 
 </div><!-- /#cvd-layer -->
 
-<!-- Palette sidebar lives OUTSIDE #cvd-layer: iOS Safari doesn't apply an
-     ancestor SVG filter to fixed / compositing-layer descendants, so the CVD
-     filter is applied to this element directly (see the CVD toggle in main.js)
-     instead of inherited from #cvd-layer. -->
+<!-- Palette sidebar lives OUTSIDE #cvd-layer for layout/compositing stability.
+     CVD simulation is applied by one full-viewport backdrop layer when
+     supported, with the older direct filters kept as a fallback. -->
 <aside class="palette-section" id="palette-section" aria-label="Saved palette" hidden>
   <div class="palette-head">
     <span class="section-label">Palette</span>
@@ -765,9 +764,7 @@
 </aside>
 
 <!-- Color-vision-deficiency simulation filters (Machado et al. 2009, severity 1.0).
-     feColorMatrix operates in linearRGB, matching the matrices' color space.
-     A generous filterRegion keeps the fixed palette sidebar and the Preferences
-     popup — which sit outside #cvd-layer's border box — from being clipped. -->
+     feColorMatrix operates in linearRGB, matching the matrices' color space. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <defs>
     <filter id="cvd-protan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
@@ -781,6 +778,8 @@
     </filter>
   </defs>
 </svg>
+
+<div id="cvd-veil" aria-hidden="true"></div>
 
 <!-- Inline palette-chip editor (cloned once, inserted under the chip being edited).
      Reuses the custom picker's slider/tab classes; hooks are data-* to avoid id clashes. -->

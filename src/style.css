@@ -65,13 +65,24 @@ body {
   gap: 1rem;
 }
 
-/* CVD-simulation wrapper. Normally transparent to layout (display:contents),
-   so body's flex rules — including every responsive padding/gap tier — keep
-   applying to header/main/about/footer unchanged. When a simulation turns on,
-   it becomes a real flex box carrying the color-vision filter; `gap: inherit`
-   preserves body's current inter-section spacing at whatever breakpoint. */
+/* CVD simulation prefers a fixed full-viewport backdrop filter, which applies
+   one post-process pass to the whole painted app. The wrapper below remains as
+   a fallback for browsers that do not support SVG filters in backdrop-filter. */
+#cvd-veil {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  /* A barely non-transparent backdrop keeps WebKit's backdrop pass alive. */
+  background: rgba(255,255,255,0.001);
+}
+body.cvd-backdrop-active #cvd-veil {
+  display: block;
+}
+
 #cvd-layer { display: contents; }
-body.cvd-active #cvd-layer {
+body.cvd-legacy-active #cvd-layer {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1075,6 +1086,7 @@ input.custom-val:focus {
 
 /* ── Inline palette-chip editor ─────────────────────────────────────────────── */
 .chip-editor {
+  --chip-editor-open-max: 760px;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -1083,11 +1095,47 @@ input.custom-val:focus {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface2, var(--surface));
-  animation: chip-editor-in 0.16s ease;
+  overflow: visible;
+  max-height: var(--chip-editor-open-max);
+  transform-origin: top;
+  animation: chip-editor-in 0.22s ease;
 }
 @keyframes chip-editor-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    max-height: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    max-height: var(--chip-editor-open-max);
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+}
+.chip-editor--closing {
+  pointer-events: none;
+  overflow: hidden;
+  animation: chip-editor-out 0.18s ease forwards;
+}
+@keyframes chip-editor-out {
+  to {
+    opacity: 0;
+    max-height: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-4px);
+  }
 }
 .chip-editor .custom-mode-tabs { margin-bottom: 0; }
 .chip-editor-wheel {
@@ -1235,6 +1283,7 @@ input.custom-val:focus {
   padding: 3px;
   margin: -3px;
 }
+.palette-rail--editor-transition { pointer-events: none; }
 .palette-chip {
   display: flex;
   align-items: center;

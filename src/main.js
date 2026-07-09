@@ -2468,31 +2468,34 @@ function downloadExport(format) {
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
 // Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html.
-// The filter goes on #cvd-layer (a wrapper around all app content), not <body>:
-// iOS Safari won't apply a body-level SVG filter to compositing layers such as
-// the WebGL wheel or the animated Preferences popup, but a regular wrapper
-// element rasterizes them into the filter correctly. body.cvd-active switches
-// the wrapper from display:contents to a real (filterable) box.
+// Prefer one full-viewport backdrop-filter pass (#cvd-veil), which covers the
+// whole painted app on iOS/iPadOS without filtering individual elements twice.
+// Fall back to the older element filters where SVG backdrop filters are absent.
 // Intentionally not persisted: a simulation surviving reload would look broken.
 
 {
   const cvdLayer = /** @type {HTMLElement} */ (document.getElementById('cvd-layer'));
   const cvdSidebar = /** @type {HTMLElement} */ (document.getElementById('palette-section'));
+  const cvdVeil = /** @type {HTMLElement} */ (document.getElementById('cvd-veil'));
+  const supportsBackdropCvd = CSS.supports('backdrop-filter: url(#cvd-protan)')
+    || CSS.supports('-webkit-backdrop-filter: url(#cvd-protan)');
   const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
   cvdBtns.forEach(btn => btn.addEventListener('click', () => {
     cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
     const v = btn.dataset.cvd;
-    document.body.classList.toggle('cvd-active', !!v);
     const f = v ? `url(#cvd-${v})` : '';
-    cvdLayer.style.filter = f;
-    // The palette sidebar sits outside #cvd-layer (a fixed / compositing layer
-    // that iOS Safari won't rasterize through an ancestor filter), so filter it
-    // directly — this covers the saved colors, the inline editor and its preview.
-    cvdSidebar.style.filter = f;
-    // iOS Safari doesn't re-run an SVG filter over the already-painted WebGL
-    // wheel when the filter is (un)set, so the wheel keeps its unfiltered
-    // pixels. Repaint it now that the filter state has changed so the fresh
-    // canvas rasterizes through the filter.
+    const useBackdrop = supportsBackdropCvd && !!v;
+
+    document.body.classList.toggle('cvd-backdrop-active', useBackdrop);
+    document.body.classList.toggle('cvd-legacy-active', !!v && !useBackdrop);
+
+    cvdVeil.style.backdropFilter = useBackdrop ? f : '';
+    cvdVeil.style.webkitBackdropFilter = useBackdrop ? f : '';
+    cvdLayer.style.filter = useBackdrop ? '' : f;
+    cvdSidebar.style.filter = useBackdrop ? '' : f;
+
+    // Repaint canvas layers after toggling so fallback filters and WebKit's
+    // backdrop sampling see fresh pixels instead of cached composited content.
     scheduleRender(true);
   }));
 }
@@ -2660,25 +2663,31 @@ else if (_paletteToggleMq.addListener) _paletteToggleMq.addListener(placePalette
 function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)); }
 
 function addToPalette(hex, role) {
-  if (_ceIdx !== null) closeChipEditor(true); // structural change → close the inline editor
-  hex = hex.toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(hex)) return;
-  // Duplicates within a role are ignored; each role holds up to four colors
-  // (primary / secondary / tertiary / quaternary)
-  if (palette.some(e => e.hex === hex && e.role === role)) return;
-  if (palette.filter(e => e.role === role).length >= PALETTE_ROLE_MAX) return;
-  palette.push({ hex, role });
-  savePalette();
-  renderPalette();
-  // Pinning while the sidebar is closed opens it so the color visibly lands
-  if (!paletteOpen) setPaletteOpen(true);
+  const commit = () => {
+    hex = hex.toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(hex)) return;
+    // Duplicates within a role are ignored; each role holds up to four colors
+    // (primary / secondary / tertiary / quaternary)
+    if (palette.some(e => e.hex === hex && e.role === role)) return;
+    if (palette.filter(e => e.role === role).length >= PALETTE_ROLE_MAX) return;
+    palette.push({ hex, role });
+    savePalette();
+    renderPalette();
+    // Pinning while the sidebar is closed opens it so the color visibly lands
+    if (!paletteOpen) setPaletteOpen(true);
+  };
+  if (_ceIdx !== null) closeChipEditor(true, commit);
+  else commit();
 }
 
 function removeFromPalette(index) {
-  if (_ceIdx !== null) closeChipEditor(true); // indices shift → close the inline editor
-  palette.splice(index, 1);
-  savePalette();
-  renderPalette();
+  const commit = () => {
+    palette.splice(index, 1);
+    savePalette();
+    renderPalette();
+  };
+  if (_ceIdx !== null) closeChipEditor(true, commit);
+  else commit();
 }
 
 /** Reorder within one role (fg/bg) — moving `from`→`to` among that role's
@@ -2864,6 +2873,7 @@ let _ce = null;        // working state { role, r, g, b, mode, hsl, lum, gray }
 let _cePartner = 0;    // partner-color cycle index
 let _ceRaf = 0;        // rAF gate for wheel + preview repaint
 let _ceWheelCache = null;
+let _ceCloseTimer = null;
 
 const _ceClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -3243,11 +3253,26 @@ function chipEditorRenderPreview() {
   }
 }
 
+function centerChipEditorInRail(smooth = true) {
+  if (!_ceEl || !paletteRail.contains(_ceEl)) return;
+  const railRect = paletteRail.getBoundingClientRect();
+  const editorRect = _ceEl.getBoundingClientRect();
+  const next = paletteRail.scrollTop
+    + (editorRect.top + editorRect.height / 2)
+    - (railRect.top + railRect.height / 2);
+  paletteRail.scrollTo({
+    top: Math.max(0, next),
+    behavior: smooth ? 'smooth' : 'auto',
+  });
+}
+
 function openChipEditor(idx) {
   if (_ceIdx === idx) { closeChipEditor(); return; } // toggle off
-  if (_ceIdx !== null) closeChipEditor(true);
+  if (_ceIdx !== null) { closeChipEditor(true, () => openChipEditor(idx)); return; }
   if (!palette[idx]) return;
   if (!_ceEl) buildChipEditor();
+  clearTimeout(_ceCloseTimer);
+  _ceEl.classList.remove('chip-editor--closing');
   _ceIdx = idx;
   _cePartner = 0;
   _ceWheelCache = null;
@@ -3260,41 +3285,63 @@ function openChipEditor(idx) {
   chipEditorRenderPreview();
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) { chipEl.classList.add('editing'); chipEl.after(_ceEl); }
-  // A press anywhere outside the editor finishes editing (capture phase so the
-  // editor's own stopPropagation doesn't hide it).
+  requestAnimationFrame(() => {
+    centerChipEditorInRail(true);
+    setTimeout(() => centerChipEditorInRail(true), 180);
+  });
+  // A press outside the sidebar finishes editing (capture phase so the
+  // editor's own stopPropagation doesn't hide it). Presses inside the sidebar
+  // are kept open so they can start a scroll.
   document.addEventListener('pointerdown', _ceOutsideClose, true);
 }
 
-// Close when a tap / mouse press lands outside the editor. The chip being edited
-// is treated as "inside" so its pencil still toggles the editor rather than
-// reopening it; skipRender avoids tearing chips down mid-event so a press on
-// another chip's edit button still opens that chip.
+// Close when a tap / mouse press lands outside the sidebar. Presses elsewhere
+// inside the palette rail are allowed so the user can start a sidebar scroll
+// without collapsing the editor. The chip being edited is also "inside" so its
+// pencil still toggles the editor rather than reopening it.
 function _ceOutsideClose(e) {
   if (_ceIdx === null) return;
   const t = /** @type {Node} */ (e.target);
   if (_ceEl && _ceEl.contains(t)) return;
+  if (paletteSection.contains(t)) return;
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${_ceIdx}"]`);
   if (chipEl && chipEl.contains(t)) return;
-  closeChipEditor(true);
+  closeChipEditor();
   renderPalettePreviews();
 }
 
-function closeChipEditor(skipRender) {
-  if (_ceIdx === null) return;
+function closeChipEditor(skipRender, afterClose) {
+  if (_ceIdx === null) { if (afterClose) afterClose(); return; }
+  const lockRail = !!afterClose;
+  if (lockRail) paletteRail.classList.add('palette-rail--editor-transition');
   document.removeEventListener('pointerdown', _ceOutsideClose, true);
   closeChipEditorDropdown();
   const idx = _ceIdx;
   _ceIdx = null;
   _ce = null;
   savePalette();
-  if (_ceEl && _ceEl.parentNode) _ceEl.parentNode.removeChild(_ceEl);
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) chipEl.classList.remove('editing');
-  if (!skipRender) renderPalette();
+  clearTimeout(_ceCloseTimer);
+  const removeEditor = () => {
+    if (_ceEl) {
+      _ceEl.classList.remove('chip-editor--closing');
+      if (_ceEl.parentNode) _ceEl.parentNode.removeChild(_ceEl);
+    }
+    if (!skipRender) renderPalette();
+    if (lockRail) paletteRail.classList.remove('palette-rail--editor-transition');
+    if (afterClose) afterClose();
+  };
+  if (!_ceEl || !_ceEl.parentNode) {
+    removeEditor();
+  } else {
+    _ceEl.classList.add('chip-editor--closing');
+    _ceCloseTimer = setTimeout(removeEditor, 190);
+  }
 }
 
 /** Re-attach the open editor after a renderPalette() rebuild (used as a safety
-    net; structural edits close the editor outright). */
+    net; structural edits close the editor before rebuilding). */
 function reinsertChipEditor() {
   if (_ceIdx === null) return;
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${_ceIdx}"]`);
