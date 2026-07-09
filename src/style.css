@@ -58,6 +58,11 @@ html, body {
   margin: 0;
   padding: 0;
 }
+body.palette-open {
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+}
 
 #app-wrapper {
   display: flex;
@@ -981,6 +986,11 @@ input.custom-val:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+@media (max-width: 860px) {
+  .palette-section {
+    padding-bottom: calc(75px + env(safe-area-inset-bottom, 0px));
+  }
 }
 @media (max-width: 520px) {
   :root { --palette-w: min(260px, 85vw); }
