@@ -58,10 +58,13 @@ html, body {
   margin: 0;
   padding: 0;
 }
-body.palette-open {
-  overflow: hidden;
-  height: 100vh;
-  height: 100dvh;
+/* When the sidebar is open, mobile browsers (iOS Safari) may show their
+   toolbar — eating ~49 px from the bottom. Pad the page so the SATURATION
+   slider (and anything else near the bottom) stays scrollable into view.
+   We do NOT lock scroll or set a fixed height (that caused the toolbar to
+   dock higher and shrink the viewport — making things worse). */
+body.palette-open #app-wrapper {
+  padding-bottom: calc(75px + env(safe-area-inset-bottom, 0px));
 }
 
 #app-wrapper {
