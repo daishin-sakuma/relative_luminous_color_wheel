@@ -1468,8 +1468,10 @@ input.custom-val:focus {
   gap: 0.75rem;
   z-index: 200;
   /* The always-on export preview can make the panel taller than short
-     viewports — scroll inside instead of getting cut off at the fold */
-  max-height: calc(100vh - 80px);
+     viewports — scroll inside instead of running off-screen. JS sets a precise
+     px max-height on open (visible viewport − the panel's top − a bottom gap
+     matching the side margins); this dvh value is the fallback. */
+  max-height: calc(100dvh - 6rem);
   overflow-y: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;

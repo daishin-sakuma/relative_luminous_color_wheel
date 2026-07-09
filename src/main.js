@@ -2497,6 +2497,27 @@ function downloadExport(format) {
   }));
 }
 
+// ─── Preferences popper height ────────────────────────────────────────────────
+// Cap the popper to the visible viewport so it never runs off a short screen,
+// leaving a bottom gap equal to the body's side padding; its content then
+// scrolls inside (overflow-y:auto in CSS). Recomputed on open and on resize.
+{
+  const wrap = /** @type {HTMLElement} */ (document.querySelector('.settings-wrap'));
+  const panel = document.getElementById('settings-panel');
+  if (wrap && panel) {
+    const syncPanelHeight = () => {
+      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const gap = parseFloat(getComputedStyle(document.body).paddingLeft) || 16; // match side margins
+      const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap
+      panel.style.maxHeight = Math.max(140, vh - top - gap) + 'px';
+    };
+    wrap.addEventListener('pointerenter', syncPanelHeight);
+    window.addEventListener('resize', syncPanelHeight);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
+    syncPanelHeight();
+  }
+}
+
 // ─── Palette rail + contrast matrix ───────────────────────────────────────────
 // Pinned colors persist in localStorage and travel in the share URL (`p`,
 // governed by the "Color in share link" preference). The section is hidden
