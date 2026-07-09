@@ -92,6 +92,7 @@
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
+    "softwareVersion": "1.24.0",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -106,10 +107,10 @@
       "Experimental APCA perceptual lightness-contrast targets (Lc 45–90)",
       "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color",
       "APCA Lc readouts alongside every contrast ratio",
-      "Color palette sidebar with text/background roles, smooth in-place editing, and drag & drop reordering",
-      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview and selectable opposite-role comparison",
+      "Color palette sidebar with text/background roles, smooth in-place editing, and drag & drop reordering (within groups or across roles)",
+      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview and selectable opposite-role comparison (defaults to Lum mode)",
       "Full-app color vision simulation (protanopia, deuteranopia, tritanopia)",
-      "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, in OKLCH or hex with an sRGB hex fallback",
+      "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, prioritizing saved swatches with live color backups",
       "Accessible color scheme and dark-mode palette builder",
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
@@ -183,17 +184,12 @@
 </head>
 <body>
 
-<!-- Wraps all app content so the color-vision-deficiency filter can be applied
-     one level below <body>. iOS Safari doesn't apply a body-level SVG filter to
-     compositing layers (the WebGL wheel, the animated Preferences popup); a
-     regular wrapper element rasterizes them into the filter correctly. Normally
-     display:contents, so it has zero layout effect until the filter turns on. -->
-<div id="cvd-layer">
+
 
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.23.14</span>
+    <span class="app-version">ver. 1.24.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -691,11 +687,9 @@
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside</li>
-        <li>Hold a target contrast (3:1 / 4.5:1 / 7:1 or APCA Lc 45–90) while freely exploring one side — the other side follows and never drops below the threshold</li>
-        <li>Build accessible color schemes and dark-mode palettes where every hue shares one luminance</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker, a live contrast preview against a selectable opposite-role color, smooth open/close transitions, automatic centering in the sidebar, drag &amp; drop reordering, and one-tap hex copy</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color, smooth open/close transitions, automatic centering in the sidebar, drag &amp; drop reordering (within groups or dragging across roles to swap their type), and one-tap hex copy</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app to preview your colors under color vision deficiencies</li>
-        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH or hex (with an sRGB hex fallback)</li>
+        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH or hex (with an sRGB hex fallback). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
       <h3>Who it's for</h3>
       <p>
@@ -737,7 +731,9 @@
       <p><strong>Can I export colors to CSS, Tailwind, or design tokens?</strong><br>
         Yes. Export your palette as CSS custom properties, a Tailwind v4 <code>@theme</code> block,
         or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH or hex, always with an
-        sRGB hex fallback. Your colors and palette also travel in a shareable URL.</p>
+        sRGB hex fallback. Pinned swatches are prioritized on export, while the active main picker
+        colors are safely backed up inside CSS/Tailwind comments and JSON extension properties.
+        Your colors and palette also travel in a shareable URL.</p>
       <p><strong>Is it free and private?</strong><br>
         Yes. It is completely free with no account and no sign-up, and it is private by design —
         everything runs locally in your browser with nothing uploaded.</p>
@@ -747,7 +743,7 @@
 
 <footer class="copyright"><a href="https://fxx.huruike.com/projects/relative-luminous-color-wheel.html" target="_blank" rel="noopener noreferrer">MIT © Daishin Sakuma.</a></footer>
 
-</div><!-- /#cvd-layer -->
+
 
 <!-- Palette sidebar lives OUTSIDE #cvd-layer for layout/compositing stability.
      CVD simulation is applied by one full-viewport backdrop layer when
@@ -779,7 +775,7 @@
   </defs>
 </svg>
 
-<div id="cvd-veil" aria-hidden="true"></div>
+
 
 <!-- Inline palette-chip editor (cloned once, inserted under the chip being edited).
      Reuses the custom picker's slider/tab classes; hooks are data-* to avoid id clashes. -->

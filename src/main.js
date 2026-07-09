@@ -2241,14 +2241,16 @@ document.addEventListener('click', e => {
 
 function buildExport(format) {
   // Export the palette grouped by role. Each role's first pinned color is its
-  // primary, the second its secondary, then plain ordinals. The color live in
-  // the main picker (wheel for text, custom for background) is always included
-  // too, appended unless that role already holds it.
+  // primary, the second its secondary, then plain ordinals.
+  // If the palette already has colors saved for a role, only those saved colors
+  // are exported. Otherwise, the live picker color is exported as a fallback.
   const wheelHex  = toHex(...selectedRgbBiased()).toLowerCase();
   const customHex = toHex(cR, cG, cB).toLowerCase();
   const roleColors = (role, liveHex) => {
     const hexes = palette.filter(e => e.role === role).map(e => e.hex);
-    if (!hexes.includes(liveHex)) hexes.push(liveHex);
+    if (hexes.length === 0) {
+      hexes.push(liveHex);
+    }
     return hexes.map(hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
   };
   const text = roleColors('fg', wheelHex);
@@ -2271,6 +2273,7 @@ function buildExport(format) {
     ];
     return `:root {
   /* text-primary vs bg-primary contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
+  /* liveText: ${wheelHex} (${oklchCss(wheelHex)}), liveBg: ${customHex} (${oklchCss(customHex)}) */
 ${lines.join('\n')}
 }
 `;
@@ -2285,6 +2288,7 @@ ${lines.join('\n')}
       ...bg.map((c, i)   => twLine(`--color-bg-${key(i)}`, c)),
     ];
     return `@theme {
+  /* liveText: ${wheelHex} (${oklchCss(wheelHex)}), liveBg: ${customHex} (${oklchCss(customHex)}) */
 ${lines.join('\n')}
 }
 `;
@@ -2312,6 +2316,14 @@ ${lines.join('\n')}
         textBgContrastRatio: +ratio.toFixed(2),
         textLuminances: text.map(c => +c.lum.toFixed(4)),
         bgLuminances:   bg.map(c => +c.lum.toFixed(4)),
+        liveText: {
+          hex: wheelHex,
+          oklch: oklchCss(wheelHex),
+        },
+        liveBg: {
+          hex: customHex,
+          oklch: oklchCss(customHex),
+        },
       },
     },
   };
@@ -2468,34 +2480,21 @@ function downloadExport(format) {
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
 // Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html.
-// Prefer one full-viewport backdrop-filter pass (#cvd-veil), which covers the
-// whole painted app on iOS/iPadOS without filtering individual elements twice.
-// Fall back to the older element filters where SVG backdrop filters are absent.
+// Apply the SVG filter directly to the html root element to cover the whole app,
+// including fixed overlays (like the sidebar) and canvases across all browsers.
 // Intentionally not persisted: a simulation surviving reload would look broken.
 
 {
-  const cvdLayer = /** @type {HTMLElement} */ (document.getElementById('cvd-layer'));
-  const cvdSidebar = /** @type {HTMLElement} */ (document.getElementById('palette-section'));
-  const cvdVeil = /** @type {HTMLElement} */ (document.getElementById('cvd-veil'));
-  const supportsBackdropCvd = CSS.supports('backdrop-filter: url(#cvd-protan)')
-    || CSS.supports('-webkit-backdrop-filter: url(#cvd-protan)');
   const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
   cvdBtns.forEach(btn => btn.addEventListener('click', () => {
     cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
     const v = btn.dataset.cvd;
     const f = v ? `url(#cvd-${v})` : '';
-    const useBackdrop = supportsBackdropCvd && !!v;
 
-    document.body.classList.toggle('cvd-backdrop-active', useBackdrop);
-    document.body.classList.toggle('cvd-legacy-active', !!v && !useBackdrop);
+    // Apply the filter globally to the html root element
+    document.documentElement.style.filter = f;
 
-    cvdVeil.style.backdropFilter = useBackdrop ? f : '';
-    cvdVeil.style.webkitBackdropFilter = useBackdrop ? f : '';
-    cvdLayer.style.filter = useBackdrop ? '' : f;
-    cvdSidebar.style.filter = useBackdrop ? '' : f;
-
-    // Repaint canvas layers after toggling so fallback filters and WebKit's
-    // backdrop sampling see fresh pixels instead of cached composited content.
+    // Repaint canvas layers after toggling so the renderer sees fresh pixels
     scheduleRender(true);
   }));
 }
@@ -2690,16 +2689,29 @@ function removeFromPalette(index) {
   else commit();
 }
 
-/** Reorder within one role (fg/bg) — moving `from`→`to` among that role's
-    entries while leaving the other role's entries untouched. The top entry of
-    each role is its "primary", the second its "secondary". */
-function reorderRole(role, from, to) {
-  const flatIdx = [];
-  palette.forEach((e, i) => { if (e.role === role) flatIdx.push(i); });
-  const items = flatIdx.map(i => palette[i]);
-  const [moved] = items.splice(from, 1);
-  items.splice(to, 0, moved);
-  flatIdx.forEach((fi, k) => { palette[fi] = items[k]; });
+/** Reorder palette swatches, optionally moving them across roles (fg/bg) while
+    leaving other elements untouched. */
+function reorderAcrossRoles(srcRole, from, dstRole, to) {
+  const fgItems = palette.filter(e => e.role === 'fg');
+  const bgItems = palette.filter(e => e.role === 'bg');
+
+  if (srcRole === dstRole) {
+    const items = srcRole === 'fg' ? fgItems : bgItems;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+  } else {
+    const srcItems = srcRole === 'fg' ? fgItems : bgItems;
+    const dstItems = dstRole === 'fg' ? fgItems : bgItems;
+
+    if (dstItems.length >= PALETTE_ROLE_MAX) return;
+
+    const [moved] = srcItems.splice(from, 1);
+    moved.role = dstRole;
+    dstItems.splice(to, 0, moved);
+  }
+
+  palette.length = 0;
+  palette.push(...fgItems, ...bgItems);
   savePalette();
 }
 
@@ -2727,10 +2739,39 @@ function attachChipDrag(chip, index, role, listEl) {
     if (/** @type {HTMLElement} */ (e.target).closest('button')) return;
     const isTouch = e.pointerType !== 'mouse';
     const startY = e.clientY, startX = e.clientX;
-    // Reorder is scoped to this role's list, so a Text chip stays among Text
-    const chips = /** @type {HTMLElement[]} */ ([...listEl.querySelectorAll('.palette-chip')]);
-    const slot = chip.offsetHeight + (parseFloat(getComputedStyle(listEl).rowGap) || 0);
+
+    // Gather boundary and chips across BOTH lists for cross-role drag-and-drop
+    const fgListEl = paletteRail.querySelector('.palette-group:nth-child(1) .palette-group-list');
+    const bgListEl = paletteRail.querySelector('.palette-group:nth-child(2) .palette-group-list');
+    const bgGroupHead = paletteRail.querySelector('.palette-group:nth-child(2) .palette-group-head');
+    const boundaryY = bgGroupHead ? bgGroupHead.getBoundingClientRect().top : 0;
+
+    const fgChips = /** @type {HTMLElement[]} */ ([...fgListEl.querySelectorAll('.palette-chip')]);
+    const bgChips = /** @type {HTMLElement[]} */ ([...bgListEl.querySelectorAll('.palette-chip')]);
+    const allChips = [...fgChips, ...bgChips];
+
+    // Cache initial mid-Y coordinates for target detection
+    const chipData = [];
+    const gatherChipData = (chipList, chipRole) => {
+      chipList.forEach((c, idx) => {
+        if (c === chip) return;
+        const rect = c.getBoundingClientRect();
+        chipData.push({
+          el: c,
+          role: chipRole,
+          index: idx,
+          centerY: rect.top + rect.height / 2,
+        });
+      });
+    };
+    gatherChipData(fgChips, 'fg');
+    gatherChipData(bgChips, 'bg');
+
+    const activeListEl = role === 'fg' ? fgListEl : bgListEl;
+    const slot = chip.offsetHeight + (parseFloat(getComputedStyle(activeListEl).rowGap) || 0);
+
     let lifted = false;
+    let targetRole = role;
     let targetIndex = index;
     let holdTimer = null;
     let ended = false; // guards against a second end event (up + lostcapture)
@@ -2772,25 +2813,58 @@ function attachChipDrag(chip, index, role, listEl) {
       _forceEndActiveDrag = null;
       _chipDragActive = false;
       paletteSection.classList.remove('palette-section--dragging');
-      chips.forEach(c => {
+      allChips.forEach(c => {
         c.classList.remove('palette-chip--lifted', 'palette-chip--settling');
         c.style.transform = '';
       });
     };
 
-    // Insertion slot for a given pointer Y, clamped to the list span
-    const targetForY = clientY =>
-      Math.max(0, Math.min(chips.length - 1, index + Math.round((clientY - startY) / slot)));
+    const determineTarget = (clientY) => {
+      let tr = clientY < boundaryY ? 'fg' : 'bg';
 
-    const applyTarget = ti => {
-      if (ti === targetIndex) return;
+      // Limit check: do not allow dragging into a group that is already full
+      if (tr !== role) {
+        const targetCount = tr === 'fg' ? fgChips.length : bgChips.length;
+        if (targetCount >= PALETTE_ROLE_MAX) {
+          tr = role; // Lock to original role
+        }
+      }
+
+      const targetRoleChips = chipData.filter(d => d.role === tr);
+      let ti = targetRoleChips.length; // Default to end of target list
+      for (let i = 0; i < targetRoleChips.length; i++) {
+        if (clientY < targetRoleChips[i].centerY) {
+          ti = i;
+          break;
+        }
+      }
+      return { tr, ti };
+    };
+
+    const applyVisualShift = (tr, ti) => {
+      targetRole = tr;
       targetIndex = ti;
-      chips.forEach((c, j) => {
-        if (c === chip) return;
+
+      chipData.forEach(d => {
         let shift = 0;
-        if (index < targetIndex && j > index && j <= targetIndex) shift = -slot;
-        else if (index > targetIndex && j >= targetIndex && j < index) shift = slot;
-        c.style.transform = shift ? `translateY(${shift}px)` : '';
+        if (d.role === role && role === targetRole) {
+          // Reordering within the same group
+          if (index < targetIndex && d.index > index && d.index <= targetIndex) {
+            shift = -slot;
+          } else if (index > targetIndex && d.index >= targetIndex && d.index < index) {
+            shift = slot;
+          }
+        } else {
+          // Moving between groups, or processing the non-target group
+          if (d.role === role) {
+            // Source group: shift items up to fill the gap
+            if (d.index > index) shift = -slot;
+          } else if (d.role === targetRole) {
+            // Target group: shift items down to create insertion room
+            if (d.index >= targetIndex) shift = slot;
+          }
+        }
+        d.el.style.transform = shift ? `translateY(${shift}px)` : '';
       });
     };
 
@@ -2807,13 +2881,12 @@ function attachChipDrag(chip, index, role, listEl) {
       }
       // Free movement — only the insertion target is clamped to the list span
       chip.style.transform = `translateY(${rawDy}px) scale(1.03)`;
-      applyTarget(targetForY(ev.clientY));
+      const { tr, ti } = determineTarget(ev.clientY);
+      applyVisualShift(tr, ti);
     };
 
     // Commit on release in a single tick: reorder the data, re-render, and drop
-    // the drag lock together. (A deferred settle animation used to hold the lock
-    // ~190ms; a quick second grab landing in that window was swallowed, so the
-    // reorder looked like it silently failed / sprang back.)
+    // the drag lock together.
     const settle = commit => {
       if (ended) return;
       ended = true;
@@ -2822,7 +2895,9 @@ function attachChipDrag(chip, index, role, listEl) {
       _chipDragActive = false;
       paletteSection.classList.remove('palette-section--dragging');
       if (!lifted) return;
-      if (commit && targetIndex !== index) reorderRole(role, index, targetIndex);
+      if (commit && (targetRole !== role || targetIndex !== index)) {
+        reorderAcrossRoles(role, index, targetRole, targetIndex);
+      }
       renderPalette(); // rebuild resets every chip's inline transform + rank labels
     };
 
@@ -2834,7 +2909,11 @@ function attachChipDrag(chip, index, role, listEl) {
     const onUp = ev => {
       const y = ev && typeof ev.clientY === 'number' ? ev.clientY : startY;
       if (!lifted && !isTouch && Math.abs(y - startY) > 5) lift();
-      if (lifted) applyTarget(targetForY(y));
+      if (lifted) {
+        const { tr, ti } = determineTarget(y);
+        targetRole = tr;
+        targetIndex = ti;
+      }
       settle(true);
     };
     const onCancel = () => settle(false);
@@ -3278,9 +3357,9 @@ function openChipEditor(idx) {
   _ceWheelCache = null;
   const entry = palette[idx];
   const [r, g, b] = hexToRgb(entry.hex);
-  _ce = { role: entry.role, r, g, b, mode: 'rgb', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0 };
+  _ce = { role: entry.role, r, g, b, mode: 'lum', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0 };
   reseedSubstates();
-  applyChipEditorMode('rgb');
+  applyChipEditorMode('lum');
   syncChipEditorControls();
   chipEditorRenderPreview();
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
