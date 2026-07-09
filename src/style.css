@@ -947,10 +947,13 @@ input.custom-val:focus {
 @keyframes palette-slide-out { to { transform: translateX(100%); } }
 /* display:flex beats the UA [hidden] rule — restore it explicitly */
 .palette-section[hidden] { display: none; }
-/* While a chip is being dragged, lift the clipping so it can travel outside
-   the rail and the sidebar without being masked */
-.palette-section--dragging,
-.palette-section--dragging .palette-rail { overflow: visible; }
+/* While a chip is being dragged, keep the rail clipped exactly as at rest so
+   chips scrolled out of view stay hidden behind the export footer. Only the
+   actively dragged chip moves, and it stays within the rail's bounds (its own
+   overflow past the edge is acceptable; revealing the *other* chips was not).
+   overflow:hidden (not the resting overflow-y:auto) also stops the rail from
+   scrolling while a chip is lifted. */
+.palette-section--dragging .palette-rail { overflow: hidden; }
 
 /* Toggle: lives in the content layer at the right end of the "vs White &
    Black" row; visuals come from the shared .theme-toggle class (identical to
