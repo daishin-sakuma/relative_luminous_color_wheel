@@ -2588,7 +2588,7 @@ function downloadExport(format) {
   if (wrap && panel) {
     const syncPanelHeight = () => {
       const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const gap = parseFloat(getComputedStyle(document.body).paddingLeft) || 16; // match side margins
+      const gap = parseFloat(getComputedStyle(document.getElementById('app-wrapper') || document.body).paddingLeft) || 16; // match side margins
       const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap
       panel.style.maxHeight = Math.max(140, vh - top - gap) + 'px';
     };

@@ -55,14 +55,21 @@ html, body {
   color: var(--text);
   font-family: 'NATS', sans-serif;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
 
-body {
+#app-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 1rem 2rem 1rem;
   gap: 1rem;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: var(--ground);
 }
 
 
@@ -1786,7 +1793,7 @@ input.custom-val:focus {
 
 /* Tablet: shrink left column, stack color subgroups */
 @media (max-width: 1099px) {
-  body { padding: 1rem 1.5rem; }
+  #app-wrapper { padding: 1rem 1.5rem; }
   .app-body { --wheel-col: 300px; gap: 1.25rem; }
   .wheel-wrap { width: 300px; height: 300px; }
   #wheel, #overlay { width: 300px; height: 300px; }
@@ -1812,7 +1819,7 @@ input.custom-val:focus {
 
 /* Large mobile: shrink wheel, compact tiles */
 @media (max-width: 639px) {
-  body { padding: 1.25rem 1rem 2rem; gap: 1.25rem; }
+  #app-wrapper { padding: 1.25rem 1rem 2rem; gap: 1.25rem; }
   .wheel-wrap { width: 300px; height: 300px; }
   #wheel, #overlay { width: 300px; height: 300px; }
   .preview-display { font-size: 1.7rem; }
@@ -1839,7 +1846,7 @@ input.custom-val:focus {
 
 /* Very narrow: single tile per row, reduce body padding */
 @media (max-width: 400px) {
-  body { padding: 1rem 0.75rem 1.5rem; }
+  #app-wrapper { padding: 1rem 0.75rem 1.5rem; }
   .preview-tiles { grid-template-columns: 1fr; }
   .app-version { font-size: 0.62rem; letter-spacing: 0.06em; }
   .header-right { gap: 0.35rem; }
@@ -1865,12 +1872,12 @@ input.custom-val:focus {
 
 /* Mild: just absorb the About row (~900px inner height) */
 @media (min-width: 861px) and (max-height: 919px) {
-  body { gap: 0.6rem; }
+  #app-wrapper { gap: 0.6rem; }
   .about summary { padding: 0.15rem 0; }
 }
 
 @media (min-width: 861px) and (max-height: 849px) {
-  body { padding: 0.7rem 2rem 0.6rem; gap: 0.4rem; }
+  #app-wrapper { padding: 0.7rem 2rem 0.6rem; gap: 0.4rem; }
   .app-body { gap: 1.25rem; }
   .col-left, .col-right { gap: 0.5rem; }
   .swatch { height: 38px; }
@@ -1886,7 +1893,7 @@ input.custom-val:focus {
 
 /* Even shorter windows (e.g. 1280×800 laptops with browser chrome) */
 @media (min-width: 861px) and (max-height: 769px) {
-  body { padding: 0.5rem 2rem 0.45rem; gap: 0.45rem; }
+  #app-wrapper { padding: 0.5rem 2rem 0.45rem; gap: 0.45rem; }
   .swatch { height: 36px; }
   .col-left, .col-right { gap: 0.45rem; }
   .data-cell { padding: 0.26rem 0.5rem; }
@@ -1897,7 +1904,7 @@ input.custom-val:focus {
 
 /* ~800px-tall displays (effective inner height ≤ ~720px) */
 @media (min-width: 861px) and (max-height: 719px) {
-  body { padding: 0.4rem 1.5rem 0.35rem; gap: 0.25rem; }
+  #app-wrapper { padding: 0.4rem 1.5rem 0.35rem; gap: 0.25rem; }
   header { padding: 0.3rem 0; }
   .app-body { gap: 1rem; }
   .about summary { padding: 0.05rem 0; font-size: 0.66rem; }
@@ -1917,7 +1924,7 @@ input.custom-val:focus {
 /* Very short windows (squarish displays, heavily-chromed small laptops):
    hardest compression that still keeps every feature visible */
 @media (min-width: 861px) and (max-height: 659px) {
-  body { padding: 0.3rem 1.25rem 0.25rem; gap: 0.2rem; }
+  #app-wrapper { padding: 0.3rem 1.25rem 0.25rem; gap: 0.2rem; }
   header { padding: 0.2rem 0; }
   .col-left, .col-right { gap: 0.3rem; }
   .lum-row { margin-bottom: 0.12rem; }
@@ -1980,12 +1987,18 @@ input.custom-val:focus {
 
 /* ── Color-vision-deficiency simulation stability for WebKit/Safari ────────── */
 
-html.cvd-protan {
+html.cvd-protan #app-wrapper,
+html.cvd-protan .palette-section {
   filter: url(#cvd-protan);
+  will-change: filter;
 }
-html.cvd-deutan {
+html.cvd-deutan #app-wrapper,
+html.cvd-deutan .palette-section {
   filter: url(#cvd-deutan);
+  will-change: filter;
 }
-html.cvd-tritan {
+html.cvd-tritan #app-wrapper,
+html.cvd-tritan .palette-section {
   filter: url(#cvd-tritan);
+  will-change: filter;
 }
