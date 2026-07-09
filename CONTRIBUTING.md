@@ -15,7 +15,7 @@ npm run build    # production build → dist/
 The app is intentionally small — three files, no runtime dependencies:
 
 - `index.html` — all markup (single page), SEO metadata, structured data
-- `src/main.js` — all application logic: wheel rendering (WebGL + 2D fallback), WCAG 2.2 / APCA contrast math, the target contrast lock, palette editing, global color vision simulation toggling, share links, export
+- `src/main.js` — all application logic: wheel rendering (WebGL + 2D fallback), WCAG 2.2 / APCA contrast math, the target contrast lock, palette editing, CVD simulation toggle (CSS SVG filter on the html root, bypassed on iOS/Safari to avoid WebKit compositing bugs), share links, export
 - `src/style.css` — all styles: CSS custom properties, dark/light themes, responsive width tiers and height-compression tiers for no-scroll desktop layouts
 - `public/` — static assets (icons, OGP image, manifest)
 
@@ -24,7 +24,7 @@ The app is intentionally small — three files, no runtime dependencies:
 - **Keep it dependency-free** — this project intentionally uses no runtime libraries
 - **Match the existing code style** — vanilla JS, CSS custom properties, comments explain constraints rather than restate code
 - **The math is the product** — WCAG 2.2 relative luminance / contrast ratio and APCA-W3 formulas must stay correct; when touching them, cite the spec or source in a comment
-- **Test before submitting** — both light and dark themes, a short desktop viewport (≤720px tall), a mobile width, palette edit/done/tap-away-save/cancel/reorder flows, mobile long-press drag start, drag-to-close sidebar release/cancel behavior (spring-back transition), palette preview strips in the white/black/custom contrast tiles, and global color vision simulation (checking that all UI layouts, sliders, and preferences modals change colors correctly under each vision mode on iOS/Android and desktop browsers)
+- **Test before submitting** — both light and dark themes, a short desktop viewport (≤720px tall), a mobile width, palette edit/done/tap-away-save/cancel/reorder flows, mobile long-press drag start, drag-to-close sidebar release/cancel behavior (spring-back transition), palette preview strips in the white/black/custom contrast tiles, and color vision simulation on desktop and Android browsers (iOS/Safari intentionally excluded)
 
 ## Reporting issues
 
