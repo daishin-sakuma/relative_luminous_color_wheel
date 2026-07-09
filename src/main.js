@@ -185,43 +185,15 @@ const CVD_MATRICES = {
 };
 
 function cvdTransformRgb(r, g, b) {
-  if (!currentCvd) return [r, g, b];
-  const m = CVD_MATRICES[currentCvd];
-  if (!m) return [r, g, b];
-
-  const lr = LINEAR[r];
-  const lg = LINEAR[g];
-  const lb = LINEAR[b];
-
-  const nr = m[0] * lr + m[1] * lg + m[2] * lb;
-  const ng = m[3] * lr + m[4] * lg + m[5] * lb;
-  const nb = m[6] * lr + m[7] * lg + m[8] * lb;
-
-  const toSRGB = n => {
-    const c = n <= 0.0031308 ? n * 12.92 : 1.055 * Math.pow(n, 1 / 2.4) - 0.055;
-    return Math.max(0, Math.min(255, Math.round(c * 255)));
-  };
-
-  return [toSRGB(nr), toSRGB(ng), toSRGB(nb)];
+  return [r, g, b];
 }
 
 function cvdTransformHex(hex) {
-  if (!currentCvd) return hex;
-  const [r, g, b] = hexToRgb(hex);
-  const [tr, tg, tb] = cvdTransformRgb(r, g, b);
-  return toHex(tr, tg, tb);
+  return hex;
 }
 
 function cvdTransformRgba(rgbaStr) {
-  if (!currentCvd) return rgbaStr;
-  const m = rgbaStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-  if (!m) return rgbaStr;
-  const r = parseInt(m[1], 10);
-  const g = parseInt(m[2], 10);
-  const b = parseInt(m[3], 10);
-  const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
-  const [tr, tg, tb] = cvdTransformRgb(r, g, b);
-  return `rgba(${tr}, ${tg}, ${tb}, ${a})`;
+  return rgbaStr;
 }
 
 
@@ -432,19 +404,8 @@ function drawWheel(lum) {
   const { gl, uLum, uCvdMatrix, uCvdActive } = glState;
   gl.uniform1f(uLum, lum);
   
-  // Pass CVD uniforms
-  if (currentCvd) {
-    gl.uniform1f(uCvdActive, 1.0);
-    // transpose must be false in WebGL 1.0, data is column-major
-    const m = CVD_MATRICES[currentCvd];
-    gl.uniformMatrix3fv(uCvdMatrix, false, new Float32Array([
-      m[0], m[3], m[6],
-      m[1], m[4], m[7],
-      m[2], m[5], m[8]
-    ]));
-  } else {
-    gl.uniform1f(uCvdActive, 0.0);
-  }
+  // Pass CVD uniforms - disabled because CSS filter on HTML root handles this globally
+  gl.uniform1f(uCvdActive, 0.0);
   
   gl.viewport(0, 0, BUF_SZ, BUF_SZ);
   gl.clear(gl.COLOR_BUFFER_BIT);
@@ -2606,7 +2567,10 @@ function downloadExport(format) {
     _cuTracksKey = '';
     _ceWheelCache = null;
 
-    document.documentElement.classList.toggle('cvd-active', !!v);
+    document.documentElement.classList.remove('cvd-protan', 'cvd-deutan', 'cvd-tritan');
+    if (v) {
+      document.documentElement.classList.add(`cvd-${v}`);
+    }
 
     // Repaint all canvas layers and sync UI after toggling so the renderer sees fresh pixels
     scheduleRender(true, true);

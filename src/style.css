@@ -1979,3 +1979,13 @@ input.custom-val:focus {
 }
 
 /* ── Color-vision-deficiency simulation stability for WebKit/Safari ────────── */
+
+html.cvd-protan {
+  filter: url(#cvd-protan);
+}
+html.cvd-deutan {
+  filter: url(#cvd-deutan);
+}
+html.cvd-tritan {
+  filter: url(#cvd-tritan);
+}
