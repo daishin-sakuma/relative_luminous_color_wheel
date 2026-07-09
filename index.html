@@ -6,7 +6,7 @@
   <title>Accessible Color Picker &amp; WCAG Contrast Checker — Luminance Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast, explore luminance-stable hues, edit accessible palettes inline, preview full-app color vision simulation, and export CSS, Tailwind, or W3C design tokens.">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast, explore luminance-stable hues, edit accessible palettes inline with cancel support, see saved-palette swatches in every contrast preview (white, black, and custom), preview full-app color vision simulation, and export CSS, Tailwind, or W3C design tokens.">
   <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
@@ -21,7 +21,7 @@
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
   <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta property="og:description"  content="Lock a WCAG 2.2 ratio (or experimental APCA Lc), explore luminance-stable hues, edit accessible palettes inline, preview full-app color vision simulation, and export CSS/Tailwind/tokens.">
+  <meta property="og:description"  content="Lock a WCAG 2.2 ratio (or experimental APCA Lc), explore luminance-stable hues, edit accessible palettes inline with cancel support, see saved swatches in every contrast preview, preview full-app color vision simulation, and export CSS/Tailwind/tokens.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
@@ -31,7 +31,7 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio (or experimental APCA Lc), explore luminance-stable hues, edit accessible palettes inline, preview full-app color vision simulation, and export CSS/Tailwind/tokens.">
+  <meta name="twitter:description" content="Lock a WCAG 2.2 ratio (or experimental APCA Lc), explore luminance-stable hues, edit accessible palettes inline with cancel support, see saved swatches in every contrast preview, preview full-app color vision simulation, and export CSS/Tailwind/tokens.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
@@ -88,11 +88,11 @@
     "@type": "WebApplication",
     "name": "Relative Luminous Color Wheel",
     "url": "https://relative-luminous-color-wheel.vercel.app/",
-    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks.",
+    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks. Edit palettes inline with cancel support, see saved swatches in every contrast tile (white, black, and custom), and export CSS, Tailwind, or design tokens.",
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "1.24.0",
+    "softwareVersion": "1.25.0",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -105,10 +105,10 @@
       "Equal relative luminance color wheel",
       "Target contrast lock for WCAG 2.2 ratios (3:1, 4.5:1, 7:1)",
       "Experimental APCA perceptual lightness-contrast targets (Lc 45–90)",
-      "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color",
+      "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color, with saved-palette swatch previews in every contrast tile",
       "APCA Lc readouts alongside every contrast ratio",
-      "Color palette sidebar with text/background roles, smooth in-place editing, and drag & drop reordering (within groups or across roles)",
-      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview and selectable opposite-role comparison (defaults to Lum mode)",
+      "Color palette sidebar with text/background roles, smooth in-place editing, cancel support, and drag & drop reordering (within groups or across roles)",
+      "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview, selectable opposite-role comparison (defaults to Lum mode), and one-tap cancel to revert edits",
       "Full-app color vision simulation (protanopia, deuteranopia, tritanopia)",
       "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, prioritizing saved swatches with live color backups",
       "Accessible color scheme and dark-mode palette builder",
@@ -183,6 +183,22 @@
   </script>
 </head>
 <body>
+
+<!-- Color-vision-deficiency simulation filters (Machado et al. 2009, severity 1.0).
+     feColorMatrix operates in linearRGB, matching the matrices' color space. -->
+<svg style="position: absolute; width: 0; height: 0; pointer-events: none; overflow: hidden; border: none; padding: 0; margin: 0;" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="cvd-protan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
+      <feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0"/>
+    </filter>
+    <filter id="cvd-deutan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
+      <feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0"/>
+    </filter>
+    <filter id="cvd-tritan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
+      <feColorMatrix type="matrix" values="1.255528 -0.076749 -0.178779 0 0  -0.078411 0.930809 0.147602 0 0  0.004733 0.691367 0.303900 0 0  0 0 0 1 0"/>
+    </filter>
+  </defs>
+</svg>
 
 
 
@@ -381,6 +397,10 @@
             <span class="preview-section-label">Normal text</span>
             <div class="preview-body" id="pvw-body">The quick brown fox jumps over the lazy dog.</div>
           </div>
+          <div class="preview-section preview-palette-section" id="pvw-palette-section" hidden>
+            <span class="preview-section-label">Palette</span>
+            <div class="preview-palette" id="pvw-palette"></div>
+          </div>
           <div class="preview-section">
             <span class="preview-section-label" title="UI components & graphical objects need at least 3:1 against adjacent colors (WCAG 1.4.11, Level AA — no AAA level exists). Covered by the Large AA badge.">UI · Icons</span>
             <div class="preview-ui-row" id="pvw-ui">
@@ -421,6 +441,10 @@
           <div class="preview-section">
             <span class="preview-section-label">Normal text</span>
             <div class="preview-body" id="pvb-body">The quick brown fox jumps over the lazy dog.</div>
+          </div>
+          <div class="preview-section preview-palette-section" id="pvb-palette-section" hidden>
+            <span class="preview-section-label">Palette</span>
+            <div class="preview-palette" id="pvb-palette"></div>
           </div>
           <div class="preview-section">
             <span class="preview-section-label" title="UI components & graphical objects need at least 3:1 against adjacent colors (WCAG 1.4.11, Level AA — no AAA level exists). Covered by the Large AA badge.">UI · Icons</span>
@@ -686,8 +710,8 @@
       <h3>What you can do here</h3>
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
-        <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color, smooth open/close transitions, automatic centering in the sidebar, drag &amp; drop reordering (within groups or dragging across roles to swap their type), and one-tap hex copy</li>
+        <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color, smooth open/close transitions, automatic centering in the sidebar, drag &amp; drop reordering (within groups or dragging across roles to swap their type), one-tap hex copy, and a Cancel button to revert edits</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app to preview your colors under color vision deficiencies</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH or hex (with an sRGB hex fallback). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
@@ -759,22 +783,6 @@
   </div>
 </aside>
 
-<!-- Color-vision-deficiency simulation filters (Machado et al. 2009, severity 1.0).
-     feColorMatrix operates in linearRGB, matching the matrices' color space. -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-  <defs>
-    <filter id="cvd-protan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
-      <feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0"/>
-    </filter>
-    <filter id="cvd-deutan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
-      <feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0"/>
-    </filter>
-    <filter id="cvd-tritan" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="linearRGB">
-      <feColorMatrix type="matrix" values="1.255528 -0.076749 -0.178779 0 0  -0.078411 0.930809 0.147602 0 0  0.004733 0.691367 0.303900 0 0  0 0 0 1 0"/>
-    </filter>
-  </defs>
-</svg>
-
 
 
 <!-- Inline palette-chip editor (cloned once, inserted under the chip being edited).
@@ -826,7 +834,10 @@
         <span class="chip-editor-badges"></span>
       </div>
     </div>
-    <button type="button" class="chip-editor-done">Done</button>
+    <div class="chip-editor-actions">
+      <button type="button" class="chip-editor-cancel">Cancel</button>
+      <button type="button" class="chip-editor-done">Done</button>
+    </div>
   </div>
 </template>
 

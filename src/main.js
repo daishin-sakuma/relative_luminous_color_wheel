@@ -2493,6 +2493,7 @@ function downloadExport(format) {
 
     // Apply the filter globally to the html root element
     document.documentElement.style.filter = f;
+    document.documentElement.classList.toggle('cvd-active', !!v);
 
     // Repaint canvas layers after toggling so the renderer sees fresh pixels
     scheduleRender(true);
@@ -2948,6 +2949,7 @@ const _chipEditorTpl = /** @type {HTMLTemplateElement} */ (document.getElementBy
 let _ceEl = null;      // the single cloned editor element (reused across chips)
 let _ceRefs = null;    // cached inner element references
 let _ceIdx = null;     // flat palette index being edited, or null
+let _ceOrigHex = null; // original hex color before editing
 let _ce = null;        // working state { role, r, g, b, mode, hsl, lum, gray }
 let _cePartner = 0;    // partner-color cycle index
 let _ceRaf = 0;        // rAF gate for wheel + preview repaint
@@ -2974,6 +2976,7 @@ function buildChipEditor() {
     cmpRole: q('.chip-editor-cmp-role'),
     ratio:  q('.chip-editor-cmp-ratio'),
     badges: q('.chip-editor-badges'),
+    cancel: q('.chip-editor-cancel'),
     done:   q('.chip-editor-done'),
     ranges: {}, vals: {},
   };
@@ -2996,6 +2999,7 @@ function buildChipEditor() {
     addSliderTouchFix(inp); // cloned after the initial pass, so wire touch dragging here
   });
   Object.values(_ceRefs.vals).forEach(inp => inp.addEventListener('change', onChipEditorValInput));
+  _ceRefs.cancel.addEventListener('click', () => cancelChipEditor());
   _ceRefs.done.addEventListener('click', () => closeChipEditor());
   _ceRefs.hex.addEventListener('change', () => {
     const m = /^#?([0-9a-fA-F]{6})$/.exec(_ceRefs.hex.value.trim());
@@ -3353,6 +3357,7 @@ function openChipEditor(idx) {
   clearTimeout(_ceCloseTimer);
   _ceEl.classList.remove('chip-editor--closing');
   _ceIdx = idx;
+  _ceOrigHex = palette[idx].hex;
   _cePartner = 0;
   _ceWheelCache = null;
   const entry = palette[idx];
@@ -3398,6 +3403,7 @@ function closeChipEditor(skipRender, afterClose) {
   const idx = _ceIdx;
   _ceIdx = null;
   _ce = null;
+  _ceOrigHex = null;
   savePalette();
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) chipEl.classList.remove('editing');
@@ -3417,6 +3423,16 @@ function closeChipEditor(skipRender, afterClose) {
     _ceEl.classList.add('chip-editor--closing');
     _ceCloseTimer = setTimeout(removeEditor, 190);
   }
+}
+
+function cancelChipEditor() {
+  if (_ceIdx === null) return;
+  if (_ceOrigHex !== null && palette[_ceIdx]) {
+    palette[_ceIdx].hex = _ceOrigHex;
+    updateChipVisual(_ceIdx, _ceOrigHex);
+    savePalette();
+  }
+  closeChipEditor();
 }
 
 /** Re-attach the open editor after a renderPalette() rebuild (used as a safety
@@ -3536,7 +3552,7 @@ function renderPalette() {
 function renderPalettePreviews() {
   const textColors = palette.filter(e => e.role === 'fg');
   const bgColors   = palette.filter(e => e.role === 'bg');
-  for (const id of ['pa', 'pb']) {
+  for (const id of ['pa', 'pb', 'pvw', 'pvb']) {
     const section = document.getElementById(id + '-palette-section');
     const host    = document.getElementById(id + '-palette');
     if (!section || !host) continue;
@@ -3564,7 +3580,7 @@ function renderPalettePreviews() {
 // Clicking a preview strip opens the palette sidebar (the strips just mirror
 // the saved colors; the sidebar is where you manage them). Delegated once —
 // the host elements persist across renderPalettePreviews() rebuilds.
-['pa-palette', 'pb-palette'].forEach(id => {
+['pa-palette', 'pb-palette', 'pvw-palette', 'pvb-palette'].forEach(id => {
   const host = document.getElementById(id);
   if (host) host.addEventListener('click', () => setPaletteOpen(true));
 });
