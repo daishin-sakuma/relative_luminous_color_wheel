@@ -2546,6 +2546,8 @@ let _paletteInteracted = false;
 function applyPaletteOpen() {
   clearTimeout(_paletteCloseTimer);
   if (paletteOpen) {
+    _paletteSwipe = null;
+    resetPaletteSwipeStyles();
     paletteSection.classList.remove('palette-section--closing');
     paletteSection.hidden = false;
     syncSidebarHeight(); // pin to the visible viewport now that it's showing
@@ -2614,35 +2616,123 @@ paletteSection.addEventListener('wheel', () => { _paletteInteracted = true; }, {
 // preventDefault can cancel the page scroll.
 paletteSection.addEventListener('touchmove', e => {
   if (_chipDragActive) { e.preventDefault(); return; } // lifted reorder: pin the page
+  if (_paletteSwipe && _paletteSwipe.dragging) { e.preventDefault(); return; }
   const railScrolls = paletteRail.scrollHeight > paletteRail.clientHeight
     && paletteRail.contains(/** @type {Node} */ (e.target));
   if (!railScrolls) e.preventDefault();
 }, { passive: false });
 
-// A rightward swipe on the drawer closes it. Keep this lightweight and
-// directional so vertical rail scrolling and chip reordering keep their feel.
+// A rightward swipe drags the drawer with the finger. On release it closes only
+// when the gesture has enough distance or velocity; otherwise it springs back.
 let _paletteSwipe = null;
-const _PALETTE_SWIPE_DIST = 52;
-const _PALETTE_SWIPE_ANGLE = 1.35;
+let _paletteSwipeTimer = null;
+const _PALETTE_SWIPE_START = 10;
+const _PALETTE_SWIPE_ANGLE = 1.2;
+const _PALETTE_SWIPE_CLOSE_RATIO = 0.42;
+const _PALETTE_SWIPE_LONG_RATIO = 0.72;
+const _PALETTE_SWIPE_FAST = 0.65; // px/ms
+const _PALETTE_SWIPE_FAST_MIN = 36;
+const _PALETTE_SWIPE_SNAP_MS = 180;
+
+function resetPaletteSwipeStyles() {
+  clearTimeout(_paletteSwipeTimer);
+  paletteSection.classList.remove('palette-section--swiping');
+  paletteSection.style.transition = '';
+  paletteSection.style.transform = '';
+}
+
+function finishPaletteSwipeClose(dx) {
+  const w = Math.max(1, paletteSection.getBoundingClientRect().width);
+  clearTimeout(_paletteCloseTimer);
+  clearTimeout(_paletteSwipeTimer);
+  paletteOpen = false;
+  saveToStorage('palette-open', '0');
+  document.body.classList.remove('palette-open');
+  paletteToggle.setAttribute('aria-expanded', 'false');
+  paletteSection.classList.add('palette-section--swiping');
+  paletteSection.classList.remove('palette-section--closing');
+  paletteSection.style.transition = `transform ${_PALETTE_SWIPE_SNAP_MS}ms ease`;
+  paletteSection.style.transform = `translate3d(${Math.max(dx, w)}px, 0, 0)`;
+  _paletteSwipeTimer = setTimeout(() => {
+    resetPaletteSwipeStyles();
+    paletteSection.hidden = true;
+  }, _PALETTE_SWIPE_SNAP_MS);
+}
+
+function finishPaletteSwipeCancel() {
+  clearTimeout(_paletteSwipeTimer);
+  paletteSection.classList.add('palette-section--swiping');
+  paletteSection.style.transition = `transform ${_PALETTE_SWIPE_SNAP_MS}ms cubic-bezier(.2, .8, .2, 1)`;
+  paletteSection.style.transform = 'translate3d(0, 0, 0)';
+  _paletteSwipeTimer = setTimeout(resetPaletteSwipeStyles, _PALETTE_SWIPE_SNAP_MS);
+}
+
 paletteSection.addEventListener('pointerdown', e => {
   if (!paletteOpen || e.pointerType === 'mouse' || (e.button != null && e.button !== 0)) return;
-  _paletteSwipe = { x: e.clientX, y: e.clientY, id: e.pointerId, closing: false };
+  const t = /** @type {HTMLElement} */ (e.target);
+  if (t.closest('button,input,select,textarea,.chip-editor')) return;
+  clearTimeout(_paletteSwipeTimer);
+  resetPaletteSwipeStyles();
+  _paletteSwipe = {
+    x: e.clientX,
+    y: e.clientY,
+    lastX: e.clientX,
+    lastT: performance.now(),
+    id: e.pointerId,
+    dragging: false,
+    dx: 0,
+    velocity: 0,
+  };
 }, true);
 paletteSection.addEventListener('pointermove', e => {
-  if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id || _paletteSwipe.closing) return;
+  if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id) return;
+  const now = performance.now();
   const dx = e.clientX - _paletteSwipe.x;
   const dy = e.clientY - _paletteSwipe.y;
-  if (dx > _PALETTE_SWIPE_DIST && dx > Math.abs(dy) * _PALETTE_SWIPE_ANGLE) {
-    _paletteSwipe.closing = true;
-    if (_ceIdx !== null) closeChipEditor(true);
-    setPaletteOpen(false);
+  if (!_paletteSwipe.dragging) {
+    if (Math.abs(dy) > _PALETTE_SWIPE_START && Math.abs(dy) > Math.max(dx, 0) * _PALETTE_SWIPE_ANGLE) {
+      _paletteSwipe = null;
+      return;
+    }
+    if (dx <= _PALETTE_SWIPE_START || dx <= Math.abs(dy) * _PALETTE_SWIPE_ANGLE) return;
+    _paletteSwipe.dragging = true;
+    paletteSection.classList.add('palette-section--swiping');
+    paletteSection.style.transition = 'none';
+    try { paletteSection.setPointerCapture(e.pointerId); } catch (_) {}
   }
+  e.preventDefault();
+  const dt = Math.max(1, now - _paletteSwipe.lastT);
+  _paletteSwipe.velocity = (e.clientX - _paletteSwipe.lastX) / dt;
+  _paletteSwipe.lastX = e.clientX;
+  _paletteSwipe.lastT = now;
+  _paletteSwipe.dx = Math.max(0, dx);
+  paletteSection.style.transform = `translate3d(${_paletteSwipe.dx}px, 0, 0)`;
 }, true);
 const _paletteSwipeEnd = e => {
-  if (_paletteSwipe && e.pointerId === _paletteSwipe.id) _paletteSwipe = null;
+  if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id) return;
+  const s = _paletteSwipe;
+  _paletteSwipe = null;
+  try { if (paletteSection.hasPointerCapture(e.pointerId)) paletteSection.releasePointerCapture(e.pointerId); } catch (_) {}
+  if (!s.dragging) return;
+  const w = Math.max(1, paletteSection.getBoundingClientRect().width);
+  const shouldClose = s.dx > w * _PALETTE_SWIPE_LONG_RATIO
+    || s.dx > w * _PALETTE_SWIPE_CLOSE_RATIO
+    || (s.velocity > _PALETTE_SWIPE_FAST && s.dx > _PALETTE_SWIPE_FAST_MIN);
+  if (shouldClose) {
+    if (_ceIdx !== null) closeChipEditor(true);
+    finishPaletteSwipeClose(s.dx);
+  } else {
+    finishPaletteSwipeCancel();
+  }
 };
 paletteSection.addEventListener('pointerup', _paletteSwipeEnd, true);
-paletteSection.addEventListener('pointercancel', _paletteSwipeEnd, true);
+paletteSection.addEventListener('pointercancel', e => {
+  if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id) return;
+  const wasDragging = _paletteSwipe.dragging;
+  _paletteSwipe = null;
+  try { if (paletteSection.hasPointerCapture(e.pointerId)) paletteSection.releasePointerCapture(e.pointerId); } catch (_) {}
+  if (wasDragging) finishPaletteSwipeCancel();
+}, true);
 
 const _paletteMaybeAutoClose = e => {
   if (e.pointerType !== 'mouse' || !paletteOpen || _paletteInteracted) return;

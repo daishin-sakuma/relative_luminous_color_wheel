@@ -936,6 +936,10 @@ input.custom-val:focus {
    `forwards` holds the off-screen pose until display:none lands. */
 .palette-section--closing { animation: palette-slide-out 0.22s ease forwards; }
 @keyframes palette-slide-out { to { transform: translateX(100%); } }
+.palette-section--swiping {
+  animation: none;
+  will-change: transform;
+}
 /* display:flex beats the UA [hidden] rule — restore it explicitly */
 .palette-section[hidden] { display: none; }
 /* While a chip is being dragged, keep the rail clipped exactly as at rest so
