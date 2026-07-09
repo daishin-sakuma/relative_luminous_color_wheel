@@ -680,6 +680,9 @@ input.custom-val:focus {
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.02em;
+  /* NATS' ink sits ~0.1em below its line-box centre, so "Ag" reads lower than
+     the swatch squares next to it — nudge it up to share the same centre axis. */
+  transform: translateY(-0.103em);
 }
 .preview-palette-bg {
   width: 14px;
