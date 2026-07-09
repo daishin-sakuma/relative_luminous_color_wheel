@@ -3373,23 +3373,43 @@ function openChipEditor(idx) {
     centerChipEditorInRail(true);
     setTimeout(() => centerChipEditorInRail(true), 180);
   });
-  // A press outside the sidebar finishes editing (capture phase so the
-  // editor's own stopPropagation doesn't hide it). Presses inside the sidebar
-  // are kept open so they can start a scroll.
-  document.addEventListener('pointerdown', _ceOutsideClose, true);
+  // A deliberate tap (not a scroll drag) outside the sidebar finishes editing.
+  // We track pointerdown → pointerup to distinguish taps from scrolls: if the
+  // pointer moves more than a small threshold or is held too long, the gesture
+  // is treated as a scroll and the editor stays open.
+  document.addEventListener('pointerdown', _ceOutsideDown, true);
+  document.addEventListener('pointerup',   _ceOutsideUp,   true);
 }
 
-// Close when a tap / mouse press lands outside the sidebar. Presses elsewhere
-// inside the palette rail are allowed so the user can start a sidebar scroll
-// without collapsing the editor. The chip being edited is also "inside" so its
-// pencil still toggles the editor rather than reopening it.
-function _ceOutsideClose(e) {
+// --- Outside-tap detection for chip editor close ---
+let _ceDownEvt = null;  // stashed pointerdown event for tap detection
+const _CE_TAP_DIST  = 10;  // px — max movement to still count as a tap
+const _CE_TAP_TIME  = 400; // ms — max duration to still count as a tap
+
+function _ceOutsideDown(e) {
   if (_ceIdx === null) return;
   const t = /** @type {Node} */ (e.target);
-  if (_ceEl && _ceEl.contains(t)) return;
-  if (paletteSection.contains(t)) return;
+  // Interactions inside the editor or sidebar are not outside taps.
+  if (_ceEl && _ceEl.contains(t)) { _ceDownEvt = null; return; }
+  if (paletteSection.contains(t)) { _ceDownEvt = null; return; }
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${_ceIdx}"]`);
-  if (chipEl && chipEl.contains(t)) return;
+  if (chipEl && chipEl.contains(t)) { _ceDownEvt = null; return; }
+  // Stash for the matching pointerup to measure distance/time.
+  _ceDownEvt = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
+}
+
+function _ceOutsideUp(e) {
+  if (_ceIdx === null || !_ceDownEvt) return;
+  // Only match the same pointer that started the gesture.
+  if (e.pointerId !== _ceDownEvt.id) return;
+  const dx = e.clientX - _ceDownEvt.x;
+  const dy = e.clientY - _ceDownEvt.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const elapsed = Date.now() - _ceDownEvt.t;
+  _ceDownEvt = null;
+  // If the pointer moved too far or was held too long it was a scroll / drag,
+  // not a deliberate tap — keep the editor open.
+  if (dist > _CE_TAP_DIST || elapsed > _CE_TAP_TIME) return;
   closeChipEditor();
   renderPalettePreviews();
 }
@@ -3398,7 +3418,9 @@ function closeChipEditor(skipRender, afterClose) {
   if (_ceIdx === null) { if (afterClose) afterClose(); return; }
   const lockRail = !!afterClose;
   if (lockRail) paletteRail.classList.add('palette-rail--editor-transition');
-  document.removeEventListener('pointerdown', _ceOutsideClose, true);
+  document.removeEventListener('pointerdown', _ceOutsideDown, true);
+  document.removeEventListener('pointerup',   _ceOutsideUp,   true);
+  _ceDownEvt = null;
   closeChipEditorDropdown();
   const idx = _ceIdx;
   _ceIdx = null;

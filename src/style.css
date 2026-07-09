@@ -716,7 +716,8 @@ input.custom-val:focus {
   color: inherit;
   cursor: pointer;
   height: var(--share-btn-h, 1.65rem); /* shared with .preview-share-btn */
-  padding: 0 0.38em;
+  aspect-ratio: 1;          /* always square — width tracks height */
+  padding: 0;
   line-height: 0;
   transition: opacity 0.12s, transform 0.08s;
 }
