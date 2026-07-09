@@ -164,6 +164,68 @@ function toHex(r, g, b) {
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
+let currentCvd = '';
+
+const CVD_MATRICES = {
+  protan: [
+    0.152286, 1.052583, -0.204868,
+    0.114503, 0.786281, 0.099216,
+    -0.003882, -0.048116, 1.051998
+  ],
+  deutan: [
+    0.367322, 0.860646, -0.227968,
+    0.280085, 0.672501, 0.047413,
+    -0.011820, 0.042940, 0.968881
+  ],
+  tritan: [
+    1.255528, -0.076749, -0.178779,
+    -0.078411, 0.930809, 0.147602,
+    0.004733, 0.691367, 0.303900
+  ]
+};
+
+function cvdTransformRgb(r, g, b) {
+  if (!currentCvd) return [r, g, b];
+  const m = CVD_MATRICES[currentCvd];
+  if (!m) return [r, g, b];
+
+  const lr = LINEAR[r];
+  const lg = LINEAR[g];
+  const lb = LINEAR[b];
+
+  const nr = m[0] * lr + m[1] * lg + m[2] * lb;
+  const ng = m[3] * lr + m[4] * lg + m[5] * lb;
+  const nb = m[6] * lr + m[7] * lg + m[8] * lb;
+
+  const toSRGB = n => {
+    const c = n <= 0.0031308 ? n * 12.92 : 1.055 * Math.pow(n, 1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(255, Math.round(c * 255)));
+  };
+
+  return [toSRGB(nr), toSRGB(ng), toSRGB(nb)];
+}
+
+function cvdTransformHex(hex) {
+  if (!currentCvd) return hex;
+  const [r, g, b] = hexToRgb(hex);
+  const [tr, tg, tb] = cvdTransformRgb(r, g, b);
+  return toHex(tr, tg, tb);
+}
+
+function cvdTransformRgba(rgbaStr) {
+  if (!currentCvd) return rgbaStr;
+  const m = rgbaStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (!m) return rgbaStr;
+  const r = parseInt(m[1], 10);
+  const g = parseInt(m[2], 10);
+  const b = parseInt(m[3], 10);
+  const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+  const [tr, tg, tb] = cvdTransformRgb(r, g, b);
+  return `rgba(${tr}, ${tg}, ${tb}, ${a})`;
+}
+
+
+
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
@@ -261,6 +323,8 @@ precision highp float;
 uniform float uLum;
 uniform float uRadius;
 uniform vec2  uCenter;
+uniform mat3  uCvdMatrix;
+uniform float uCvdActive;
 
 float sL(float c) {
   return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
@@ -297,12 +361,25 @@ void main() {
   }
 
   vec3  color = hsl(h, sat, (lo + hi) * 0.5);
+  
+  // Apply CVD Simulation in linear space if active
+  if (uCvdActive > 0.5) {
+    vec3 lin = vec3(sL(color.r), sL(color.g), sL(color.b));
+    vec3 cvdLin = uCvdMatrix * lin;
+    // convert back to sRGB
+    color = vec3(
+      cvdLin.r <= 0.0031308 ? cvdLin.r * 12.92 : 1.055 * pow(cvdLin.r, 1.0 / 2.4) - 0.055,
+      cvdLin.g <= 0.0031308 ? cvdLin.g * 12.92 : 1.055 * pow(cvdLin.g, 1.0 / 2.4) - 0.055,
+      cvdLin.b <= 0.0031308 ? cvdLin.b * 12.92 : 1.055 * pow(cvdLin.b, 1.0 / 2.4) - 0.055
+    );
+  }
+  
   float a     = smoothstep(uRadius + 1.0, uRadius - 1.0, dist);
-  gl_FragColor = vec4(color * a, a);
+  gl_FragColor = vec4(clamp(color, 0.0, 1.0) * a, a);
 }
 `;
 
-/** @type {{ gl: WebGLRenderingContext, uLum: WebGLUniformLocation } | null} */
+/** @type {{ gl: WebGLRenderingContext, uLum: WebGLUniformLocation, uCvdMatrix: WebGLUniformLocation, uCvdActive: WebGLUniformLocation } | null} */
 let glState = null;
 
 function initGL() {
@@ -335,22 +412,40 @@ function initGL() {
   gl.enableVertexAttribArray(aPos);
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-  const uLum    = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uLum'));
-  const uCenter = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uCenter'));
-  const uRadius = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uRadius'));
+  const uLum       = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uLum'));
+  const uCenter    = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uCenter'));
+  const uRadius    = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uRadius'));
+  const uCvdMatrix = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uCvdMatrix'));
+  const uCvdActive = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uCvdActive'));
+  
   gl.uniform2f(uCenter, BUF_SZ / 2, BUF_SZ / 2);
   gl.uniform1f(uRadius, R_BUF);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.clearColor(0, 0, 0, 0);
 
-  return { gl, uLum };
+  return { gl, uLum, uCvdMatrix, uCvdActive };
 }
 
 function drawWheel(lum) {
   if (!glState) return;
-  const { gl, uLum } = glState;
+  const { gl, uLum, uCvdMatrix, uCvdActive } = glState;
   gl.uniform1f(uLum, lum);
+  
+  // Pass CVD uniforms
+  if (currentCvd) {
+    gl.uniform1f(uCvdActive, 1.0);
+    // transpose must be false in WebGL 1.0, data is column-major
+    const m = CVD_MATRICES[currentCvd];
+    gl.uniformMatrix3fv(uCvdMatrix, false, new Float32Array([
+      m[0], m[3], m[6],
+      m[1], m[4], m[7],
+      m[2], m[5], m[8]
+    ]));
+  } else {
+    gl.uniform1f(uCvdActive, 0.0);
+  }
+  
   gl.viewport(0, 0, BUF_SZ, BUF_SZ);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -376,9 +471,10 @@ function renderWheel2D(lum) {
         const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
         const l   = findLightness(hue, sat, lum);
         const [r, g, b] = hslToRgb(hue, sat, l);
+        const [tr, tg, tb] = cvdTransformRgb(r, g, b);
         const alpha = dist > R_BUF - 0.5 ? Math.max(0, Math.round((R_BUF + 1 - dist) * 255)) : 255;
         const idx = (py * BUF_SZ + px) * 4;
-        data[idx] = r; data[idx+1] = g; data[idx+2] = b; data[idx+3] = alpha;
+        data[idx] = tr; data[idx+1] = tg; data[idx+2] = tb; data[idx+3] = alpha;
       }
     }
     row = end;
@@ -443,7 +539,7 @@ function updateLumSliderTrack() {
   const s = Math.max(selSat, 0.65);
   const stops = [0, 0.15, 0.35, 0.55, 0.75, 0.90, 1].map(t => {
     const l = findLightness(selHue, s, t);
-    return `${toHex(...hslToRgb(selHue, s, l))} ${(t * 100).toFixed(0)}%`;
+    return `${cvdTransformHex(toHex(...hslToRgb(selHue, s, l)))} ${(t * 100).toFixed(0)}%`;
   });
   lumSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
@@ -455,7 +551,7 @@ function updateHueSliderTrack() {
   const stops = Array.from({ length: 13 }, (_, i) => {
     const h = i * 30;
     const l = findLightness(h, 1, targetLum);
-    return `${toHex(...hslToRgb(h, 1, l))} ${Math.round(i / 12 * 100)}%`;
+    return `${cvdTransformHex(toHex(...hslToRgb(h, 1, l)))} ${Math.round(i / 12 * 100)}%`;
   });
   hueSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
@@ -467,7 +563,7 @@ function updateSatSliderTrack() {
   _satTrackKey = key;
   const stops = [0, 0.25, 0.5, 0.75, 1].map(s => {
     const l = findLightness(selHue, s, targetLum);
-    return `${toHex(...hslToRgb(selHue, s, l))} ${Math.round(s * 100)}%`;
+    return `${cvdTransformHex(toHex(...hslToRgb(selHue, s, l)))} ${Math.round(s * 100)}%`;
   });
   satSlider.style.backgroundImage = `linear-gradient(to right, ${stops.join(', ')})`;
 }
@@ -562,13 +658,13 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
 
   if (dom.ratioEl) {
     dom.ratioEl.textContent = ratio.toFixed(2) + ':1';
-    dom.ratioEl.style.color = dim;
+    dom.ratioEl.style.color = cvdTransformRgba(dim);
   }
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
       const lc = apcaLc(txtRgb, bgRgb);
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
-      dom.apcaEl.style.color = dim;
+      dom.apcaEl.style.color = cvdTransformRgba(dim);
     } else {
       dom.apcaEl.textContent = '';
     }
@@ -593,18 +689,18 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
   const passBg     = useBrightStyle ? 'rgba(93,222,138,0.10)' : 'rgba(26,122,66,0.10)';
   const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
 
-  for (const catEl of dom.cats) catEl.style.color = dim;
+  for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
   for (const { el: b, threshold } of dom.badges) {
     if (ratio >= threshold) {
-      b.style.color       = passColor;
-      b.style.borderColor = passBorder;
-      b.style.background  = passBg;
-      b.style.boxShadow   = passRing;
+      b.style.color       = cvdTransformHex(passColor);
+      b.style.borderColor = cvdTransformRgba(passBorder);
+      b.style.background  = cvdTransformRgba(passBg);
+      b.style.boxShadow   = cvdTransformRgba(passRing);
     } else {
-      b.style.color       = isLight ? 'rgba(0,0,0,0.3)'   : 'rgba(255,255,255,0.3)';
-      b.style.borderColor = isLight ? 'rgba(0,0,0,0.12)'  : 'rgba(255,255,255,0.12)';
-      b.style.background  = isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)';
+      b.style.color       = cvdTransformRgba(isLight ? 'rgba(0,0,0,0.3)'   : 'rgba(255,255,255,0.3)');
+      b.style.borderColor = cvdTransformRgba(isLight ? 'rgba(0,0,0,0.12)'  : 'rgba(255,255,255,0.12)');
+      b.style.background  = cvdTransformRgba(isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)');
       b.style.boxShadow   = 'none';
     }
   }
@@ -618,13 +714,13 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
 function updatePreviewFixed(selectedHex, selectedLum) {
   // vs White (bg lum = 1, isLight = true)
   const tileW = /** @type {HTMLElement} */ (document.getElementById('preview-white'));
-  tileW.style.background = '#ffffff';
-  tileW.style.setProperty('--tile-bg', '#ffffff');
-  tileW.style.color = 'rgba(0,0,0,0.55)';
-  /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.background = selectedHex;
-  /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.borderColor = 'rgba(0,0,0,0.2)';
+  tileW.style.background = cvdTransformHex('#ffffff');
+  tileW.style.setProperty('--tile-bg', cvdTransformHex('#ffffff'));
+  tileW.style.color = cvdTransformRgba('rgba(0,0,0,0.55)');
+  /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.background = cvdTransformHex(selectedHex);
+  /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.borderColor = cvdTransformRgba('rgba(0,0,0,0.2)');
   for (const id of ['pvw-display', 'pvw-body', 'pvw-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = selectedHex;
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(selectedHex);
   }
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
@@ -634,13 +730,13 @@ function updatePreviewFixed(selectedHex, selectedLum) {
 
   // vs Black (bg lum = 0, isLight = false)
   const tileB = /** @type {HTMLElement} */ (document.getElementById('preview-black'));
-  tileB.style.background = '#000000';
-  tileB.style.setProperty('--tile-bg', '#000000');
-  tileB.style.color = 'rgba(255,255,255,0.55)';
-  /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.background = selectedHex;
-  /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.borderColor = 'rgba(255,255,255,0.25)';
+  tileB.style.background = cvdTransformHex('#000000');
+  tileB.style.setProperty('--tile-bg', cvdTransformHex('#000000'));
+  tileB.style.color = cvdTransformRgba('rgba(255,255,255,0.55)');
+  /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.background = cvdTransformHex(selectedHex);
+  /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.borderColor = cvdTransformRgba('rgba(255,255,255,0.25)');
   for (const id of ['pvb-display', 'pvb-body', 'pvb-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = selectedHex;
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(selectedHex);
   }
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
@@ -661,19 +757,19 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   const tileA  = /** @type {HTMLElement} */ (document.getElementById('preview-a'));
   const fgA    = getForeground(customLum);
   const dotBorderA = customLum > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
-  tileA.style.background = customHex;
-  tileA.style.setProperty('--tile-bg', customHex);
-  tileA.style.color      = fgA;  // inherited by role labels
+  tileA.style.background = cvdTransformHex(customHex);
+  tileA.style.setProperty('--tile-bg', cvdTransformHex(customHex));
+  tileA.style.color      = cvdTransformHex(fgA);  // inherited by role labels
 
   for (const id of ['pa-display', 'pa-body', 'pa-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = selectedHex;
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(selectedHex);
   }
   const paTxt = /** @type {HTMLElement} */ (document.getElementById('pa-text-dot'));
   const paBg  = /** @type {HTMLElement} */ (document.getElementById('pa-bg-dot'));
-  paTxt.style.background   = selectedHex;
-  paTxt.style.borderColor  = dotBorderA;
-  paBg.style.background    = customHex;
-  paBg.style.borderColor   = dotBorderA;
+  paTxt.style.background   = cvdTransformHex(selectedHex);
+  paTxt.style.borderColor  = cvdTransformRgba(dotBorderA);
+  paBg.style.background    = cvdTransformHex(customHex);
+  paBg.style.borderColor   = cvdTransformRgba(dotBorderA);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
     selectedLum, customLum, customLum,
@@ -684,19 +780,19 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   const tileB  = /** @type {HTMLElement} */ (document.getElementById('preview-b'));
   const fgB    = getForeground(selectedLum);
   const dotBorderB = selectedLum > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
-  tileB.style.background = selectedHex;
-  tileB.style.setProperty('--tile-bg', selectedHex);
-  tileB.style.color      = fgB;
+  tileB.style.background = cvdTransformHex(selectedHex);
+  tileB.style.setProperty('--tile-bg', cvdTransformHex(selectedHex));
+  tileB.style.color      = cvdTransformHex(fgB);
 
   for (const id of ['pb-display', 'pb-body', 'pb-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = customHex;
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(customHex);
   }
   const pbTxt = /** @type {HTMLElement} */ (document.getElementById('pb-text-dot'));
   const pbBg  = /** @type {HTMLElement} */ (document.getElementById('pb-bg-dot'));
-  pbTxt.style.background   = customHex;
-  pbTxt.style.borderColor  = dotBorderB;
-  pbBg.style.background    = selectedHex;
-  pbBg.style.borderColor   = dotBorderB;
+  pbTxt.style.background   = cvdTransformHex(customHex);
+  pbTxt.style.borderColor  = cvdTransformRgba(dotBorderB);
+  pbBg.style.background    = cvdTransformHex(selectedHex);
+  pbBg.style.borderColor   = cvdTransformRgba(dotBorderB);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
     customLum, selectedLum, selectedLum,
@@ -713,14 +809,18 @@ function updateUI() {
   const hsl       = rgbToHsl(r, g, b);
 
   // Swatch + accent
-  document.getElementById('swatch').style.background = selHex;
+  const cvdSelHex = cvdTransformHex(selHex);
+  const [cvdSelR, cvdSelG, cvdSelB] = hexToRgb(cvdSelHex);
+  const cvdSelLum = relativeLuminance(cvdSelR, cvdSelG, cvdSelB);
+
+  document.getElementById('swatch').style.background = cvdSelHex;
   const swatchHexEl = /** @type {HTMLElement} */ (document.getElementById('swatch-hex'));
   swatchHexEl.textContent = formatHex(selHex);
-  swatchHexEl.style.color = selLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
-  swatchHexEl.style.setProperty('--icon-clr', selLum > 0.179 ? '#000' : '#fff');
+  swatchHexEl.style.color = cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
+  swatchHexEl.style.setProperty('--icon-clr', cvdSelLum > 0.179 ? '#000' : '#fff');
   /** @type {HTMLElement} */ (document.getElementById('swatch-tools')).style.color =
-    selLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
-  document.documentElement.style.setProperty('--accent', selHex);
+    cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
+  document.documentElement.style.setProperty('--accent', cvdSelHex);
 
   // Data grid
   document.getElementById('v-hex').textContent = formatHex(selHex);
@@ -1069,7 +1169,8 @@ function renderCustomWheel() {
         const alpha = dist > radius - 0.5
           ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
         const idx = (py * CW_BUF + px) * 4;
-        data[idx] = cR; data[idx+1] = cG; data[idx+2] = cB; data[idx+3] = alpha;
+        const [tr, tg, tb] = cvdTransformRgb(cR, cG, cB);
+        data[idx] = tr; data[idx+1] = tg; data[idx+2] = tb; data[idx+3] = alpha;
       }
     }
     cwCtx.putImageData(img, 0, 0);
@@ -1090,10 +1191,11 @@ function renderCustomWheel() {
           const sat = Math.min(dist / radius, 1);
           const l   = findLightness(hue, sat, cuLum);
           const [rr, gg, bb] = hslToRgb(hue, sat, l);
+          const [tr, tg, tb] = cvdTransformRgb(rr, gg, bb);
           const alpha = dist > radius - 0.5
             ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
           const idx = (py * CW_BUF + px) * 4;
-          data[idx] = rr; data[idx+1] = gg; data[idx+2] = bb; data[idx+3] = alpha;
+          data[idx] = tr; data[idx+1] = tg; data[idx+2] = tb; data[idx+3] = alpha;
         }
       }
       _cwLumCache = { lum: cuLum, imageData: img };
@@ -1127,10 +1229,11 @@ function renderCustomWheel() {
         const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
         const sat = Math.min(dist / radius, 1);
         const [rr, gg, bb] = hslToRgb(hue, sat, cL);
+        const [tr, tg, tb] = cvdTransformRgb(rr, gg, bb);
         const alpha = dist > radius - 0.5
           ? Math.max(0, Math.round((radius + 1 - dist) * 255)) : 255;
         const idx = (py * CW_BUF + px) * 4;
-        data[idx] = rr; data[idx+1] = gg; data[idx+2] = bb; data[idx+3] = alpha;
+        data[idx] = tr; data[idx+1] = tg; data[idx+2] = tb; data[idx+3] = alpha;
       }
     }
     _cwColorCache = { l: cL, imageData: img };
@@ -1189,17 +1292,17 @@ function updateCustomSliderTracks() {
   const sSl = /** @type {HTMLInputElement} */ (document.getElementById('c-s-slider'));
   const lSl = /** @type {HTMLInputElement} */ (document.getElementById('c-l-slider'));
 
-  rSl.style.backgroundImage = `linear-gradient(to right,${toHex(0,cG,cB)},${toHex(255,cG,cB)})`;
-  gSl.style.backgroundImage = `linear-gradient(to right,${toHex(cR,0,cB)},${toHex(cR,255,cB)})`;
-  bSl.style.backgroundImage = `linear-gradient(to right,${toHex(cR,cG,0)},${toHex(cR,cG,255)})`;
+  rSl.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(0,cG,cB))},${cvdTransformHex(toHex(255,cG,cB))})`;
+  gSl.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(cR,0,cB))},${cvdTransformHex(toHex(cR,255,cB))})`;
+  bSl.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(cR,cG,0))},${cvdTransformHex(toHex(cR,cG,255))})`;
 
   const hStops = Array.from({ length: 13 }, (_, i) => {
     const h = i * 30;
-    return `${toHex(...hslToRgb(h, cS, cL))} ${Math.round(i / 12 * 100)}%`;
+    return `${cvdTransformHex(toHex(...hslToRgb(h, cS, cL)))} ${Math.round(i / 12 * 100)}%`;
   });
   hSl.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
-  sSl.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(cH,0,cL))},${toHex(...hslToRgb(cH,1,cL))})`;
-  lSl.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(cH,cS,0))},${toHex(...hslToRgb(cH,cS,0.5))},${toHex(...hslToRgb(cH,cS,1))})`;
+  sSl.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(...hslToRgb(cH,0,cL)))},${cvdTransformHex(toHex(...hslToRgb(cH,1,cL)))})`;
+  lSl.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(...hslToRgb(cH,cS,0)))},${cvdTransformHex(toHex(...hslToRgb(cH,cS,0.5)))},${cvdTransformHex(toHex(...hslToRgb(cH,cS,1)))})`;
 }
 
 let _cuTracksKey = '';
@@ -1214,20 +1317,20 @@ function updateLumModeSliderTracks() {
   // Luminance track: actual hue/sat colors sampled across lum 0→1
   const lumStops = [0, 0.04, 0.18, 0.40, 0.65, 1.0].map(lm => {
     const l = findLightness(cuHue, cuSat, lm);
-    return `${toHex(...hslToRgb(cuHue, cuSat, l))} ${Math.round(lm * 100)}%`;
+    return `${cvdTransformHex(toHex(...hslToRgb(cuHue, cuSat, l)))} ${Math.round(lm * 100)}%`;
   });
   lumSl.style.backgroundImage = `linear-gradient(to right,${lumStops.join(',')})`;
 
   // Saturation track: achromatic → vivid at current hue/lum
-  const s0 = toHex(...hslToRgb(cuHue, 0, findLightness(cuHue, 0, cuLum)));
-  const s1 = toHex(...hslToRgb(cuHue, 1, findLightness(cuHue, 1, cuLum)));
+  const s0 = cvdTransformHex(toHex(...hslToRgb(cuHue, 0, findLightness(cuHue, 0, cuLum))));
+  const s1 = cvdTransformHex(toHex(...hslToRgb(cuHue, 1, findLightness(cuHue, 1, cuLum))));
   satSl.style.backgroundImage = `linear-gradient(to right,${s0},${s1})`;
 
   // Hue track: rotate hue at current sat/lum
   const hStops = Array.from({ length: 13 }, (_, i) => {
     const h = i * 30;
     const l = findLightness(h, cuSat, cuLum);
-    return `${toHex(...hslToRgb(h, cuSat, l))} ${Math.round(i / 12 * 100)}%`;
+    return `${cvdTransformHex(toHex(...hslToRgb(h, cuSat, l)))} ${Math.round(i / 12 * 100)}%`;
   });
   hueSl.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
 }
@@ -1249,8 +1352,10 @@ function syncCustomControls() {
     }
   }
   const customSwatchEl = /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display'));
-  customSwatchEl.style.background = customColor;
-  customSwatchEl.style.color = relativeLuminance(cR, cG, cB) > 0.179
+  const cvdCustomColor = cvdTransformHex(customColor);
+  const [cvdCustomR, cvdCustomG, cvdCustomB] = hexToRgb(cvdCustomColor);
+  customSwatchEl.style.background = cvdCustomColor;
+  customSwatchEl.style.color = relativeLuminance(cvdCustomR, cvdCustomG, cvdCustomB) > 0.179
     ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
 
   const grayVal = Math.round(cL * 255);
@@ -2488,15 +2593,24 @@ function downloadExport(format) {
   const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
   cvdBtns.forEach(btn => btn.addEventListener('click', () => {
     cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
-    const v = btn.dataset.cvd;
-    const f = v ? `url(#cvd-${v})` : '';
+    const v = btn.dataset.cvd || '';
+    
+    currentCvd = v;
+    
+    // Invalidate custom wheel, slider tracks, and chip editor caches
+    _cwLumCache = null;
+    _cwColorCache = null;
+    _lumTrackKey = '';
+    _hueTrackKey = -1;
+    _satTrackKey = '';
+    _cuTracksKey = '';
+    _ceWheelCache = null;
 
-    // Apply the filter globally to the html root element
-    document.documentElement.style.filter = f;
     document.documentElement.classList.toggle('cvd-active', !!v);
 
-    // Repaint canvas layers after toggling so the renderer sees fresh pixels
-    scheduleRender(true);
+    // Repaint all canvas layers and sync UI after toggling so the renderer sees fresh pixels
+    scheduleRender(true, true);
+    renderPalette();
   }));
 }
 
@@ -2541,18 +2655,24 @@ const paletteToggleCount = /** @type {HTMLElement} */ (document.getElementById('
 
 let paletteOpen = false;
 let _paletteCloseTimer = null;
+let _paletteOpenTimer = null;
 let _paletteInteracted = false;
 
 function applyPaletteOpen() {
   clearTimeout(_paletteCloseTimer);
+  clearTimeout(_paletteOpenTimer);
   if (paletteOpen) {
     _paletteSwipe = null;
     resetPaletteSwipeStyles();
     paletteSection.classList.remove('palette-section--closing');
+    paletteSection.classList.add('palette-section--opening');
     paletteSection.hidden = false;
     syncSidebarHeight(); // pin to the visible viewport now that it's showing
+    _paletteOpenTimer = setTimeout(() => {
+      paletteSection.classList.remove('palette-section--opening');
+    }, 220);
   } else if (!paletteSection.hidden) {
-    // Mirror of the slide-in: play the slide-out, then actually hide
+    paletteSection.classList.remove('palette-section--opening');
     paletteSection.classList.add('palette-section--closing');
     _paletteCloseTimer = setTimeout(() => {
       paletteSection.classList.remove('palette-section--closing');
@@ -2651,6 +2771,9 @@ function finishPaletteSwipeClose(dx) {
   paletteToggle.setAttribute('aria-expanded', 'false');
   paletteSection.classList.add('palette-section--swiping');
   paletteSection.classList.remove('palette-section--closing');
+  
+  paletteSection.offsetHeight; // force reflow so starting transform is evaluated
+  
   paletteSection.style.transition = `transform ${_PALETTE_SWIPE_SNAP_MS}ms ease`;
   paletteSection.style.transform = `translate3d(${Math.max(dx, w)}px, 0, 0)`;
   _paletteSwipeTimer = setTimeout(() => {
@@ -2662,6 +2785,9 @@ function finishPaletteSwipeClose(dx) {
 function finishPaletteSwipeCancel() {
   clearTimeout(_paletteSwipeTimer);
   paletteSection.classList.add('palette-section--swiping');
+  
+  paletteSection.offsetHeight; // force reflow so starting transform is evaluated
+  
   paletteSection.style.transition = `transform ${_PALETTE_SWIPE_SNAP_MS}ms cubic-bezier(.2, .8, .2, 1)`;
   paletteSection.style.transform = 'translate3d(0, 0, 0)';
   _paletteSwipeTimer = setTimeout(resetPaletteSwipeStyles, _PALETTE_SWIPE_SNAP_MS);
@@ -3166,7 +3292,7 @@ function buildChipEditorDropdown() {
     it.setAttribute('aria-selected', String(i === _cePartner));
     // Role type (TEXT / BG) leads, then the rank name; hex is a muted suffix.
     const rl = document.createElement('span'); rl.className = 'chip-editor-dd-role'; rl.textContent = roleLabel;
-    const sw = document.createElement('span'); sw.className = 'chip-editor-dd-swatch'; sw.style.background = hex;
+    const sw = document.createElement('span'); sw.className = 'chip-editor-dd-swatch'; sw.style.background = cvdTransformHex(hex);
     const nm = document.createElement('span'); nm.className = 'chip-editor-dd-name'; nm.textContent = paletteRankLabel(i);
     const hx = document.createElement('span'); hx.className = 'chip-editor-dd-hex'; hx.textContent = formatHex(hex);
     it.append(rl, sw, nm, hx);
@@ -3277,21 +3403,21 @@ function renderChipEditorSliderTracks() {
   if (!_ceEl) return;
   const R = _ceRefs.ranges, { r, g, b } = _ce;
   if (_ce.mode === 'rgb') {
-    R.r.style.backgroundImage = `linear-gradient(to right,${toHex(0, g, b)},${toHex(255, g, b)})`;
-    R.g.style.backgroundImage = `linear-gradient(to right,${toHex(r, 0, b)},${toHex(r, 255, b)})`;
-    R.b.style.backgroundImage = `linear-gradient(to right,${toHex(r, g, 0)},${toHex(r, g, 255)})`;
+    R.r.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(0, g, b))},${cvdTransformHex(toHex(255, g, b))})`;
+    R.g.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(r, 0, b))},${cvdTransformHex(toHex(r, 255, b))})`;
+    R.b.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(r, g, 0))},${cvdTransformHex(toHex(r, g, 255))})`;
   } else if (_ce.mode === 'hsl') {
     const [h, s, l] = _ce.hsl, sf = s / 100, lf = l / 100;
-    const hStops = Array.from({ length: 13 }, (_, i) => `${toHex(...hslToRgb(i * 30, sf, lf))} ${Math.round(i / 12 * 100)}%`);
+    const hStops = Array.from({ length: 13 }, (_, i) => `${cvdTransformHex(toHex(...hslToRgb(i * 30, sf, lf)))} ${Math.round(i / 12 * 100)}%`);
     R.h.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
-    R.s.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(h, 0, lf))},${toHex(...hslToRgb(h, 1, lf))})`;
-    R.l.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(h, sf, 0))},${toHex(...hslToRgb(h, sf, 0.5))},${toHex(...hslToRgb(h, sf, 1))})`;
+    R.s.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(...hslToRgb(h, 0, lf)))},${cvdTransformHex(toHex(...hslToRgb(h, 1, lf)))})`;
+    R.l.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(...hslToRgb(h, sf, 0)))},${cvdTransformHex(toHex(...hslToRgb(h, sf, 0.5)))},${cvdTransformHex(toHex(...hslToRgb(h, sf, 1)))})`;
   } else if (_ce.mode === 'lum') {
     const [lm, s, h] = _ce.lum, sf = s / 100, lumT = lm / 1000;
-    const lumStops = [0, 0.04, 0.18, 0.40, 0.65, 1.0].map(x => `${toHex(...hslToRgb(h, sf, findLightness(h, sf, x)))} ${Math.round(x * 100)}%`);
+    const lumStops = [0, 0.04, 0.18, 0.40, 0.65, 1.0].map(x => `${cvdTransformHex(toHex(...hslToRgb(h, sf, findLightness(h, sf, x))))} ${Math.round(x * 100)}%`);
     R.clum.style.backgroundImage = `linear-gradient(to right,${lumStops.join(',')})`;
-    R.csat.style.backgroundImage = `linear-gradient(to right,${toHex(...hslToRgb(h, 0, findLightness(h, 0, lumT)))},${toHex(...hslToRgb(h, 1, findLightness(h, 1, lumT)))})`;
-    const hStops = Array.from({ length: 13 }, (_, i) => `${toHex(...hslToRgb(i * 30, sf, findLightness(i * 30, sf, lumT)))} ${Math.round(i / 12 * 100)}%`);
+    R.csat.style.backgroundImage = `linear-gradient(to right,${cvdTransformHex(toHex(...hslToRgb(h, 0, findLightness(h, 0, lumT))))},${cvdTransformHex(toHex(...hslToRgb(h, 1, findLightness(h, 1, lumT))))})`;
+    const hStops = Array.from({ length: 13 }, (_, i) => `${cvdTransformHex(toHex(...hslToRgb(i * 30, sf, findLightness(i * 30, sf, lumT))))} ${Math.round(i / 12 * 100)}%`);
     R.chue.style.backgroundImage = `linear-gradient(to right,${hStops.join(',')})`;
   }
   // Gray uses the static black→white .custom-gray-slider gradient.
@@ -3309,12 +3435,13 @@ function chipEditorWriteThrough() {
 function updateChipVisual(idx, hex) {
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (!chipEl) return;
-  const [r, g, b] = hexToRgb(hex);
-  const lum = relativeLuminance(r, g, b);
-  chipEl.style.background = hex;
-  chipEl.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
+  const cvdHex = cvdTransformHex(hex);
+  const [cvdChipR, cvdChipG, cvdChipB] = hexToRgb(cvdHex);
+  const cvdLum = relativeLuminance(cvdChipR, cvdChipG, cvdChipB);
+  chipEl.style.background = cvdHex;
+  chipEl.style.color = cvdLum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
   const hx = chipEl.querySelector('.palette-chip-hex');
-  if (hx) hx.textContent = formatHex(toHex(r, g, b));
+  if (hx) hx.textContent = formatHex(hex);
 }
 
 function onChipEditorSlider() {
@@ -3392,7 +3519,8 @@ function renderChipEditorWheel() {
         let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360;
         const sat = Math.min(1, dist / R);
         const rgb = lumMode ? hslToRgb(hue, sat, findLightness(hue, sat, lumT)) : hslToRgb(hue, sat, L);
-        d[idx] = rgb[0]; d[idx + 1] = rgb[1]; d[idx + 2] = rgb[2]; d[idx + 3] = 255;
+        const [tr, tg, tb] = cvdTransformRgb(rgb[0], rgb[1], rgb[2]);
+        d[idx] = tr; d[idx + 1] = tg; d[idx + 2] = tb; d[idx + 3] = 255;
       }
     }
     _ceWheelCache = { key, img };
@@ -3437,9 +3565,9 @@ function chipEditorRenderPreview() {
   if (_ce.role === 'bg') { bgHex = editedHex; textHex = partner; cmpRole = 'Text'; }
   else                   { textHex = editedHex; bgHex = partner; cmpRole = 'BG'; }
 
-  _ceRefs.tile.style.background = bgHex;
-  _ceRefs.ag.style.color = textHex;
-  _ceRefs.cmpBtn.style.color = textHex; // icon stroke = currentColor
+  _ceRefs.tile.style.background = cvdTransformHex(bgHex);
+  _ceRefs.ag.style.color = cvdTransformHex(textHex);
+  _ceRefs.cmpBtn.style.color = cvdTransformHex(textHex); // icon stroke = currentColor
 
   const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
   _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
@@ -3630,8 +3758,11 @@ function renderPalette() {
     const chip = document.createElement('div');
     chip.className = 'palette-chip';
     chip.dataset.idx = String(flatIdx);
-    chip.style.background = hex;
-    chip.style.color = lum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
+    chip.style.background = cvdTransformHex(hex);
+    const cvdHexColor = cvdTransformHex(hex);
+    const [cvdChipR, cvdChipG, cvdChipB] = hexToRgb(cvdHexColor);
+    const cvdLum = relativeLuminance(cvdChipR, cvdChipG, cvdChipB);
+    chip.style.color = cvdLum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
 
     const rank = document.createElement('span');
     rank.className = 'palette-chip-rank';
@@ -3701,14 +3832,14 @@ function renderPalettePreviews() {
       const el = document.createElement('span');
       el.className = 'preview-palette-text';
       el.textContent = 'Ag';
-      el.style.color = hex;
+      el.style.color = cvdTransformHex(hex);
       el.title = `Text color ${formatHex(hex.toUpperCase())} — open palette`;
       host.appendChild(el);
     });
     bgColors.forEach(({ hex }) => {
       const el = document.createElement('span');
       el.className = 'preview-palette-bg';
-      el.style.background = hex;
+      el.style.background = cvdTransformHex(hex);
       el.title = `Background color ${formatHex(hex.toUpperCase())} — open palette`;
       host.appendChild(el);
     });

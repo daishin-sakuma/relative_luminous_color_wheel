@@ -929,6 +929,8 @@ input.custom-val:focus {
      went blank while the sidebar was open. Coexists with the slide animation
      (its keyframes override transform while running). */
   transform: translateZ(0);
+}
+.palette-section--opening {
   animation: palette-slide-in 0.22s ease;
 }
 @keyframes palette-slide-in { from { transform: translateX(100%); } }
@@ -1977,19 +1979,3 @@ input.custom-val:focus {
 }
 
 /* ── Color-vision-deficiency simulation stability for WebKit/Safari ────────── */
-html.cvd-active,
-html.cvd-active body {
-  will-change: filter;
-}
-
-/* Force hardware accelerated layers to correctly composite the root filter in Safari */
-html.cvd-active canvas,
-html.cvd-active .palette-section,
-html.cvd-active .settings-panel,
-html.cvd-active .swatch,
-html.cvd-active .preview-badge,
-html.cvd-active .chip-editor-badge {
-  will-change: filter;
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
-}
