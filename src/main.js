@@ -2761,17 +2761,26 @@ function syncSidebarHeight() {
 window.addEventListener('resize', syncSidebarHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', syncSidebarHeight);
 
-// After the sidebar height re-syncs to the keyboard-shrunk viewport, keep a
-// focused chip-editor hex field visible in the rail (registered after
-// syncSidebarHeight so the rail's new size is already applied). The keyboard
-// animation fires a burst of resize events, so coalesce them and run a single
-// smooth scroll once it settles — the hex glides into view instead of jumping.
+// After the sidebar height re-syncs to the keyboard-shrunk viewport, keep the
+// chip editor tidy in the rail (registered after syncSidebarHeight so the rail's
+// new size is already applied). The keyboard's open/close animation fires a burst
+// of resize events, so coalesce them and run a single smooth scroll once it
+// settles: while the hex is focused, glide it into view; once the keyboard is
+// dismissed, glide the editor back to its centered position.
 let _ceHexScrollTimer = null;
+let _ceHexReturnPending = false;
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => {
-    if (!(_ceRefs && _ceRefs.hex && document.activeElement === _ceRefs.hex)) return;
+    if (!(_ceEl && paletteRail.contains(_ceEl))) return; // only while the editor is open
     clearTimeout(_ceHexScrollTimer);
-    _ceHexScrollTimer = setTimeout(() => scrollChipHexIntoView(true), 80);
+    _ceHexScrollTimer = setTimeout(() => {
+      if (_ceRefs && _ceRefs.hex && document.activeElement === _ceRefs.hex) {
+        scrollChipHexIntoView(true);          // keyboard open → keep the hex visible
+      } else if (_ceHexReturnPending && !_ceEl.contains(document.activeElement)) {
+        centerChipEditorInRail(true);         // keyboard dismissed → glide back to center
+        _ceHexReturnPending = false;
+      }
+    }, 80);
   });
 }
 
@@ -3368,6 +3377,9 @@ function buildChipEditor() {
   // viewport after focus, so scroll now and again once the resize settles.
   _ceRefs.hex.addEventListener('focus', () => { _ceRefs.hex.select(); scrollChipHexIntoView(); });
   _ceRefs.hex.addEventListener('click', () => _ceRefs.hex.select());
+  // Arm the smooth "return" so that when the keyboard is dismissed the editor
+  // glides back to centre (handled by the visualViewport resize above).
+  _ceRefs.hex.addEventListener('blur', () => { _ceHexReturnPending = true; });
   _ceRefs.hexCopy.addEventListener('click', () => {
     copyToClipboard(formatHex(toHex(_ce.r, _ce.g, _ce.b)));
     _ceRefs.hex.classList.add('hex-copied');
@@ -3863,6 +3875,8 @@ function _ceOutsideUp(e) {
 
 function closeChipEditor(skipRender, afterClose) {
   if (_ceIdx === null) { if (afterClose) afterClose(); return; }
+  _ceHexReturnPending = false;
+  clearTimeout(_ceHexScrollTimer);
   const lockRail = !!afterClose;
   if (lockRail) paletteRail.classList.add('palette-rail--editor-transition');
   document.removeEventListener('pointerdown', _ceOutsideDown, true);
