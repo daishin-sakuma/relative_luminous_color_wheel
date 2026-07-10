@@ -2548,16 +2548,17 @@ function downloadExport(format) {
   tabs.className = 'palette-export-tabs';
   tabs.append(colorGroup, fileGroup);
 
-  // Copy + Download — same segmented button style/size as the tabs.
+  // Copy + Download — two independent buttons that each fill half the row.
   const flashLabel = (btn, text, cls) => {
     const orig = btn.textContent;
     btn.textContent = text;
     btn.classList.add(cls);
     setTimeout(() => { btn.textContent = orig; btn.classList.remove(cls); }, 1500);
   };
-  const actGroup = mkGroup();
+  const actions = document.createElement('div');
+  actions.className = 'palette-export-actions';
   const copy = document.createElement('button');
-  copy.className = 'settings-theme-btn palette-export-copy';
+  copy.className = 'palette-export-btn palette-export-copy';
   copy.textContent = 'Copy';
   copy.title = 'Copy the selected export';
   copy.addEventListener('click', async () => {
@@ -2567,14 +2568,11 @@ function downloadExport(format) {
     } catch (_) { /* clipboard denied */ }
   });
   const dl = document.createElement('button');
-  dl.className = 'settings-theme-btn palette-export-dl';
+  dl.className = 'palette-export-btn palette-export-dl';
   dl.textContent = 'Download';
   dl.title = 'Download the selected export';
   dl.addEventListener('click', () => { downloadExport(selectedFormat); flashLabel(dl, 'Saved', 'done'); });
-  actGroup.append(copy, dl);
-  const actions = document.createElement('div');
-  actions.className = 'palette-export-actions';
-  actions.append(actGroup);
+  actions.append(copy, dl);
 
   host.append(tabs, actions);
 

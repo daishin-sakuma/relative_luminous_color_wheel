@@ -1017,32 +1017,49 @@ input.custom-val:focus {
   text-transform: uppercase;
   color: var(--muted);
 }
-/* Export controls reuse the Preferences segmented tabs (.settings-theme-btns /
-   .settings-theme-btn) verbatim. The mode-switch and file-format groups share
-   one row, side by side; Copy/Download match. */
+/* The mode-switch and file-format tab groups share one row and always stretch to
+   fill the sidebar width (each group grows from its content, buttons split their
+   group equally). Copy/Download live on their own row below. */
 .palette-export-tabs,
 .palette-export-actions {
   display: flex;
   flex-wrap: nowrap;
   gap: 0.4rem;
 }
-.palette-export .settings-theme-btn.copied,
-.palette-export .settings-theme-btn.done { color: var(--pass); }
+.palette-export-tabs > .settings-theme-btns { flex: 1 1 auto; min-width: 0; }
+.palette-export-tabs .settings-theme-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
 
-/* On phones the two tab groups would overflow at the Preferences button size, so
-   let both groups (and their buttons) split the row equally and tighten the type
-   just enough that everything stays on one line without wrapping. */
+/* On phones the buttons get narrow enough that "Tailwind" would overflow, so
+   tighten the type just enough that everything stays on one line. */
 @media (max-width: 430px) {
-  .palette-export-tabs .settings-theme-btns { flex: 1 1 0; min-width: 0; }
   .palette-export-tabs .settings-theme-btn {
-    flex: 1 1 0;
-    min-width: 0;
     padding: 0.3rem 0.1rem;
     font-size: 0.54rem;
     letter-spacing: 0.01em;
-    white-space: nowrap;
   }
 }
+
+/* Copy + Download: independent buttons, each filling half the row with a gap
+   between (the sidebar's own padding provides the left/right inset). */
+.palette-export-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding: 0.34rem 0.4rem;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
+}
+.palette-export-btn:hover  { background: var(--surface2); color: var(--text); }
+.palette-export-btn:active { transform: scale(0.97); }
+.palette-export-btn.copied,
+.palette-export-btn.done { color: var(--pass); border-color: var(--pass); }
 
 /* ── Inline palette-chip editor ─────────────────────────────────────────────── */
 .chip-editor {
