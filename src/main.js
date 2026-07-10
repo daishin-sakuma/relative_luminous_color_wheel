@@ -2507,31 +2507,27 @@ function downloadExport(format) {
 // are included), so users can copy or download straight from the palette.
 {
   const host = /** @type {HTMLElement} */ (document.getElementById('palette-export'));
-  const DL_SVG   = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>';
-  const COPY_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
   const FORMATS = [['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']];
 
-  // Rather than a copy+download pair per format (which crowds the narrow mobile
-  // sidebar), pick one file format via a tab row, then act on it — so every
-  // control keeps a comfortable tap size.
+  // Match the Preferences export controls exactly: segmented .settings-theme-btns
+  // groups. Pick one file format, then Copy/Download act on it.
   let selectedFormat = 'css';
+  const mkGroup = () => { const d = document.createElement('div'); d.className = 'settings-theme-btns'; return d; };
 
   // OKLCH/HEX/RGB color-format toggle, shared with the Preferences export (a single
   // delegated click handler drives every .export-colorfmt-btn on the page).
-  const colorRow = document.createElement('div');
-  colorRow.className = 'palette-colorfmt-btns';
+  const colorGroup = mkGroup();
   for (const cf of ['oklch', 'hex', 'rgb']) {
     const b = document.createElement('button');
-    b.className = 'palette-colorfmt-btn export-colorfmt-btn';
+    b.className = 'settings-theme-btn export-colorfmt-btn';
     b.dataset.colorfmt = cf;
     b.textContent = cf.toUpperCase();
     b.title = `Export colors as ${cf.toUpperCase()}`;
-    colorRow.appendChild(b);
+    colorGroup.appendChild(b);
   }
 
   // File-format tabs (CSS / Tailwind / JSON) — one is selected; the actions use it.
-  const fileRow = document.createElement('div');
-  fileRow.className = 'palette-colorfmt-btns palette-fileformat-btns';
+  const fileGroup = mkGroup();
   const fileBtns = {};
   const selectFormat = fmt => {
     selectedFormat = fmt;
@@ -2539,47 +2535,48 @@ function downloadExport(format) {
   };
   for (const [format, label] of FORMATS) {
     const b = document.createElement('button');
-    b.className = 'palette-colorfmt-btn palette-fileformat-btn';
+    b.className = 'settings-theme-btn palette-fileformat-btn';
     b.textContent = label;
     b.title = `Select ${label} export`;
     b.addEventListener('click', () => selectFormat(format));
     fileBtns[format] = b;
-    fileRow.appendChild(b);
+    fileGroup.appendChild(b);
   }
 
-  // Copy + Download, operating on the currently selected file format.
-  const flashLabel = (btn, labelEl, text, cls) => {
-    const orig = labelEl.textContent;
-    labelEl.textContent = text;
-    btn.classList.add(cls);
-    setTimeout(() => { labelEl.textContent = orig; btn.classList.remove(cls); }, 1500);
-  };
-  const actions = document.createElement('div');
-  actions.className = 'palette-export-actions';
+  // Mode-switch tabs and file-format tabs sit on one row, side by side.
+  const tabs = document.createElement('div');
+  tabs.className = 'palette-export-tabs';
+  tabs.append(colorGroup, fileGroup);
 
+  // Copy + Download — same segmented button style/size as the tabs.
+  const flashLabel = (btn, text, cls) => {
+    const orig = btn.textContent;
+    btn.textContent = text;
+    btn.classList.add(cls);
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove(cls); }, 1500);
+  };
+  const actGroup = mkGroup();
   const copy = document.createElement('button');
-  copy.className = 'palette-export-action palette-export-copy';
-  copy.innerHTML = COPY_SVG;
-  const copyLabel = document.createElement('span');
-  copyLabel.textContent = 'Copy';
-  copy.appendChild(copyLabel);
+  copy.className = 'settings-theme-btn palette-export-copy';
+  copy.textContent = 'Copy';
+  copy.title = 'Copy the selected export';
   copy.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(buildExport(selectedFormat));
-      flashLabel(copy, copyLabel, 'Copied', 'copied');
+      flashLabel(copy, 'Copied', 'copied');
     } catch (_) { /* clipboard denied */ }
   });
-
   const dl = document.createElement('button');
-  dl.className = 'palette-export-action palette-export-dl';
-  dl.innerHTML = DL_SVG;
-  const dlLabel = document.createElement('span');
-  dlLabel.textContent = 'Download';
-  dl.appendChild(dlLabel);
-  dl.addEventListener('click', () => { downloadExport(selectedFormat); flashLabel(dl, dlLabel, 'Saved', 'done'); });
+  dl.className = 'settings-theme-btn palette-export-dl';
+  dl.textContent = 'Download';
+  dl.title = 'Download the selected export';
+  dl.addEventListener('click', () => { downloadExport(selectedFormat); flashLabel(dl, 'Saved', 'done'); });
+  actGroup.append(copy, dl);
+  const actions = document.createElement('div');
+  actions.className = 'palette-export-actions';
+  actions.append(actGroup);
 
-  actions.append(copy, dl);
-  host.append(colorRow, fileRow, actions);
+  host.append(tabs, actions);
 
   selectFormat('css');
   // Reflect the persisted color format on every toggle button now that they all exist.
@@ -3283,6 +3280,10 @@ let _ceRaf = 0;        // rAF gate for wheel + preview repaint
 let _ceWheelCache = null;
 let _ceCloseTimer = null;
 
+// Display size (CSS px) the chip-editor wheel is drawn/measured against. The
+// CSS caps the wheel at this width; the canvas buffer and marker scale off it.
+const CE_WHEEL_SIZE = 200;
+
 const _ceClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function chipEditorActiveIdx() { return _ceIdx; }
@@ -3309,10 +3310,14 @@ function buildChipEditor() {
   };
   _ceEl.querySelectorAll('[data-ch]').forEach(inp => { _ceRefs.ranges[inp.dataset.ch] = inp; });
   _ceEl.querySelectorAll('[data-chv]').forEach(inp => { _ceRefs.vals[inp.dataset.chv] = inp; });
-  // Render at device resolution (CSS holds the display size at 132px) so the
-  // circle edge downsamples smoothly like the main wheels, not jagged.
+  // Render above the display size for a smooth downsample, but cap the buffer:
+  // Lum mode rebuilds the whole wheel (per-pixel lightness search) whenever the
+  // target luminance changes, so an unbounded high-DPI buffer would make the Lum
+  // slider drag janky. 300px keeps that cost near the old 132px wheel's while the
+  // wheel now displays much larger.
   const wdpr = Math.min(window.devicePixelRatio || 1, 2);
-  _ceRefs.wheel.width = _ceRefs.wheel.height = Math.round(132 * wdpr);
+  const buf = Math.min(Math.round(CE_WHEEL_SIZE * wdpr), 300);
+  _ceRefs.wheel.width = _ceRefs.wheel.height = buf;
   _ceRefs.ctx = _ceRefs.wheel.getContext('2d');
 
   // Keep chip drag / outside-close from firing on editor interactions
@@ -3683,7 +3688,7 @@ function renderChipEditorWheel() {
   if (lumMode)                 { mh = _ce.lum[2]; ms = _ce.lum[1] / 100; }
   else if (_ce.mode === 'hsl') { mh = _ce.hsl[0]; ms = _ce.hsl[1] / 100; }
   else                         { const h = rgbToHsl(_ce.r, _ce.g, _ce.b); mh = h[0]; ms = h[1]; }
-  const a = mh * Math.PI / 180, dd = ms * R, scale = SZ / 132;
+  const a = mh * Math.PI / 180, dd = ms * R, scale = SZ / CE_WHEEL_SIZE;
   const cx = R + Math.cos(a) * dd, cy = R + Math.sin(a) * dd, rad = 5 * scale;
   // Double ring (white halo + black core) so the marker stays visible on any
   // underlying colour — a single-tone ring vanishes when the selected colour's

@@ -1017,61 +1017,32 @@ input.custom-val:focus {
   text-transform: uppercase;
   color: var(--muted);
 }
-/* Segmented tab rows: color format (OKLCH/HEX/RGB) and file format
-   (CSS/Tailwind/JSON). Buttons split the row equally so each stays a
-   comfortable tap target on mobile. */
-.palette-colorfmt-btns {
-  display: flex;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.palette-colorfmt-btn {
-  flex: 1 1 0;
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.66rem;
-  letter-spacing: 0.04em;
-  padding: 0.42rem 0.2rem;
-  min-height: 34px;
-  transition: background 0.12s, color 0.12s;
-}
-.palette-colorfmt-btn + .palette-colorfmt-btn { border-left: 1px solid var(--border); }
-.palette-colorfmt-btn:hover  { color: var(--text); }
-.palette-colorfmt-btn:active { transform: scale(0.96); }
-.palette-colorfmt-btn.active { background: var(--border); color: var(--text); }
-
-/* Copy + Download actions — operate on the selected file format. */
+/* Export controls reuse the Preferences segmented tabs (.settings-theme-btns /
+   .settings-theme-btn) verbatim. The mode-switch and file-format groups share
+   one row, side by side; Copy/Download match. */
+.palette-export-tabs,
 .palette-export-actions {
   display: flex;
+  flex-wrap: nowrap;
   gap: 0.4rem;
 }
-.palette-export-action {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.34rem;
-  min-height: 40px;
-  padding: 0.3rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: none;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.72rem;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+.palette-export .settings-theme-btn.copied,
+.palette-export .settings-theme-btn.done { color: var(--pass); }
+
+/* On phones the two tab groups would overflow at the Preferences button size, so
+   let both groups (and their buttons) split the row equally and tighten the type
+   just enough that everything stays on one line without wrapping. */
+@media (max-width: 430px) {
+  .palette-export-tabs .settings-theme-btns { flex: 1 1 0; min-width: 0; }
+  .palette-export-tabs .settings-theme-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.3rem 0.1rem;
+    font-size: 0.54rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
 }
-.palette-export-action svg { flex-shrink: 0; }
-.palette-export-action:hover  { background: var(--border); }
-.palette-export-action:active { transform: scale(0.97); }
-.palette-export-action.copied,
-.palette-export-action.done { color: var(--pass); border-color: var(--pass); }
 
 /* ── Inline palette-chip editor ─────────────────────────────────────────────── */
 .chip-editor {
@@ -1127,9 +1098,21 @@ input.custom-val:focus {
   }
 }
 .chip-editor .custom-mode-tabs { margin-bottom: 0; }
+/* Match the Preferences tabs' type + hover (scoped so the main picker's tabs are
+   untouched); the 4 tabs keep flex:1 to fill the editor width. */
+.chip-editor .custom-mode-tab {
+  font-size: 0.68rem;
+  letter-spacing: 0.10em;
+}
+.chip-editor .custom-mode-tab:hover { background: var(--surface2); color: var(--text); }
 .chip-editor-wheel {
-  width: 132px;
-  height: 132px;
+  /* Standalone sizing (no .custom-wheel-canvas class) so the main picker's
+     mobile shrink rules don't apply — larger target for fine edits, shrinks
+     only on very narrow screens. */
+  display: block;
+  width: min(100%, 200px);
+  height: auto;
+  aspect-ratio: 1 / 1;
   align-self: center;
   border-radius: 50%;
   cursor: crosshair;
@@ -1141,7 +1124,10 @@ input.custom-val:focus {
 .chip-editor-hex {
   width: 100%;
   text-align: left;
-  padding-right: 1.9rem; /* room for the copy icon */
+  /* Drop the fixed 22px field height and give the text more vertical breathing
+     room top and bottom. */
+  height: auto;
+  padding: 0.4rem 1.9rem 0.4rem 0.4rem; /* right: room for the copy icon */
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
 }
@@ -1240,36 +1226,13 @@ input.custom-val:focus {
   color: var(--muted);
 }
 .chip-editor-badge.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 45%, transparent); }
+/* Cancel/Done reuse the Preferences segmented tabs (.settings-theme-btns /
+   .settings-theme-btn): the group spans the width with each button filling half;
+   Done keeps the .active highlight so it still reads as the primary action. */
 .chip-editor-actions {
-  display: flex;
-  gap: 0.5rem;
   width: 100%;
 }
-.chip-editor-cancel,
-.chip-editor-done {
-  flex: 1;
-  padding: 0.4rem;
-  border-radius: 5px;
-  font-family: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: opacity 0.12s, transform 0.08s;
-}
-.chip-editor-done {
-  background: var(--border);
-  border: none;
-  color: var(--text);
-}
-.chip-editor-cancel {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-}
-.chip-editor-cancel:hover,
-.chip-editor-done:hover  { opacity: 0.85; }
-.chip-editor-cancel:active,
-.chip-editor-done:active { transform: scale(0.98); }
+.chip-editor-actions .settings-theme-btn { flex: 1; }
 .palette-chip.editing { outline: 1px solid var(--accent); outline-offset: 1px; }
 .palette-rail {
   display: flex;
