@@ -2761,6 +2761,16 @@ function syncSidebarHeight() {
 window.addEventListener('resize', syncSidebarHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', syncSidebarHeight);
 
+// After the sidebar height re-syncs to the keyboard-shrunk viewport, keep a
+// focused chip-editor hex field visible in the rail (registered after
+// syncSidebarHeight so the rail's new size is already applied). Instant scroll
+// so it tracks the keyboard animation without fighting a smooth scroll.
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    if (_ceRefs && _ceRefs.hex && document.activeElement === _ceRefs.hex) scrollChipHexIntoView(false);
+  });
+}
+
 // Hovering the toggle opens the sidebar (mouse only — on touch, the tap's
 // synthesized pointerenter would open it just before click toggled it shut).
 // A click that lands while the hover-open is still active is absorbed, so
@@ -3349,8 +3359,10 @@ function buildChipEditor() {
     if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
     else _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b);
   });
-  // Match the main custom hex field: focusing/tapping selects all; the icon copies
-  _ceRefs.hex.addEventListener('focus', () => _ceRefs.hex.select());
+  // Match the main custom hex field: focusing/tapping selects all; the icon copies.
+  // Also keep the field visible in the rail — the mobile keyboard shrinks the
+  // viewport after focus, so scroll now and again once the resize settles.
+  _ceRefs.hex.addEventListener('focus', () => { _ceRefs.hex.select(); scrollChipHexIntoView(); });
   _ceRefs.hex.addEventListener('click', () => _ceRefs.hex.select());
   _ceRefs.hexCopy.addEventListener('click', () => {
     copyToClipboard(formatHex(toHex(_ce.r, _ce.g, _ce.b)));
@@ -3756,6 +3768,23 @@ function centerChipEditorInRail(smooth = true) {
     top: Math.max(0, next),
     behavior: smooth ? 'smooth' : 'auto',
   });
+}
+
+// Keep the chip-editor hex field visible in the rail's scroll area. On mobile the
+// keyboard shrinks the viewport (and thus the sidebar/rail) when the field gains
+// focus, which can push the selected hex out of view; this re-centers it in
+// whatever visible height remains. Only scrolls when it's actually clipped, so an
+// already-visible field isn't yanked around.
+function scrollChipHexIntoView(smooth = true) {
+  if (!_ceRefs || !_ceRefs.hex || !_ceEl || !paletteRail.contains(_ceEl)) return;
+  const railRect = paletteRail.getBoundingClientRect();
+  const elRect = _ceRefs.hex.getBoundingClientRect();
+  const margin = 8;
+  if (elRect.top >= railRect.top + margin && elRect.bottom <= railRect.bottom - margin) return;
+  const next = paletteRail.scrollTop
+    + (elRect.top + elRect.height / 2)
+    - (railRect.top + railRect.height / 2);
+  paletteRail.scrollTo({ top: Math.max(0, next), behavior: smooth ? 'smooth' : 'auto' });
 }
 
 function openChipEditor(idx) {
