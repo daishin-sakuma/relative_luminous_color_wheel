@@ -2507,63 +2507,137 @@ function downloadExport(format) {
 // are included), so users can copy or download straight from the palette.
 {
   const host = /** @type {HTMLElement} */ (document.getElementById('palette-export'));
-  const DL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>';
+  const DL_SVG   = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>';
+  const COPY_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
   const FORMATS = [['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']];
 
-  const flash = (btn, cls) => { btn.classList.add(cls); setTimeout(() => btn.classList.remove(cls), 1500); };
+  // Rather than a copy+download pair per format (which crowds the narrow mobile
+  // sidebar), pick one file format via a tab row, then act on it — so every
+  // control keeps a comfortable tap size.
+  let selectedFormat = 'css';
 
   // OKLCH/HEX/RGB color-format toggle, shared with the Preferences export (a single
   // delegated click handler drives every .export-colorfmt-btn on the page).
-  const fmtRow = document.createElement('div');
-  fmtRow.className = 'palette-export-row palette-colorfmt-row';
-  const fmtLabel = document.createElement('span');
-  fmtLabel.className = 'palette-export-fmt';
-  fmtLabel.textContent = 'Color format';
-  const fmtBtns = document.createElement('div');
-  fmtBtns.className = 'palette-colorfmt-btns';
+  const colorRow = document.createElement('div');
+  colorRow.className = 'palette-colorfmt-btns';
   for (const cf of ['oklch', 'hex', 'rgb']) {
     const b = document.createElement('button');
     b.className = 'palette-colorfmt-btn export-colorfmt-btn';
     b.dataset.colorfmt = cf;
     b.textContent = cf.toUpperCase();
     b.title = `Export colors as ${cf.toUpperCase()}`;
-    fmtBtns.appendChild(b);
+    colorRow.appendChild(b);
   }
-  fmtRow.append(fmtLabel, fmtBtns);
-  host.appendChild(fmtRow);
 
+  // File-format tabs (CSS / Tailwind / JSON) — one is selected; the actions use it.
+  const fileRow = document.createElement('div');
+  fileRow.className = 'palette-colorfmt-btns palette-fileformat-btns';
+  const fileBtns = {};
+  const selectFormat = fmt => {
+    selectedFormat = fmt;
+    for (const k in fileBtns) fileBtns[k].classList.toggle('active', k === fmt);
+  };
   for (const [format, label] of FORMATS) {
-    const row = document.createElement('div');
-    row.className = 'palette-export-row';
-
-    const name = document.createElement('span');
-    name.className = 'palette-export-fmt';
-    name.textContent = label;
-
-    const copy = document.createElement('button');
-    copy.className = 'palette-export-act palette-export-copy';
-    copy.title = `Copy ${label}`;
-    copy.setAttribute('aria-label', `Copy ${label}`);
-    copy.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(buildExport(format));
-        flash(copy, 'copied');
-      } catch (_) { /* clipboard denied */ }
-    });
-
-    const dl = document.createElement('button');
-    dl.className = 'palette-export-act palette-export-dl';
-    dl.title = `Download ${label}`;
-    dl.setAttribute('aria-label', `Download ${label}`);
-    dl.innerHTML = DL_SVG;
-    dl.addEventListener('click', () => { downloadExport(format); flash(dl, 'done'); });
-
-    row.append(name, copy, dl);
-    host.appendChild(row);
+    const b = document.createElement('button');
+    b.className = 'palette-colorfmt-btn palette-fileformat-btn';
+    b.textContent = label;
+    b.title = `Select ${label} export`;
+    b.addEventListener('click', () => selectFormat(format));
+    fileBtns[format] = b;
+    fileRow.appendChild(b);
   }
 
-  // Reflect the persisted format on every toggle button now that they all exist.
+  // Copy + Download, operating on the currently selected file format.
+  const flashLabel = (btn, labelEl, text, cls) => {
+    const orig = labelEl.textContent;
+    labelEl.textContent = text;
+    btn.classList.add(cls);
+    setTimeout(() => { labelEl.textContent = orig; btn.classList.remove(cls); }, 1500);
+  };
+  const actions = document.createElement('div');
+  actions.className = 'palette-export-actions';
+
+  const copy = document.createElement('button');
+  copy.className = 'palette-export-action palette-export-copy';
+  copy.innerHTML = COPY_SVG;
+  const copyLabel = document.createElement('span');
+  copyLabel.textContent = 'Copy';
+  copy.appendChild(copyLabel);
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(buildExport(selectedFormat));
+      flashLabel(copy, copyLabel, 'Copied', 'copied');
+    } catch (_) { /* clipboard denied */ }
+  });
+
+  const dl = document.createElement('button');
+  dl.className = 'palette-export-action palette-export-dl';
+  dl.innerHTML = DL_SVG;
+  const dlLabel = document.createElement('span');
+  dlLabel.textContent = 'Download';
+  dl.appendChild(dlLabel);
+  dl.addEventListener('click', () => { downloadExport(selectedFormat); flashLabel(dl, dlLabel, 'Saved', 'done'); });
+
+  actions.append(copy, dl);
+  host.append(colorRow, fileRow, actions);
+
+  selectFormat('css');
+  // Reflect the persisted color format on every toggle button now that they all exist.
   syncExportColorFmtButtons();
+}
+
+// ─── "What is this?" — modal on wide screens, inline <details> on narrow ──────
+// Wide viewports leave the 720px prose column stranded beside a wide, empty
+// section, so there the trigger opens a centered modal instead. The real
+// .about-body node is moved into the modal (never duplicated — keeps a single
+// copy for SEO) and moved back on close. Narrow screens keep the inline expand.
+{
+  const section = document.querySelector('.about');
+  const details = section && section.querySelector('details');
+  const summary = section && section.querySelector('summary');
+  const body    = section && section.querySelector('.about-body');
+  const modal   = document.getElementById('about-modal');
+  const content = document.getElementById('about-modal-content');
+  if (details && summary && body && modal && content) {
+    const wide = window.matchMedia('(min-width: 1024px)');
+    let lastFocus = null;
+
+    const openModal = () => {
+      details.open = false;          // keep the inline copy collapsed
+      content.appendChild(body);     // move the node in (no duplicate text)
+      modal.hidden = false;
+      document.body.classList.add('about-modal-open');
+      lastFocus = document.activeElement;
+      modal.querySelector('.about-modal-close').focus();
+    };
+    const closeModal = () => {
+      if (modal.hidden) return;
+      modal.hidden = true;
+      document.body.classList.remove('about-modal-open');
+      details.appendChild(body);     // return the node to <details>
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+      else summary.focus();
+    };
+
+    summary.addEventListener('click', e => {
+      if (!wide.matches) return;     // narrow: let <details> toggle inline
+      e.preventDefault();
+      openModal();
+    });
+    modal.addEventListener('click', e => {
+      if (/** @type {HTMLElement} */ (e.target).hasAttribute('data-about-close')) closeModal();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !modal.hidden) closeModal();
+    });
+    // Keep the two presentations consistent when the viewport crosses 1024px.
+    const onChange = () => {
+      if (wide.matches) { if (details.open) openModal(); }  // inline → modal
+      else if (!modal.hidden) closeModal();                 // modal → collapsed
+    };
+    if (wide.addEventListener) wide.addEventListener('change', onChange);
+    else if (wide.addListener) wide.addListener(onChange);
+  }
 }
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
@@ -3435,14 +3509,24 @@ function syncChipEditorControls() {
   scheduleChipEditorPaint();
 }
 
+function paintChipEditor() {
+  renderChipEditorWheel();
+  renderChipEditorSliderTracks();
+  chipEditorRenderPreview();
+}
+
 function scheduleChipEditorPaint() {
   if (_ceRaf) return;
-  _ceRaf = requestAnimationFrame(() => {
-    _ceRaf = 0;
-    renderChipEditorWheel();
-    renderChipEditorSliderTracks();
-    chipEditorRenderPreview();
-  });
+  _ceRaf = requestAnimationFrame(() => { _ceRaf = 0; paintChipEditor(); });
+}
+
+// Paint synchronously, cancelling any pending rAF. Used when a wheel gesture
+// ends: on Android a single tap's rAF-deferred paint can be dropped by the
+// compositor, leaving the picker ring unpainted — a synchronous draw inside the
+// pointer event is presented reliably, so the ring always lands on the wheel.
+function flushChipEditorPaint() {
+  if (_ceRaf) { cancelAnimationFrame(_ceRaf); _ceRaf = 0; }
+  paintChipEditor();
 }
 
 // Colour the active mode's slider tracks, mirroring the main custom picker so
@@ -3548,8 +3632,11 @@ function attachChipEditorWheel() {
     handleChipEditorWheel(e);
   });
   cv.addEventListener('pointermove', move);
-  cv.addEventListener('pointerup',   () => { down = false; });
-  cv.addEventListener('pointercancel', () => { down = false; });
+  // Flush a synchronous paint when the gesture ends so a stationary tap always
+  // leaves the picker ring drawn (see flushChipEditorPaint — Android drops the
+  // rAF-deferred paint for a lone tap).
+  cv.addEventListener('pointerup',     () => { down = false; flushChipEditorPaint(); });
+  cv.addEventListener('pointercancel', () => { down = false; flushChipEditorPaint(); });
 }
 
 function handleChipEditorWheel(e) {
