@@ -2763,11 +2763,15 @@ if (window.visualViewport) window.visualViewport.addEventListener('resize', sync
 
 // After the sidebar height re-syncs to the keyboard-shrunk viewport, keep a
 // focused chip-editor hex field visible in the rail (registered after
-// syncSidebarHeight so the rail's new size is already applied). Instant scroll
-// so it tracks the keyboard animation without fighting a smooth scroll.
+// syncSidebarHeight so the rail's new size is already applied). The keyboard
+// animation fires a burst of resize events, so coalesce them and run a single
+// smooth scroll once it settles — the hex glides into view instead of jumping.
+let _ceHexScrollTimer = null;
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => {
-    if (_ceRefs && _ceRefs.hex && document.activeElement === _ceRefs.hex) scrollChipHexIntoView(false);
+    if (!(_ceRefs && _ceRefs.hex && document.activeElement === _ceRefs.hex)) return;
+    clearTimeout(_ceHexScrollTimer);
+    _ceHexScrollTimer = setTimeout(() => scrollChipHexIntoView(true), 80);
   });
 }
 
