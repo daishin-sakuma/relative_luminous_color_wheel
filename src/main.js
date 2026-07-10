@@ -251,6 +251,12 @@ function oklchComponents(hex) {
   return [+L.toFixed(4), +C.toFixed(4), +H.toFixed(2)];
 }
 
+/** sRGB as a CSS rgb() string, e.g. 'rgb(76 187 255)'. */
+function rgbCss(hex) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${r} ${g} ${b})`;
+}
+
 /**
  * Return a foreground color (near-black or near-white) that contrasts with bgLum.
  * Threshold ≈ 0.179 is where black and white have equal contrast ratio.
@@ -2272,13 +2278,14 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
-// Color value format for exports: 'oklch' (default) or 'hex'. Shared by the
-// Preferences preview and the palette sidebar; toggled via any
+// Color value format for exports: 'oklch' (default), 'hex' or 'rgb'. Shared by
+// the Preferences preview and the palette sidebar; toggled via any
 // .export-colorfmt-btn and persisted across sessions.
+const EXPORT_COLOR_FMTS = ['oklch', 'hex', 'rgb'];
 let exportColorFmt = 'oklch';
 try {
   const v = localStorage.getItem('export-color-fmt');
-  if (v === 'hex' || v === 'oklch') exportColorFmt = v;
+  if (EXPORT_COLOR_FMTS.includes(v)) exportColorFmt = v;
 } catch (e) {}
 
 const _exportColorFmtListeners = [];
@@ -2291,7 +2298,7 @@ function syncExportColorFmtButtons() {
 }
 
 function setExportColorFmt(fmt) {
-  if ((fmt !== 'hex' && fmt !== 'oklch') || fmt === exportColorFmt) return;
+  if (!EXPORT_COLOR_FMTS.includes(fmt) || fmt === exportColorFmt) return;
   exportColorFmt = fmt;
   try { localStorage.setItem('export-color-fmt', fmt); } catch (e) {}
   syncExportColorFmtButtons();
@@ -2321,18 +2328,20 @@ function buildExport(format) {
   };
   const text = roleColors('fg', wheelHex);
   const bg   = roleColors('bg', customHex);
-  const RANKS = ['primary', 'secondary', 'tertiary', 'quaternary'];
+  const RANKS = ['primary', 'secondary', 'tertiary', 'quaternary', 'quinary', 'senary', 'septenary', 'octonary', 'nonary', 'denary'];
   const key = pos => RANKS[pos] || String(pos + 1);
   const ratio = contrastRatio(text[0].lum, bg[0].lum); // text-primary vs bg-primary
 
-  // Color value in the chosen format; hex keeps the source, OKLCH is the modern
-  // CSS color space. The unused representation is kept in a comment for reference.
-  const isHex = exportColorFmt === 'hex';
+  // Color value in the chosen format (hex string, rgb() or oklch()); the
+  // alternate representation is kept in a trailing comment for reference.
+  const isOklch = exportColorFmt === 'oklch';
+  const cssVal = c => exportColorFmt === 'hex' ? c.hex.toLowerCase()
+                    : exportColorFmt === 'rgb' ? rgbCss(c.hex)
+                    :                            oklchCss(c.hex);
+  const altComment = c => exportColorFmt === 'hex' ? oklchCss(c.hex) : c.hex.toLowerCase();
 
   if (format === 'css') {
-    const cssLine = (name, c) => isHex
-      ? `  ${name}: ${c.hex.toLowerCase()};  /* ${oklchCss(c.hex)} — luminance ${c.lum.toFixed(4)} */`
-      : `  ${name}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} — luminance ${c.lum.toFixed(4)} */`;
+    const cssLine = (name, c) => `  ${name}: ${cssVal(c)};  /* ${altComment(c)} — luminance ${c.lum.toFixed(4)} */`;
     const lines = [
       ...text.map((c, i) => cssLine(`--color-text-${key(i)}`, c)),
       ...bg.map((c, i)   => cssLine(`--color-bg-${key(i)}`, c)),
@@ -2346,9 +2355,7 @@ ${lines.join('\n')}
   }
   if (format === 'tailwind') {
     // Tailwind v4 @theme; its default palette is OKLCH, so OKLCH is idiomatic.
-    const twLine = (name, c) => isHex
-      ? `  ${name}: ${c.hex.toLowerCase()};  /* ${oklchCss(c.hex)} */`
-      : `  ${name}: ${oklchCss(c.hex)};  /* ${c.hex.toLowerCase()} */`;
+    const twLine = (name, c) => `  ${name}: ${cssVal(c)};  /* ${altComment(c)} */`;
     const lines = [
       ...text.map((c, i) => twLine(`--color-text-${key(i)}`, c)),
       ...bg.map((c, i)   => twLine(`--color-bg-${key(i)}`, c)),
@@ -2361,17 +2368,18 @@ ${lines.join('\n')}
   }
   // W3C Design Tokens (DTCG) 2025.10: color $value is an object with a
   // colorSpace + components array; `hex` is the optional sRGB fallback.
+  // DTCG has no hex-vs-rgb distinction (both are sRGB); only OKLCH differs.
   const colorToken = c => {
-    if (isHex) {
-      const [r, g, b] = hexToRgb(c.hex);
-      const comp = [r, g, b].map(v => +(v / 255).toFixed(4));
-      return { $value: { colorSpace: 'srgb', components: comp, alpha: 1, hex: c.hex.toLowerCase() } };
+    if (isOklch) {
+      return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex: c.hex.toLowerCase() } };
     }
-    return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex: c.hex.toLowerCase() } };
+    const [r, g, b] = hexToRgb(c.hex);
+    const comp = [r, g, b].map(v => +(v / 255).toFixed(4));
+    return { $value: { colorSpace: 'srgb', components: comp, alpha: 1, hex: c.hex.toLowerCase() } };
   };
   const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
   const json = {
-    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). Colors are ${isHex ? 'sRGB' : 'OKLCH'} per the W3C Design Tokens format (2025.10); each carries an sRGB hex fallback.`,
+    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). Colors are ${isOklch ? 'OKLCH' : 'sRGB'} per the W3C Design Tokens format (2025.10); each carries an sRGB hex fallback.`,
     color: {
       $type: 'color',
       text: groupTokens(text),
@@ -2474,7 +2482,7 @@ function downloadExport(format) {
     if (pinnedFormat !== null) render(pinnedFormat);
   });
 
-  // Re-render the live preview when the OKLCH/HEX color format toggles.
+  // Re-render the live preview when the color format toggles.
   onExportColorFmtChange(() => { if (pinnedFormat !== null) render(pinnedFormat); });
 
   sync();
@@ -2490,7 +2498,7 @@ function downloadExport(format) {
 
   const flash = (btn, cls) => { btn.classList.add(cls); setTimeout(() => btn.classList.remove(cls), 1500); };
 
-  // OKLCH/HEX color-format toggle, shared with the Preferences export (a single
+  // OKLCH/HEX/RGB color-format toggle, shared with the Preferences export (a single
   // delegated click handler drives every .export-colorfmt-btn on the page).
   const fmtRow = document.createElement('div');
   fmtRow.className = 'palette-export-row palette-colorfmt-row';
@@ -2499,7 +2507,7 @@ function downloadExport(format) {
   fmtLabel.textContent = 'Color format';
   const fmtBtns = document.createElement('div');
   fmtBtns.className = 'palette-colorfmt-btns';
-  for (const cf of ['oklch', 'hex']) {
+  for (const cf of ['oklch', 'hex', 'rgb']) {
     const b = document.createElement('button');
     b.className = 'palette-colorfmt-btn export-colorfmt-btn';
     b.dataset.colorfmt = cf;
@@ -2604,8 +2612,8 @@ function downloadExport(format) {
 // governed by the "Color in share link" preference). The section is hidden
 // while empty so it never affects the height-fitted layouts.
 
-// Per role: only the first four get names (primary / secondary / tertiary /
-// quaternary); further colors are still storable up to this reasonable cap.
+// Per role: all ten get Latin-ordinal names (primary … denary), which is also
+// the storage cap.
 const PALETTE_ROLE_MAX = 10;
 /** @type {{hex: string, role: 'fg'|'bg'}[]} hex is lowercase '#rrggbb'; role
     records which picker the color was pinned from (fg = wheel, bg = custom)
@@ -2725,6 +2733,16 @@ function resetPaletteSwipeStyles() {
   paletteSection.style.transform = '';
 }
 
+// After a touch gesture the toggle's :hover sticks (mobile Safari keeps the
+// hovered look until you tap elsewhere), so a swipe-close that never touches
+// the toggle leaves it looking active. Dropping the element out of hit-testing
+// for one frame makes the browser recompute hover as false and clears it.
+function clearPaletteToggleHover() {
+  paletteToggle.blur();
+  paletteToggle.style.pointerEvents = 'none';
+  requestAnimationFrame(() => { paletteToggle.style.pointerEvents = ''; });
+}
+
 function finishPaletteSwipeClose(dx) {
   const w = Math.max(1, paletteSection.getBoundingClientRect().width);
   clearTimeout(_paletteCloseTimer);
@@ -2733,6 +2751,7 @@ function finishPaletteSwipeClose(dx) {
   saveToStorage('palette-open', '0');
   document.body.classList.remove('palette-open');
   paletteToggle.setAttribute('aria-expanded', 'false');
+  clearPaletteToggleHover();
   paletteSection.classList.add('palette-section--swiping');
   paletteSection.classList.remove('palette-section--closing');
   
@@ -3025,6 +3044,7 @@ function attachChipDrag(chip, index, role, listEl) {
         c.classList.remove('palette-chip--lifted', 'palette-chip--settling');
         c.style.transform = '';
       });
+      if (bgGroupHead) bgGroupHead.style.transform = '';
     };
 
     const determineTarget = (clientY) => {
@@ -3052,28 +3072,39 @@ function attachChipDrag(chip, index, role, listEl) {
     const applyVisualShift = (tr, ti) => {
       targetRole = tr;
       targetIndex = ti;
+      const cross = tr !== role;
 
+      // Treat the two lists plus the Background header as one continuous column
+      // (fg chips → BG head → bg chips) so a cross-group move opens a single,
+      // clean insertion gap and the header slides with it — instead of leaving
+      // a stray gap above a pinned "BACKGROUND" label.
       chipData.forEach(d => {
         let shift = 0;
-        if (d.role === role && role === targetRole) {
-          // Reordering within the same group
-          if (index < targetIndex && d.index > index && d.index <= targetIndex) {
-            shift = -slot;
-          } else if (index > targetIndex && d.index >= targetIndex && d.index < index) {
-            shift = slot;
-          }
-        } else {
-          // Moving between groups, or processing the non-target group
+        if (!cross) {
+          // Reorder within the same group
           if (d.role === role) {
-            // Source group: shift items up to fill the gap
-            if (d.index > index) shift = -slot;
-          } else if (d.role === targetRole) {
-            // Target group: shift items down to create insertion room
-            if (d.index >= targetIndex) shift = slot;
+            if (index < ti && d.index > index && d.index <= ti) shift = -slot;
+            else if (index > ti && d.index >= ti && d.index < index) shift = slot;
           }
+        } else if (role === 'fg') {
+          // fg → bg: everything below the source and above the insertion point
+          // (the trailing fg chips, and the bg chips before ti) slides up.
+          if (d.role === 'fg' && d.index > index) shift = -slot;
+          else if (d.role === 'bg' && d.index < ti) shift = -slot;
+        } else {
+          // bg → fg: everything from the insertion point down to the source
+          // (the fg chips at/after ti, and the bg chips before the source) slides down.
+          if (d.role === 'fg' && d.index >= ti) shift = slot;
+          else if (d.role === 'bg' && d.index < index) shift = slot;
         }
         d.el.style.transform = shift ? `translateY(${shift}px)` : '';
       });
+
+      // The Background header sits between the lists, so it moves with a
+      // cross-group drag: up when a Text color leaves for Background (Text
+      // shrinks), down when a Background color moves up to Text (Text grows).
+      const headShift = cross ? (role === 'fg' ? -slot : slot) : 0;
+      if (bgGroupHead) bgGroupHead.style.transform = headShift ? `translateY(${headShift}px)` : '';
     };
 
     const onMove = ev => {
@@ -3135,9 +3166,10 @@ function attachChipDrag(chip, index, role, listEl) {
   });
 }
 
-/** Rank name by position within a role group: 0 → Primary, 1 → Secondary,
-    then the plain ordinal. Shared by the sidebar badges and the export. */
-const PALETTE_RANKS = ['Primary', 'Secondary', 'Tertiary', 'Quaternary'];
+/** Rank name by position within a role group: 0 → Primary … 9 → Denary (the
+    PALETTE_ROLE_MAX cap), then the plain ordinal. Shared by the sidebar badges
+    and the export. */
+const PALETTE_RANKS = ['Primary', 'Secondary', 'Tertiary', 'Quaternary', 'Quinary', 'Senary', 'Septenary', 'Octonary', 'Nonary', 'Denary'];
 function paletteRankLabel(pos) {
   return PALETTE_RANKS[pos] || String(pos + 1);
 }
@@ -3205,7 +3237,20 @@ function buildChipEditor() {
     inp.addEventListener('input', onChipEditorSlider);
     addSliderTouchFix(inp); // cloned after the initial pass, so wire touch dragging here
   });
-  Object.values(_ceRefs.vals).forEach(inp => inp.addEventListener('change', onChipEditorValInput));
+  // Value inputs behave like the main picker's: select-all on focus (paste/copy),
+  // Arrow Up/Down nudge by one unit, Enter commits.
+  Object.values(_ceRefs.vals).forEach(inp => {
+    inp.addEventListener('change', onChipEditorValInput);
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        chipEditorValStep(inp, e.key === 'ArrowUp' ? 1 : -1);
+      } else if (e.key === 'Enter') {
+        inp.blur();
+      }
+    });
+  });
   _ceRefs.cancel.addEventListener('click', () => cancelChipEditor());
   _ceRefs.done.addEventListener('click', () => closeChipEditor());
   _ceRefs.hex.addEventListener('change', () => {
@@ -3452,6 +3497,23 @@ function onChipEditorValInput() {
   onChipEditorSlider();
 }
 
+// Arrow-key nudge for a value input: ±1 display unit (Lum's luminance steps by
+// 0.001, i.e. one slider step; everything else by 1), then apply + re-sync.
+function chipEditorValStep(input, dir) {
+  const key = input.dataset.chv;
+  const rng = _ceRefs.ranges[key];
+  if (!rng) return;
+  const isLum = key === 'clum';
+  const factor = isLum ? 1000 : 1;               // display → range units
+  const dispStep = isLum ? 0.001 : 1;
+  const rmin = parseFloat(rng.min), rmax = parseFloat(rng.max);
+  const cur = parseFloat(String(input.value).replace(/[^0-9.\-]/g, ''));
+  const base = Number.isFinite(cur) ? cur : rmin / factor;
+  const next = _ceClamp(base + dir * dispStep, rmin / factor, rmax / factor);
+  rng.value = String(Math.round(next * factor));
+  onChipEditorSlider();
+}
+
 function chipEditorSetRgb(r, g, b) {
   _ce.r = _ceClamp(Math.round(r), 0, 255);
   _ce.g = _ceClamp(Math.round(g), 0, 255);
@@ -3521,10 +3583,19 @@ function renderChipEditorWheel() {
   else if (_ce.mode === 'hsl') { mh = _ce.hsl[0]; ms = _ce.hsl[1] / 100; }
   else                         { const h = rgbToHsl(_ce.r, _ce.g, _ce.b); mh = h[0]; ms = h[1]; }
   const a = mh * Math.PI / 180, dd = ms * R, scale = SZ / 132;
+  const cx = R + Math.cos(a) * dd, cy = R + Math.sin(a) * dd, rad = 5 * scale;
+  // Double ring (white halo + black core) so the marker stays visible on any
+  // underlying colour — a single-tone ring vanishes when the selected colour's
+  // luminance sits near the black/white threshold.
+  ctx.lineWidth = 3.5 * scale;
+  ctx.strokeStyle = '#fff';
   ctx.beginPath();
-  ctx.arc(R + Math.cos(a) * dd, R + Math.sin(a) * dd, 5 * scale, 0, Math.PI * 2);
-  ctx.strokeStyle = relativeLuminance(_ce.r, _ce.g, _ce.b) > 0.35 ? '#000' : '#fff';
-  ctx.lineWidth = 2 * scale;
+  ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1.6 * scale;
+  ctx.strokeStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(cx, cy, rad, 0, Math.PI * 2);
   ctx.stroke();
 }
 
@@ -3584,7 +3655,7 @@ function centerChipEditorInRail(smooth = true) {
 }
 
 function openChipEditor(idx) {
-  if (_ceIdx === idx) { closeChipEditor(); return; } // toggle off
+  if (_ceIdx === idx) return; // already editing this chip → stay open (no toggle)
   if (_ceIdx !== null) { closeChipEditor(true, () => openChipEditor(idx)); return; }
   if (!palette[idx]) return;
   if (!_ceEl) buildChipEditor();
@@ -3627,6 +3698,12 @@ function _ceOutsideDown(e) {
   // the sidebar is outside the editing section, so a deliberate tap there
   // should behave like Done: save the live edits and leave edit mode.
   if (_ceEl && _ceEl.contains(t)) { _ceDownEvt = null; return; }
+  // Operating the currently-edited chip's own edit or copy button keeps the
+  // editor open (the pencil no longer toggles closed; copy just copies).
+  const chip = t.closest && t.closest('.palette-chip');
+  if (chip && chip.dataset.idx === String(_ceIdx) && t.closest('.palette-chip-edit, .palette-chip-copy')) {
+    _ceDownEvt = null; return;
+  }
   // Stash for the matching pointerup to measure distance/time.
   _ceDownEvt = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
 }
@@ -3700,8 +3777,9 @@ function reinsertChipEditor() {
 }
 
 function renderPalette() {
+  // A small dot marks a non-empty palette (no dot when empty); the old numeric
+  // count is gone, so this element carries no text.
   paletteToggleCount.hidden = palette.length === 0;
-  paletteToggleCount.textContent = String(palette.length);
   paletteRail.innerHTML = '';
 
   // Two role groups (Text = wheel colors, Background = custom colors), always

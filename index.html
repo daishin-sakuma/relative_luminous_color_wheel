@@ -7,7 +7,7 @@
 
   <!-- SEO -->
   <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast, explore luminance-stable hues, edit accessible palettes inline with tap-away save, cancel support, mobile-friendly drag reordering, and a touch drawer you drag right to close (with smooth spring-back); preview full-app color vision simulation (including layouts and preferences modal, optimized for iOS/Safari, Android &amp; Desktop) and export CSS, Tailwind, or W3C design tokens.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -110,7 +110,7 @@
       "Color palette sidebar with text/background roles, smooth in-place editing, tap-away save, cancel support, touch drag-to-close gesture, and drag & drop reordering (within groups or across roles)",
       "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview, selectable opposite-role comparison (defaults to Lum mode), one-tap Done, and one-tap Cancel to revert edits",
       "Full-app color vision simulation (protanopia, deuteranopia, tritanopia)",
-      "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, prioritizing saved swatches with live color backups",
+      "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB, prioritizing saved swatches with live color backups",
       "Accessible color scheme and dark-mode palette builder",
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
@@ -167,7 +167,7 @@
         "name": "Can I export colors to CSS, Tailwind, or design tokens?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Export your palette as CSS custom properties, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH or hex, always with an sRGB hex fallback. Your colors and palette also travel in a shareable URL."
+          "text": "Yes. Export your palette as CSS custom properties, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH, hex, or RGB, always with an sRGB hex fallback. Your colors and palette also travel in a shareable URL."
         }
       },
       {
@@ -223,7 +223,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.28.6</span>
+    <span class="app-version">ver. 1.29.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -268,7 +268,7 @@
           </label>
         </div>
         <div class="settings-toggle-row">
-          <span class="settings-row-label">Color in share link</span>
+          <span class="settings-row-label">Colors in share link</span>
           <label class="toggle-switch">
             <input type="checkbox" id="share-state-checkbox" checked>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -305,6 +305,7 @@
           <div class="settings-theme-btns">
             <button class="settings-theme-btn export-colorfmt-btn" data-colorfmt="oklch" title="Export colors as OKLCH">OKLCH</button>
             <button class="settings-theme-btn export-colorfmt-btn" data-colorfmt="hex" title="Export colors as hex">HEX</button>
+            <button class="settings-theme-btn export-colorfmt-btn" data-colorfmt="rgb" title="Export colors as rgb()">RGB</button>
           </div>
         </div>
         <div class="export-preview" id="export-preview" hidden>
@@ -391,7 +392,7 @@
         <span class="section-label">vs White &amp; Black</span>
         <button class="theme-toggle palette-toggle" id="palette-toggle" title="Palette" aria-label="Toggle palette sidebar" aria-expanded="false" aria-controls="palette-section">
           <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 0 0 5.304 0l6.401-6.402M6.75 21A3.75 3.75 0 0 1 3 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 0 0 3.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008Z"/></svg>
-          <span class="palette-toggle-count" id="palette-toggle-count" hidden></span>
+          <span class="palette-toggle-count" id="palette-toggle-count" aria-hidden="true" hidden></span>
         </button>
       </div>
       <div class="preview-tiles">
@@ -731,7 +732,7 @@
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
         <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color, tap outside the editor to save like Done, use Cancel to revert edits, reorder saved colors with a more forgiving mobile drag gesture, drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app (including the layout, sliders, and preferences modal) using high-fidelity, hardware-accelerated CSS and SVG filters (fully optimized for iOS/Safari, Android, and desktop browsers)</li>
-        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH or hex (with an sRGB hex fallback). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
+        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
       <h3>Who it's for</h3>
       <p>
@@ -772,7 +773,7 @@
         pick-then-check-then-adjust loop.</p>
       <p><strong>Can I export colors to CSS, Tailwind, or design tokens?</strong><br>
         Yes. Export your palette as CSS custom properties, a Tailwind v4 <code>@theme</code> block,
-        or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH or hex, always with an
+        or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH, hex, or RGB, always with an
         sRGB hex fallback. Pinned swatches are prioritized on export, while the active main picker
         colors are safely backed up inside CSS/Tailwind comments and JSON extension properties.
         Your colors and palette also travel in a shareable URL.</p>
