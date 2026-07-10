@@ -2334,7 +2334,6 @@ function buildExport(format) {
 
   // Color value in the chosen format (hex string, rgb() or oklch()); the
   // alternate representation is kept in a trailing comment for reference.
-  const isOklch = exportColorFmt === 'oklch';
   const cssVal = c => exportColorFmt === 'hex' ? c.hex.toLowerCase()
                     : exportColorFmt === 'rgb' ? rgbCss(c.hex)
                     :                            oklchCss(c.hex);
@@ -2366,27 +2365,40 @@ ${lines.join('\n')}
 }
 `;
   }
-  // W3C Design Tokens (DTCG) 2025.10: color $value is an object with a
-  // colorSpace + components array; `hex` is the optional sRGB fallback.
-  // DTCG has no hex-vs-rgb distinction (both are sRGB); only OKLCH differs.
+  // W3C Design Tokens (DTCG) 2025.10: a color $value is an OBJECT with a
+  // required colorSpace + components array (a bare hex string is not valid).
+  // sRGB components are 0–1 (not 0–255) and there is no separate "rgb" space —
+  // so hex and RGB both live in sRGB. We keep them distinct by notation: HEX
+  // carries the `hex` fallback string, RGB is pure sRGB channels, and OKLCH
+  // uses OKLCH components with an sRGB hex fallback for non-OKLCH consumers.
   const colorToken = c => {
-    if (isOklch) {
-      return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex: c.hex.toLowerCase() } };
+    const hex = c.hex.toLowerCase();
+    if (exportColorFmt === 'oklch') {
+      return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex } };
     }
     const [r, g, b] = hexToRgb(c.hex);
-    const comp = [r, g, b].map(v => +(v / 255).toFixed(4));
-    return { $value: { colorSpace: 'srgb', components: comp, alpha: 1, hex: c.hex.toLowerCase() } };
+    const components = [r, g, b].map(v => +(v / 255).toFixed(4));
+    return exportColorFmt === 'hex'
+      ? { $value: { colorSpace: 'srgb', components, alpha: 1, hex } }
+      : { $value: { colorSpace: 'srgb', components, alpha: 1 } };
   };
   const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
+  const fmtNote = exportColorFmt === 'oklch'
+    ? 'Colors use the OKLCH color space, each with an sRGB hex fallback.'
+    : exportColorFmt === 'hex'
+    ? 'Colors use the sRGB color space (components 0–1) with an sRGB hex fallback string.'
+    : 'Colors use the sRGB color space as numeric channels (components 0–1).';
   const json = {
-    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). Colors are ${isOklch ? 'OKLCH' : 'sRGB'} per the W3C Design Tokens format (2025.10); each carries an sRGB hex fallback.`,
+    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Per the W3C Design Tokens format (2025.10).`,
     color: {
       $type: 'color',
       text: groupTokens(text),
       bg:   groupTokens(bg),
     },
     $extensions: {
-      'relative-luminous-color-wheel': {
+      // Reverse-DNS namespace (DTCG SHOULD) to avoid clashes with other vendors'
+      // extension data; matches the app's reverse-domain identifier.
+      'app.vercel.relative-luminous-color-wheel': {
         textBgContrastRatio: +ratio.toFixed(2),
         textLuminances: text.map(c => +c.lum.toFixed(4)),
         bgLuminances:   bg.map(c => +c.lum.toFixed(4)),
@@ -2404,11 +2416,13 @@ ${lines.join('\n')}
   return JSON.stringify(json, null, 2) + '\n';
 }
 
-// Filename + MIME per export format (all plain text; extensions match syntax)
+// Filename + MIME per export format. JSON uses the DTCG-preferred media type
+// (application/design-tokens+json) so design-token-aware tools recognise it;
+// application/json remains an acceptable fallback per the spec.
 const EXPORT_FILE = {
   css:      { name: 'color-palette.css',          mime: 'text/css' },
   tailwind: { name: 'color-palette.tailwind.css', mime: 'text/css' },
-  json:     { name: 'color-palette.tokens.json',  mime: 'application/json' },
+  json:     { name: 'color-palette.tokens.json',  mime: 'application/design-tokens+json' },
 };
 
 /** Save the given export format as a downloaded file. */

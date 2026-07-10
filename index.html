@@ -167,7 +167,7 @@
         "name": "Can I export colors to CSS, Tailwind, or design tokens?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Export your palette as CSS custom properties, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH, hex, or RGB, always with an sRGB hex fallback. Your colors and palette also travel in a shareable URL."
+          "text": "Yes. Export your palette as CSS custom properties, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH, hex, or RGB, with an sRGB hex fallback in OKLCH and hex modes. Your colors and palette also travel in a shareable URL."
         }
       },
       {
@@ -223,7 +223,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.29.0</span>
+    <span class="app-version">ver. 1.29.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -732,7 +732,7 @@
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
         <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color, tap outside the editor to save like Done, use Cancel to revert edits, reorder saved colors with a more forgiving mobile drag gesture, drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app (including the layout, sliders, and preferences modal) using high-fidelity, hardware-accelerated CSS and SVG filters (fully optimized for iOS/Safari, Android, and desktop browsers)</li>
-        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
+        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
       <h3>Who it's for</h3>
       <p>
@@ -773,8 +773,8 @@
         pick-then-check-then-adjust loop.</p>
       <p><strong>Can I export colors to CSS, Tailwind, or design tokens?</strong><br>
         Yes. Export your palette as CSS custom properties, a Tailwind v4 <code>@theme</code> block,
-        or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH, hex, or RGB, always with an
-        sRGB hex fallback. Pinned swatches are prioritized on export, while the active main picker
+        or W3C Design Tokens (DTCG 2025.10) JSON — in your choice of OKLCH, hex, or RGB, with an
+        sRGB hex fallback in OKLCH and hex modes. Pinned swatches are prioritized on export, while the active main picker
         colors are safely backed up inside CSS/Tailwind comments and JSON extension properties.
         Your colors and palette also travel in a shareable URL.</p>
       <p><strong>Is it free and private?</strong><br>
