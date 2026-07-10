@@ -3225,11 +3225,35 @@ function buildChipEditor() {
       _ceRefs.hexCopy.classList.remove('hex-copied');
     }, 1500);
   });
+  // Mouse: hovering the caret opens the compare-color dropdown so you can slide
+  // straight down into it and pick. A short close delay + hover checks bridge
+  // the gap between the caret and the list. Touch keeps tap-to-toggle.
+  _ceRefs.cmpBtn.addEventListener('pointerenter', e => {
+    if (e.pointerType === 'mouse') { _ceCancelDropdownClose(); openChipEditorDropdown(); }
+  });
+  _ceRefs.cmpBtn.addEventListener('pointerleave', e => {
+    if (e.pointerType === 'mouse') _ceScheduleDropdownClose();
+  });
+  _ceRefs.dropdown.addEventListener('pointerenter', _ceCancelDropdownClose);
+  _ceRefs.dropdown.addEventListener('pointerleave', e => {
+    if (e.pointerType === 'mouse') _ceScheduleDropdownClose();
+  });
   _ceRefs.cmpBtn.addEventListener('click', toggleChipEditorDropdown);
   attachChipEditorWheel();
 }
 
 // ── Compare-color dropdown (single-select) ────────────────────────────────────
+let _ceDdHoverCloseTimer = 0;
+function _ceCancelDropdownClose() { clearTimeout(_ceDdHoverCloseTimer); _ceDdHoverCloseTimer = 0; }
+function _ceScheduleDropdownClose() {
+  _ceCancelDropdownClose();
+  _ceDdHoverCloseTimer = setTimeout(() => {
+    // Keep it open if the pointer is still over the caret or the list.
+    if (!_ceRefs || _ceRefs.dropdown.matches(':hover') || _ceRefs.cmpBtn.matches(':hover')) return;
+    closeChipEditorDropdown();
+  }, 260);
+}
+
 function toggleChipEditorDropdown() {
   if (_ceRefs.dropdown.hidden) openChipEditorDropdown();
   else closeChipEditorDropdown();
@@ -3275,6 +3299,7 @@ function openChipEditorDropdown() {
 }
 
 function closeChipEditorDropdown() {
+  _ceCancelDropdownClose();
   if (!_ceRefs || _ceRefs.dropdown.hidden) return;
   _ceRefs.dropdown.hidden = true;
   _ceRefs.cmpBtn.setAttribute('aria-expanded', 'false');
