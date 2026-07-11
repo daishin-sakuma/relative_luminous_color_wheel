@@ -108,7 +108,7 @@ header {
   align-items: center;
   justify-content: center;
 }
-.theme-toggle:hover  { opacity: 1; color: var(--text); }
+@media (hover: hover) { .theme-toggle:hover  { opacity: 1; color: var(--text); } }
 .theme-toggle:active { transform: scale(0.86); opacity: 0.9; }
 
 .wordmark {
@@ -454,7 +454,7 @@ input[type="range"]::-moz-range-thumb {
   user-select: none;
 }
 .custom-hex-copy-icon::after { content: '⧉'; }
-.custom-hex-copy-icon:hover { opacity: 0.8; }
+@media (hover: hover) { .custom-hex-copy-icon:hover { opacity: 0.8; } }
 .custom-hex-copy-icon.hex-copied { opacity: 1; color: var(--pass); }
 .custom-hex-copy-icon.hex-copied::after { content: '✓'; }
 
@@ -704,7 +704,7 @@ input.custom-val:focus {
   transition: opacity 0.12s, transform 0.08s;
   white-space: nowrap;
 }
-.preview-share-btn:hover  { opacity: 0.75; }
+@media (hover: hover) { .preview-share-btn:hover  { opacity: 0.75; } }
 .preview-share-btn:active { opacity: 0.55; transform: scale(0.95); }
 .preview-share-btn .preview-share-label,
 .preview-share-btn .preview-icon { color: var(--tile-bg); }
@@ -729,7 +729,7 @@ input.custom-val:focus {
   line-height: 0;
   transition: opacity 0.12s, transform 0.08s;
 }
-.preview-platform-btn:hover  { opacity: 0.75; }
+@media (hover: hover) { .preview-platform-btn:hover  { opacity: 0.75; } }
 .preview-platform-btn:active { opacity: 0.55; transform: scale(0.95); }
 .preview-platform-btn svg {
   width: 1em;
@@ -811,7 +811,7 @@ input.custom-val:focus {
   transition: opacity 0.12s, transform 0.1s;
 }
 .pin-btn svg { display: block; } /* no inline-baseline gap below the icon */
-.pin-btn:hover  { opacity: 1; }
+@media (hover: hover) { .pin-btn:hover  { opacity: 1; } }
 .pin-btn:active { transform: scale(0.9); }
 /* Overlaid on the custom color's mini swatch, flush right; color is set by
    syncCustomUI() to contrast with the swatch color underneath */
@@ -872,7 +872,7 @@ input.custom-val:focus {
   user-select: none;
 }
 .export-preview-copy::after { content: '⧉'; }
-.export-preview-copy:hover { opacity: 0.8; }
+@media (hover: hover) { .export-preview-copy:hover { opacity: 0.8; } }
 .export-preview-copy.copied { opacity: 1; color: var(--pass); }
 .export-preview-copy.copied::after { content: '✓'; }
 /* Download button — sits just left of the copy button, same affordance */
@@ -893,7 +893,7 @@ input.custom-val:focus {
   color: var(--text);
   transition: opacity 0.15s, color 0.15s;
 }
-.export-preview-dl:hover { opacity: 0.8; }
+@media (hover: hover) { .export-preview-dl:hover { opacity: 0.8; } }
 .export-preview-dl.done { opacity: 1; color: var(--pass); }
 
 /* ── APCA readout (WCAG 3 draft reference value) ──────────────────────────────
@@ -966,6 +966,9 @@ input.custom-val:focus {
    Black" row; visuals come from the shared .theme-toggle class (identical to
    the Preferences button), this only anchors the count badge */
 .palette-toggle { position: relative; }
+/* Highlighted only while the sidebar is open (hover is gated to hover devices so
+   a tap can't leave it stuck lit); back to normal once it closes. */
+body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 /* Small dot: shown only when the palette holds at least one color */
 .palette-toggle-count {
   position: absolute;
@@ -986,8 +989,18 @@ input.custom-val:focus {
 .palette-head {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.9rem; /* Palette · Undo/Redo · Clear all, left-aligned */
 }
+/* Undo / Redo — icon buttons in the same style as the Preferences/icon buttons
+   (.theme-toggle), sat between the "Palette" label and "Clear all". */
+.palette-history {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.palette-history-btn { font-size: 0.92rem; }
+.palette-history-btn:disabled { opacity: 0.28; cursor: default; }
+.palette-history-btn:disabled:hover { opacity: 0.28; color: var(--muted); }
 .palette-clear {
   background: none;
   border: none;
@@ -1000,7 +1013,7 @@ input.custom-val:focus {
   padding: 0.1rem 0;
   transition: color 0.12s;
 }
-.palette-clear:hover { color: var(--text); }
+@media (hover: hover) { .palette-clear:hover { color: var(--text); } }
 
 /* Export footer — same formats as Preferences, pinned below the rail */
 .palette-export {
@@ -1026,14 +1039,21 @@ input.custom-val:focus {
   flex-wrap: nowrap;
   gap: 0.4rem;
 }
-.palette-export-tabs > .settings-theme-btns { flex: 1 1 auto; min-width: 0; }
+.palette-export-tabs > .settings-theme-btns { flex: 1 1 0; min-width: 0; } /* both groups equal width */
 .palette-export-tabs .settings-theme-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
 
-/* On phones the buttons get narrow enough that "Tailwind" would overflow, so
-   tighten the type just enough that everything stays on one line. */
-@media (max-width: 430px) {
+/* With the two groups equal-width, "Tailwind" needs the buttons wider than a
+   half-sidebar gives below ~480px, so tighten the type in two tiers to keep
+   everything on one line without wrapping. */
+@media (max-width: 479px) {
   .palette-export-tabs .settings-theme-btn {
     padding: 0.3rem 0.1rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.02em;
+  }
+}
+@media (max-width: 400px) {
+  .palette-export-tabs .settings-theme-btn {
     font-size: 0.54rem;
     letter-spacing: 0.01em;
   }
@@ -1056,7 +1076,7 @@ input.custom-val:focus {
   padding: 0.34rem 0.4rem;
   transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
 }
-.palette-export-btn:hover  { background: var(--surface2); color: var(--text); }
+@media (hover: hover) { .palette-export-btn:hover  { background: var(--surface2); color: var(--text); } }
 .palette-export-btn:active { transform: scale(0.97); }
 .palette-export-btn.copied,
 .palette-export-btn.done { color: var(--pass); border-color: var(--pass); }
@@ -1169,37 +1189,65 @@ input.custom-val:focus {
 /* NATS has tall, asymmetric vertical metrics (ascent 1294 / descent −756 per
    970 upm), so even at line-height:1 the glyph ink sits ~0.10em below the box
    centre. Nudge up by that amount so "Ag" is optically centred in the tile. */
-.chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; transform: translateY(-0.103em); }
+.chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; transform: translateY(-0.103em); flex-shrink: 0; }
+/* Label + caret form ONE elongated hover/click trigger for the compare-color
+   dropdown, filling the row to the right of "Ag" and the full tile height. */
 .chip-editor-cmp-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  align-self: stretch;
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  justify-content: space-between;
+  gap: 0.6rem;
   background: none;
   border: none;
-  padding: 0.1rem;
+  padding: 0.2rem 0.15rem 0.2rem 0.1rem;
   border-radius: 4px;
   color: inherit; /* icon stroke is currentColor; JS sets it to the text color */
   cursor: pointer;
+  text-align: left;
+}
+/* Role + rank label, painted in the text colour by JS — full opacity so it works
+   as a contrast sample alongside "Ag". */
+.chip-editor-tile-label {
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-editor-tile-icon {
+  display: block;
+  flex-shrink: 0;
   opacity: 0.85;
   transition: opacity 0.12s;
 }
-.chip-editor-cmp-btn:hover { opacity: 1; }
-.chip-editor-tile-icon { display: block; }
-/* Compare-color dropdown (single-select) */
+@media (hover: hover) { .chip-editor-cmp-btn:hover .chip-editor-tile-icon { opacity: 1; } }
+/* Compare-color dropdown (single-select). The rounded, opaque shell does NOT
+   scroll — an inner element does — because a rounded overflow:auto box flashes
+   unpainted (transparent) corners during momentum scroll. */
 .chip-editor-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 6;
   min-width: 12rem;
-  max-height: 9rem;
-  overflow-y: auto;
-  padding: 0.25rem;
+  overflow: hidden;
   background: var(--surface2, var(--surface));
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+.chip-editor-dd-scroll {
+  max-height: 9rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 0.25rem;
 }
 .chip-editor-dropdown[hidden] { display: none; }
 .chip-editor-dd-item {
@@ -1216,7 +1264,7 @@ input.custom-val:focus {
   font-size: 0.68rem;
   text-align: left;
 }
-.chip-editor-dd-item:hover:not([disabled]) { background: var(--border); }
+@media (hover: hover) { .chip-editor-dd-item:hover:not([disabled]) { background: var(--border); } }
 .chip-editor-dd-item[aria-selected="true"] { background: var(--border); }
 .chip-editor-dd-item[disabled] { cursor: default; color: var(--muted); }
 .chip-editor-dd-role { flex-shrink: 0; min-width: 2.4em; font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
@@ -1243,13 +1291,40 @@ input.custom-val:focus {
   color: var(--muted);
 }
 .chip-editor-badge.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 45%, transparent); }
-/* Cancel/Done reuse the Preferences segmented tabs (.settings-theme-btns /
-   .settings-theme-btn): the group spans the width with each button filling half;
-   Done keeps the .active highlight so it still reads as the primary action. */
+/* Cancel/Done: two independent buttons, each filling half the row with a gap
+   between; Done is filled to read as the primary action, Cancel is outlined. */
 .chip-editor-actions {
+  display: flex;
+  gap: 0.5rem;
   width: 100%;
 }
-.chip-editor-actions .settings-theme-btn { flex: 1; }
+.chip-editor-cancel,
+.chip-editor-done {
+  flex: 1 1 0;
+  padding: 0.4rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, opacity 0.12s, transform 0.08s;
+}
+.chip-editor-done {
+  background: var(--border);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.chip-editor-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+@media (hover: hover) {
+.chip-editor-cancel:hover,
+.chip-editor-done:hover { opacity: 0.85; }
+}
+.chip-editor-cancel:active,
+.chip-editor-done:active { transform: scale(0.98); }
 .palette-chip.editing { outline: 1px solid var(--accent); outline-offset: 1px; }
 .palette-rail {
   display: flex;
@@ -1326,7 +1401,7 @@ input.custom-val:focus {
   flex-shrink: 0;
   transition: color 0.12s, opacity 0.12s;
 }
-.palette-group-add:hover { color: var(--text); }
+@media (hover: hover) { .palette-group-add:hover { color: var(--text); } }
 .palette-group-add:active { transform: scale(0.9); }
 .palette-group-add:disabled { opacity: 0.3; cursor: default; }
 .palette-group-list {
@@ -1374,7 +1449,7 @@ input.custom-val:focus {
   transition: opacity 0.15s;
 }
 .palette-chip-edit svg { display: block; }
-.palette-chip-edit:hover { opacity: 1; }
+@media (hover: hover) { .palette-chip-edit:hover { opacity: 1; } }
 /* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
 .palette-chip-copy {
   background: none;
@@ -1389,7 +1464,7 @@ input.custom-val:focus {
   user-select: none;
 }
 .palette-chip-copy::after { content: '⧉'; }
-.palette-chip-copy:hover { opacity: 1; }
+@media (hover: hover) { .palette-chip-copy:hover { opacity: 1; } }
 .palette-chip-copy.copied { opacity: 1; color: var(--pass); }
 .palette-chip-copy.copied::after { content: '✓'; }
 .palette-chip-remove {
@@ -1403,7 +1478,7 @@ input.custom-val:focus {
   padding: 0.5rem 0.5rem 0.5rem 0.15rem;
   transition: opacity 0.12s;
 }
-.palette-chip-remove:hover { opacity: 1; }
+@media (hover: hover) { .palette-chip-remove:hover { opacity: 1; } }
 /* ── About section ──────────────────────────────────────────────────────────── */
 .about {
   width: 100%;
@@ -1418,7 +1493,7 @@ input.custom-val:focus {
   padding: 0.35rem 0;
   transition: color 0.12s;
 }
-.about summary:hover { color: var(--text); }
+@media (hover: hover) { .about summary:hover { color: var(--text); } }
 .about summary h2 {
   display: inline;
   font-size: inherit;
@@ -1477,25 +1552,37 @@ input.custom-val:focus {
 }
 .about-modal-panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 780px;
   max-height: 84vh;
-  overflow-y: auto;
-  padding: 2rem 2.4rem 2.2rem;
+  /* The opaque, rounded panel does NOT scroll — an inner element does. A rounded
+     overflow:auto box flashes unpainted (transparent) corners during momentum
+     scroll; keeping the clip + background on this stationary layer avoids that. */
+  overflow: hidden;
   background: var(--ground);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
   animation: about-modal-pop 0.18s ease;
 }
+.about-modal-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain; /* don't let a fling chain out and reveal gaps */
+  min-height: 0;                /* allow the flex child to shrink and scroll */
+  /* Extra horizontal room so the copy stays clear of the floating close button
+     (its hit area sits in the right gutter, never over the text). */
+  padding: 2rem 3.4rem 2.2rem;
+}
 @keyframes about-modal-fade { from { opacity: 0; } }
 @keyframes about-modal-pop { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
 .about-modal-panel .about-body { max-width: none; padding-top: 0; }
 .about-modal-close {
-  position: sticky;
-  top: 0;
-  float: right;
-  margin: -0.6rem -0.9rem 0 0.6rem;
+  position: absolute;
+  top: 0.7rem;
+  right: 0.9rem;
+  z-index: 1;
   width: 2rem;
   height: 2rem;
   display: flex;
@@ -1510,7 +1597,7 @@ input.custom-val:focus {
   cursor: pointer;
   transition: color 0.12s, background 0.12s;
 }
-.about-modal-close:hover { color: var(--text); background: var(--border); }
+@media (hover: hover) { .about-modal-close:hover { color: var(--text); background: var(--border); } }
 body.about-modal-open { overflow: hidden; }
 
 /* ── Footer ─────────────────────────────────────────────────────────────────── */
@@ -1544,7 +1631,9 @@ body.about-modal-open { overflow: hidden; }
   align-items: center;
 }
 
-.settings-wrap:hover .theme-toggle { opacity: 1; color: var(--text); }
+@media (hover: hover) { .settings-wrap:hover .theme-toggle { opacity: 1; color: var(--text); } }
+/* Highlighted only while the Preferences popper is open; back to normal on close. */
+.settings-wrap.settings-open .theme-toggle { opacity: 1; color: var(--text); }
 
 .settings-panel {
   position: absolute;
@@ -1592,6 +1681,14 @@ body.about-modal-open { overflow: hidden; }
   display: flex;
   animation: panel-in 0.14s ease-out;
 }
+/* Click/tap toggle: JS opens with .settings-open; .settings-dismissed force-
+   closes even while the button is still hovered/tapped (it beats :hover by
+   coming later at equal specificity), so a second click/tap closes the panel. */
+.settings-wrap.settings-open .settings-panel {
+  display: flex;
+  animation: panel-in 0.14s ease-out;
+}
+.settings-wrap.settings-dismissed .settings-panel { display: none; }
 
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(-5px); }
@@ -1772,7 +1869,7 @@ body.about-modal-open { overflow: hidden; }
   text-transform: uppercase;
   transition: border-color 0.12s, color 0.12s, transform 0.1s;
 }
-.settings-reset-btn:hover  { border-color: var(--muted); color: var(--text); }
+@media (hover: hover) { .settings-reset-btn:hover  { border-color: var(--muted); color: var(--text); } }
 .settings-reset-btn:active { transform: scale(0.93); }
 
 .settings-divider {
@@ -1795,7 +1892,7 @@ body.about-modal-open { overflow: hidden; }
   line-height: 0;
   transition: opacity 0.2s;
 }
-.toggle-switch:hover { opacity: 0.82; }
+@media (hover: hover) { .toggle-switch:hover { opacity: 0.82; } }
 .toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 .toggle-track {

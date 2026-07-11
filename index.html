@@ -7,7 +7,7 @@
 
   <!-- SEO -->
   <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast, explore luminance-stable hues, edit accessible palettes inline with tap-away save, cancel support, mobile-friendly drag reordering, and a touch drawer you drag right to close (with smooth spring-back); preview full-app color vision simulation (including layouts and preferences modal, optimized for iOS/Safari, Android &amp; Desktop) and export CSS, Tailwind, or W3C design tokens.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -107,7 +107,7 @@
       "Experimental APCA perceptual lightness-contrast targets (Lc 45–90)",
       "WCAG 2.2 AA/AAA contrast checker vs white, black, or any custom color, with saved-palette swatch previews in every contrast tile",
       "APCA Lc readouts alongside every contrast ratio",
-      "Color palette sidebar with text/background roles, smooth in-place editing, tap-away save, cancel support, touch drag-to-close gesture, and drag & drop reordering (within groups or across roles)",
+      "Color palette sidebar with text/background roles, smooth in-place editing, tap-away save, cancel support, undo/redo of every palette edit, touch drag-to-close gesture, and drag & drop reordering (within groups or across roles)",
       "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview, selectable opposite-role comparison (defaults to Lum mode), one-tap Done, and one-tap Cancel to revert edits",
       "Full-app color vision simulation (protanopia, deuteranopia, tritanopia)",
       "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB, prioritizing saved swatches with live color backups",
@@ -223,7 +223,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.31.4</span>
+    <span class="app-version">ver. 1.32.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -675,14 +675,14 @@
             <input type="text" class="custom-val" id="cu-lum-val" value="0.200" inputmode="decimal" autocomplete="off" spellcheck="false">
           </div>
           <div class="custom-slider-row">
-            <span class="custom-ch">S</span>
-            <input type="range" id="cu-sat-slider" min="0" max="100" value="100">
-            <input type="text" class="custom-val" id="cu-sat-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
-          </div>
-          <div class="custom-slider-row">
             <span class="custom-ch">H</span>
             <input type="range" id="cu-hue-slider" min="0" max="359" value="0">
             <input type="text" class="custom-val" id="cu-hue-val" value="0°" inputmode="numeric" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="custom-slider-row">
+            <span class="custom-ch">S</span>
+            <input type="range" id="cu-sat-slider" min="0" max="100" value="100">
+            <input type="text" class="custom-val" id="cu-sat-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
           </div>
         </div>
         <div class="custom-slider-group" id="custom-group-gray">
@@ -730,7 +730,7 @@
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color, tap outside the editor to save like Done, use Cancel to revert edits, reorder saved colors with a more forgiving mobile drag gesture, drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary vs BG Primary"), tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), reorder saved colors with a more forgiving mobile drag gesture, drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app (including the layout, sliders, and preferences modal) using high-fidelity, hardware-accelerated CSS and SVG filters (fully optimized for iOS/Safari, Android, and desktop browsers)</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
@@ -791,7 +791,9 @@
   <div class="about-modal-backdrop" data-about-close></div>
   <div class="about-modal-panel" role="dialog" aria-modal="true" aria-label="What is this?">
     <button class="about-modal-close" type="button" aria-label="Close" data-about-close>&times;</button>
-    <div class="about-modal-content" id="about-modal-content"></div>
+    <div class="about-modal-scroll">
+      <div class="about-modal-content" id="about-modal-content"></div>
+    </div>
   </div>
 </div>
 
@@ -804,6 +806,14 @@
   <div class="palette-head">
     <span class="section-label">Palette</span>
     <button class="palette-clear" id="palette-clear">Clear all</button>
+    <div class="palette-history">
+      <button type="button" class="theme-toggle palette-history-btn" id="palette-undo" title="Undo" aria-label="Undo palette change">
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
+      </button>
+      <button type="button" class="theme-toggle palette-history-btn" id="palette-redo" title="Redo" aria-label="Redo palette change">
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 15 21 9m0 0-6-6M21 9H9a6 6 0 0 0 0 12h3"/></svg>
+      </button>
+    </div>
   </div>
   <div class="palette-rail" id="palette-rail"></div>
   <div class="palette-export" id="palette-export">
@@ -852,6 +862,7 @@
       <div class="chip-editor-tile">
         <span class="chip-editor-ag">Ag</span>
         <button type="button" class="chip-editor-cmp-btn" title="Choose the color to compare against" aria-label="Choose the color to compare against" aria-haspopup="listbox" aria-expanded="false">
+          <span class="chip-editor-tile-label"></span>
           <svg xmlns="http://www.w3.org/2000/svg" class="chip-editor-tile-icon" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
         </button>
         <div class="chip-editor-dropdown" role="listbox" hidden></div>
@@ -862,9 +873,9 @@
         <span class="chip-editor-badges"></span>
       </div>
     </div>
-    <div class="chip-editor-actions settings-theme-btns">
-      <button type="button" class="settings-theme-btn chip-editor-cancel">Cancel</button>
-      <button type="button" class="settings-theme-btn chip-editor-done active">Done</button>
+    <div class="chip-editor-actions">
+      <button type="button" class="chip-editor-cancel">Cancel</button>
+      <button type="button" class="chip-editor-done">Done</button>
     </div>
   </div>
 </template>

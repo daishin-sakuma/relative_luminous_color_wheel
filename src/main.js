@@ -2676,6 +2676,7 @@ function downloadExport(format) {
 {
   const wrap = /** @type {HTMLElement} */ (document.querySelector('.settings-wrap'));
   const panel = document.getElementById('settings-panel');
+  const btn = document.getElementById('settings-btn');
   if (wrap && panel) {
     const syncPanelHeight = () => {
       const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
@@ -2687,6 +2688,35 @@ function downloadExport(format) {
     window.addEventListener('resize', syncPanelHeight);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
     syncPanelHeight();
+
+    // The panel opens on mouse hover (CSS) and on tap (sticky :hover). Add a
+    // click/tap toggle so pressing the button again closes it. `sOpen` tracks the
+    // logical open state: mouse hover-open syncs it so the first click then
+    // closes; .settings-dismissed force-closes over the (sticky) :hover.
+    if (btn) {
+      let sOpen = false;
+      const openIt = () => {
+        sOpen = true;
+        wrap.classList.remove('settings-dismissed');
+        wrap.classList.add('settings-open');
+        syncPanelHeight();
+      };
+      const closeIt = () => {
+        sOpen = false;
+        wrap.classList.remove('settings-open');
+        wrap.classList.add('settings-dismissed');
+        btn.blur();
+      };
+      const reset = () => { sOpen = false; wrap.classList.remove('settings-open', 'settings-dismissed'); };
+      btn.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') openIt(); });
+      wrap.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') reset(); });
+      btn.addEventListener('click', () => { sOpen ? closeIt() : openIt(); });
+      // Tap/click anywhere outside the control closes it. Use closeIt (which sets
+      // .settings-dismissed) so it beats a lingering sticky :hover on touch.
+      document.addEventListener('pointerdown', e => {
+        if (sOpen && !wrap.contains(/** @type {Node} */ (e.target))) closeIt();
+      }, true);
+    }
   }
 }
 
@@ -2992,6 +3022,50 @@ else if (_paletteToggleMq.addListener) _paletteToggleMq.addListener(placePalette
 
 function savePalette() { saveToStorage('palette-colors', JSON.stringify(palette)); }
 
+// ─── Palette undo / redo ──────────────────────────────────────────────────────
+// Snapshot the palette before each structural edit (add / remove / clear /
+// reorder) so those edits — deletions especially — can be undone and redone.
+let _palUndo = [];
+let _palRedo = [];
+const _PAL_HISTORY_MAX = 50;
+const _clonePalette = () => palette.map(e => ({ ...e }));
+
+function pushPaletteHistory(snapshot) {
+  _palUndo.push(snapshot);
+  if (_palUndo.length > _PAL_HISTORY_MAX) _palUndo.shift();
+  _palRedo.length = 0;
+  updatePaletteHistoryButtons();
+}
+function recordPaletteHistory() { pushPaletteHistory(_clonePalette()); }
+function _restorePaletteSnapshot(snapshot) {
+  if (_ceIdx !== null) {
+    // Drop any in-progress edit (revert to its original) so closing the editor
+    // doesn't record it as a separate history step during undo/redo.
+    if (_ceOrigHex !== null && palette[_ceIdx]) palette[_ceIdx].hex = _ceOrigHex;
+    closeChipEditor(true);
+  }
+  palette = snapshot.map(e => ({ ...e }));
+  savePalette();
+  renderPalette();
+  updatePaletteHistoryButtons();
+}
+function undoPalette() {
+  if (!_palUndo.length) return;
+  _palRedo.push(_clonePalette());
+  _restorePaletteSnapshot(_palUndo.pop());
+}
+function redoPalette() {
+  if (!_palRedo.length) return;
+  _palUndo.push(_clonePalette());
+  _restorePaletteSnapshot(_palRedo.pop());
+}
+function updatePaletteHistoryButtons() {
+  const u = /** @type {HTMLButtonElement} */ (document.getElementById('palette-undo'));
+  const r = /** @type {HTMLButtonElement} */ (document.getElementById('palette-redo'));
+  if (u) u.disabled = _palUndo.length === 0;
+  if (r) r.disabled = _palRedo.length === 0;
+}
+
 function addToPalette(hex, role) {
   const commit = () => {
     hex = hex.toLowerCase();
@@ -3000,6 +3074,7 @@ function addToPalette(hex, role) {
     // (primary / secondary / tertiary / quaternary)
     if (palette.some(e => e.hex === hex && e.role === role)) return;
     if (palette.filter(e => e.role === role).length >= PALETTE_ROLE_MAX) return;
+    recordPaletteHistory();
     palette.push({ hex, role });
     savePalette();
     renderPalette();
@@ -3012,6 +3087,7 @@ function addToPalette(hex, role) {
 
 function removeFromPalette(index) {
   const commit = () => {
+    recordPaletteHistory();
     palette.splice(index, 1);
     savePalette();
     renderPalette();
@@ -3241,6 +3317,7 @@ function attachChipDrag(chip, index, role, listEl) {
       paletteSection.classList.remove('palette-section--dragging');
       if (!lifted) return;
       if (commit && (targetRole !== role || targetIndex !== index)) {
+        recordPaletteHistory();
         reorderAcrossRoles(role, index, targetRole, targetIndex);
       }
       renderPalette(); // rebuild resets every chip's inline transform + rank labels
@@ -3320,6 +3397,7 @@ function buildChipEditor() {
     hexCopy: q('.chip-editor-hex-copy'),
     tile:   q('.chip-editor-tile'),
     ag:     q('.chip-editor-ag'),
+    tileLabel: q('.chip-editor-tile-label'),
     cmpBtn: q('.chip-editor-cmp-btn'),
     dropdown: q('.chip-editor-dropdown'),
     cmpRole: q('.chip-editor-cmp-role'),
@@ -3392,6 +3470,7 @@ function buildChipEditor() {
   // Mouse: hovering the caret opens the compare-color dropdown so you can slide
   // straight down into it and pick. A short close delay + hover checks bridge
   // the gap between the caret and the list. Touch keeps tap-to-toggle.
+  // The whole label+caret button is one hover/click trigger for the dropdown.
   _ceRefs.cmpBtn.addEventListener('pointerenter', e => {
     if (e.pointerType === 'mouse') { _ceCancelDropdownClose(); openChipEditorDropdown(); }
   });
@@ -3412,7 +3491,7 @@ function _ceCancelDropdownClose() { clearTimeout(_ceDdHoverCloseTimer); _ceDdHov
 function _ceScheduleDropdownClose() {
   _ceCancelDropdownClose();
   _ceDdHoverCloseTimer = setTimeout(() => {
-    // Keep it open if the pointer is still over the caret or the list.
+    // Keep it open if the pointer is still over the trigger button or the list.
     if (!_ceRefs || _ceRefs.dropdown.matches(':hover') || _ceRefs.cmpBtn.matches(':hover')) return;
     closeChipEditorDropdown();
   }, 260);
@@ -3426,13 +3505,18 @@ function toggleChipEditorDropdown() {
 function buildChipEditorDropdown() {
   const dd = _ceRefs.dropdown;
   dd.innerHTML = '';
+  // The rounded shell stays put; this inner element is what scrolls (avoids the
+  // transparent-corner flash a rounded overflow:auto box shows on fast scroll).
+  const scroll = document.createElement('div');
+  scroll.className = 'chip-editor-dd-scroll';
+  dd.appendChild(scroll);
   const list = partnerList();
   if (!list.length) {
     const info = document.createElement('div');
     info.className = 'chip-editor-dd-item';
     info.setAttribute('disabled', '');
     info.textContent = `No saved ${chipEditorOppRole() === 'fg' ? 'text' : 'background'} colors`;
-    dd.appendChild(info);
+    scroll.appendChild(info);
     return;
   }
   const roleLabel = chipEditorOppRole() === 'fg' ? 'TEXT' : 'BG';
@@ -3450,7 +3534,7 @@ function buildChipEditorDropdown() {
     it.append(rl, sw, nm, hx);
     if (i === _cePartner) { const ck = document.createElement('span'); ck.className = 'chip-editor-dd-check'; ck.textContent = '✓'; it.appendChild(ck); }
     it.addEventListener('click', () => { _cePartner = i; chipEditorRenderPreview(); closeChipEditorDropdown(); });
-    dd.appendChild(it);
+    scroll.appendChild(it);
   });
 }
 
@@ -3761,6 +3845,20 @@ function chipEditorRenderPreview() {
   _ceRefs.ag.style.color = cvdTransformHex(textHex);
   _ceRefs.cmpBtn.style.color = cvdTransformHex(textHex); // icon stroke = currentColor
 
+  // Label the preview in the text colour so it reads as a contrast sample next
+  // to "Ag". When editing a Text colour (the "Ag" is that edited colour) show
+  // "<edited> vs <partner>"; when editing a BG colour (the "Ag" is the partner)
+  // just name the partner.
+  const partnerLabel = cmpRole + ' ' + (list.length ? paletteRankLabel(_cePartner) : '(picker)');
+  if (_ce.role === 'fg') {
+    let rankPos = 0;
+    for (let i = 0; i < _ceIdx; i++) if (palette[i] && palette[i].role === 'fg') rankPos++;
+    _ceRefs.tileLabel.textContent = `Text ${paletteRankLabel(rankPos)} vs ${partnerLabel}`;
+  } else {
+    _ceRefs.tileLabel.textContent = partnerLabel;
+  }
+  _ceRefs.tileLabel.style.color = cvdTransformHex(textHex);
+
   const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
   _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
   _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
@@ -3884,6 +3982,14 @@ function closeChipEditor(skipRender, afterClose) {
   _ceDownEvt = null;
   closeChipEditorDropdown();
   const idx = _ceIdx;
+  // A committed re-edit (Done / tap-away keeps the change) is undoable: record the
+  // pre-edit palette (this chip back at its original hex). Cancel reverts the hex
+  // first, so no change is seen here and nothing is recorded.
+  if (_ceOrigHex !== null && palette[idx] && palette[idx].hex !== _ceOrigHex) {
+    const pre = _clonePalette();
+    pre[idx] = { ...pre[idx], hex: _ceOrigHex };
+    pushPaletteHistory(pre);
+  }
   _ceIdx = null;
   _ce = null;
   _ceOrigHex = null;
@@ -4079,10 +4185,16 @@ document.getElementById('pin-custom').addEventListener('click', () => {
   addToPalette(toHex(cR, cG, cB), 'bg');
 });
 document.getElementById('palette-clear').addEventListener('click', () => {
+  if (!palette.length) return;
+  recordPaletteHistory();
   palette = [];
   savePalette();
   renderPalette();
 });
+
+document.getElementById('palette-undo').addEventListener('click', undoPalette);
+document.getElementById('palette-redo').addEventListener('click', redoPalette);
+updatePaletteHistoryButtons(); // start with both disabled (empty history)
 
 // Restore: localStorage first, then share-URL override.
 // Legacy entries (plain hex strings / unprefixed URL tokens) predate the
