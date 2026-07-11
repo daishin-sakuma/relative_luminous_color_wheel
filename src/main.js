@@ -3141,7 +3141,12 @@ const CHIP_TOUCH_HOLD_SLOP = 24;
 let _forceEndActiveDrag = null;
 
 function attachChipDrag(chip, index, role, listEl) {
-  chip.addEventListener('contextmenu', e => e.preventDefault()); // long-press menu
+  // Suppress every native long-press affordance that Android would otherwise fire
+  // (with a haptic + pointercancel) before our hold-to-lift engages: the context
+  // menu, and the browser's native element drag-and-drop.
+  chip.addEventListener('contextmenu', e => e.preventDefault());
+  chip.draggable = false;
+  chip.addEventListener('dragstart', e => e.preventDefault());
   chip.addEventListener('pointerdown', e => {
     // Recover any drag that never received its pointerup so it can't block this
     // press (previously the user had to click repeatedly to jog it loose).

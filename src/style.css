@@ -1380,8 +1380,20 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   user-select: none;
   -webkit-user-select: none;
   touch-action: pan-y; /* scroll until a long-press lifts the chip */
+  /* Android runs a native long-press gesture (context-menu / text-selection /
+     element-drag) on pan-y elements: it fires an OS haptic at recognition and
+     then a `pointercancel`, which tore down our hold-to-lift before it engaged
+     (so the chip could never be grabbed on Android). Disable every native
+     long-press affordance so only our JS grab runs — pan-y still gives the rail
+     native momentum scroll, and a still press-and-hold no longer gets hijacked. */
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
+/* The haptic/long-press also fires on selectable or draggable descendants even
+   when the chip itself opts out, so cover every child too. */
+.palette-chip * { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
 /* The lifted chip follows the pointer directly (no transition) while its
    siblings animate out of the way — iOS-home-screen style */
 .palette-chip--lifted {
