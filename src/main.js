@@ -2511,7 +2511,7 @@ function downloadExport(format) {
 
   // Match the Preferences export controls exactly: segmented .settings-theme-btns
   // groups. Pick one file format, then Copy/Download act on it.
-  let selectedFormat = 'css';
+  let selectedFormat = 'json';
   const mkGroup = () => { const d = document.createElement('div'); d.className = 'settings-theme-btns'; return d; };
 
   // OKLCH/HEX/RGB color-format toggle, shared with the Preferences export (a single
@@ -2576,7 +2576,7 @@ function downloadExport(format) {
 
   host.append(tabs, actions);
 
-  selectFormat('css');
+  selectFormat('json');
   // Reflect the persisted color format on every toggle button now that they all exist.
   syncExportColorFmtButtons();
 }
@@ -3070,9 +3070,9 @@ function addToPalette(hex, role) {
   const commit = () => {
     hex = hex.toLowerCase();
     if (!/^#[0-9a-f]{6}$/.test(hex)) return;
-    // Duplicates within a role are ignored; each role holds up to four colors
-    // (primary / secondary / tertiary / quaternary)
-    if (palette.some(e => e.hex === hex && e.role === role)) return;
+    // Duplicates are allowed: some users add the colors they need first, then
+    // tune them individually via the inline chip editor — so an identical color
+    // can be saved again. Only the per-role cap still applies.
     if (palette.filter(e => e.role === role).length >= PALETTE_ROLE_MAX) return;
     recordPaletteHistory();
     palette.push({ hex, role });
@@ -3128,8 +3128,12 @@ function reorderAcrossRoles(srcRole, from, dstRole, to) {
 // 1:1 while siblings slide out of the way with a transform transition; on
 // release it settles into its slot before the order is committed.
 let _chipDragActive = false;
-const CHIP_TOUCH_HOLD_MS = 220;
-const CHIP_TOUCH_HOLD_SLOP = 16;
+// Touch grab tuning. The hold must fire before the finger travels SLOP px, or the
+// gesture is treated as a scroll. Kept forgiving so a chip is easy to pick up on
+// mobile: a shorter hold engages quickly, and a wider slop tolerates the natural
+// finger drift during a press (a fast scroll flick still outruns the slop first).
+const CHIP_TOUCH_HOLD_MS = 160;
+const CHIP_TOUCH_HOLD_SLOP = 24;
 // Hard-reset hook for a wedged drag. A dropped pointerup (mouse released
 // off-window, capture lost mid-transform) can otherwise leave a drag stuck in
 // its lifted state and _chipDragActive latched true; the next press calls this
@@ -3531,8 +3535,10 @@ function buildChipEditorDropdown() {
     const sw = document.createElement('span'); sw.className = 'chip-editor-dd-swatch'; sw.style.background = cvdTransformHex(hex);
     const nm = document.createElement('span'); nm.className = 'chip-editor-dd-name'; nm.textContent = paletteRankLabel(i);
     const hx = document.createElement('span'); hx.className = 'chip-editor-dd-hex'; hx.textContent = formatHex(hex);
-    it.append(rl, sw, nm, hx);
-    if (i === _cePartner) { const ck = document.createElement('span'); ck.className = 'chip-editor-dd-check'; ck.textContent = '✓'; it.appendChild(ck); }
+    // Always append the check slot (fixed width via CSS) so the hex and other
+    // columns sit at the same x on every row — only the selected row shows the ✓.
+    const ck = document.createElement('span'); ck.className = 'chip-editor-dd-check'; ck.textContent = i === _cePartner ? '✓' : '';
+    it.append(rl, sw, nm, hx, ck);
     it.addEventListener('click', () => { _cePartner = i; chipEditorRenderPreview(); closeChipEditorDropdown(); });
     scroll.appendChild(it);
   });
@@ -3853,7 +3859,7 @@ function chipEditorRenderPreview() {
   if (_ce.role === 'fg') {
     let rankPos = 0;
     for (let i = 0; i < _ceIdx; i++) if (palette[i] && palette[i].role === 'fg') rankPos++;
-    _ceRefs.tileLabel.textContent = `Text ${paletteRankLabel(rankPos)} vs ${partnerLabel}`;
+    _ceRefs.tileLabel.textContent = `Text ${paletteRankLabel(rankPos)} on ${partnerLabel}`;
   } else {
     _ceRefs.tileLabel.textContent = partnerLabel;
   }
@@ -3863,7 +3869,9 @@ function chipEditorRenderPreview() {
   _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
   _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
   _ceRefs.badges.innerHTML = '';
-  for (const [lbl, thr] of [['AA', 4.5], ['AAA', 7]]) {
+  // Show the WCAG 2.2 ratio thresholds (3:1 large text / UI, 4.5:1 normal AA,
+  // 7:1 AAA) so each use case can be checked; each lights up when the pair meets it.
+  for (const [lbl, thr] of [['3:1', 3], ['4.5:1', 4.5], ['7:1', 7]]) {
     const b = document.createElement('span');
     b.className = 'chip-editor-badge' + (ratio >= thr ? ' pass' : '');
     b.textContent = lbl;

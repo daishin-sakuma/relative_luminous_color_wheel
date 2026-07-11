@@ -223,7 +223,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.32.1</span>
+    <span class="app-version">ver. 1.33.0</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -232,6 +232,7 @@
         </svg>
       </button>
       <div class="settings-panel" id="settings-panel">
+        <div class="settings-panel-scroll">
         <div class="settings-panel-label">Preferences</div>
         <div class="settings-theme-row">
           <span class="settings-row-label">Theme</span>
@@ -315,6 +316,7 @@
           <button class="export-preview-copy" id="export-preview-copy" title="Copy to clipboard" aria-label="Copy to clipboard"></button>
           <pre class="export-preview-code" id="export-preview-code"></pre>
         </div>
+        </div>
       </div>
     </div>
   </div>
@@ -356,11 +358,13 @@
 
     <div class="swatch-data-row">
       <div class="swatch" id="swatch">
-        <span class="swatch-hex copyable" id="swatch-hex">#808080</span>
-        <div class="swatch-tools" id="swatch-tools">
-          <button class="pin-btn" id="pin-selected" title="Add this color to the palette">
-            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg>
-          </button>
+        <div class="swatch-row">
+          <span class="swatch-hex copyable" id="swatch-hex">#808080</span>
+          <div class="swatch-tools" id="swatch-tools">
+            <button class="pin-btn" id="pin-selected" title="Add this color to the palette">
+              <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg>
+            </button>
+          </div>
         </div>
       </div>
       <div class="data-grid">
@@ -730,7 +734,7 @@
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary vs BG Primary"), tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), reorder saved colors with a more forgiving mobile drag gesture, drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked; tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors with a more forgiving mobile drag gesture, drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app (including the layout, sliders, and preferences modal) using high-fidelity, hardware-accelerated CSS and SVG filters (fully optimized for iOS/Safari, Android, and desktop browsers)</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
@@ -847,8 +851,8 @@
       </div>
       <div class="custom-slider-group" data-egroup="lum">
         <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-ch="clum" min="0" max="1000" step="1"><input type="text" class="custom-val" data-chv="clum" inputmode="decimal" autocomplete="off" spellcheck="false"></div>
-        <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-ch="csat" min="0" max="100"><input type="text" class="custom-val" data-chv="csat" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-ch="chue" min="0" max="359"><input type="text" class="custom-val" data-chv="chue" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-ch="csat" min="0" max="100"><input type="text" class="custom-val" data-chv="csat" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
       </div>
       <div class="custom-slider-group" data-egroup="gray">
         <div class="custom-slider-row"><span class="custom-ch"></span><input type="range" data-ch="gray" min="0" max="255" class="custom-gray-slider"><input type="text" class="custom-val" data-chv="gray" inputmode="numeric" autocomplete="off" spellcheck="false"></div>

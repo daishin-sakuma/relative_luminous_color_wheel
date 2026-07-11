@@ -64,8 +64,8 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 1rem 2rem 1rem;
-  gap: 1rem;
+  padding: 0.7rem 2rem 0.7rem;
+  gap: 0.7rem;
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
@@ -142,14 +142,14 @@ header {
   min-width: 0;
 }
 
-.col-left  { gap: 0.75rem; }
-.col-right { gap: 0.75rem; }
+.col-left  { gap: 0.6rem; }
+.col-right { gap: 0.6rem; }
 
 /* ── Contrast section groups ─────────────────────────────────────────────────── */
 .contrast-section {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.32rem;
 }
 
 .section-label {
@@ -189,15 +189,28 @@ header {
   position: relative;
   width: 100%;
   height: 52px;
+  /* Never shrink below what the hex value + copy/pin buttons need — this floors
+     the aggressive height tiers so the row can't clip (the swatch sits in the
+     left column, which isn't the height bottleneck). */
+  min-height: 40px;
   border-radius: 3px;
   border: 1px solid var(--border);
   display: flex;
   align-items: flex-end;
-  padding: 0.5rem 0.6rem;
+  padding: 0.5rem 0.6rem 0.15rem;
   transition: background 0.06s;
   overflow: hidden;
 }
 
+/* Hex value + pin button share one bottom-aligned row and are centred against
+   each other (so the two never look vertically staggered). */
+.swatch-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
 .swatch-hex {
   font-size: 0.82rem;
   letter-spacing: 0.10em;
@@ -347,8 +360,8 @@ input[type="range"]::-moz-range-thumb {
 .custom-panel {
   display: grid;
   grid-template-columns: 160px 1fr;
-  gap: 0.65rem 1.25rem;
-  padding: 0.75rem 1rem;
+  gap: 0.55rem 1.1rem;
+  padding: 0.6rem 0.9rem;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -551,14 +564,14 @@ input.custom-val:focus {
 
 /* ── Contrast Preview ───────────────────────────────────────────────────────── */
 
-.preview-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.preview-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
 
 .preview-tile {
-  padding: 0.9rem 1.1rem;
+  padding: 0.7rem 1rem;
   border-radius: 4px;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-width: 0;
   position: relative;
 }
@@ -791,12 +804,10 @@ input.custom-val:focus {
    baseline (matching the ⧉ copy icon): the button's 0.2rem padding and the
    svg's internal inset together offset the text's descent below the baseline */
 .swatch-tools {
-  position: absolute;
-  bottom: 0.5rem;
-  right: 0.55rem;
   display: flex;
   align-items: center;
   gap: 0.1rem;
+  flex-shrink: 0;
 }
 .pin-btn {
   background: none;
@@ -1216,13 +1227,15 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   text-align: left;
 }
 /* Role + rank label, painted in the text colour by JS — full opacity so it works
-   as a contrast sample alongside "Ag". */
+   as a contrast sample alongside "Ag". Same NATS metric nudge as "Ag" so the two
+   are optically centred on the same line (without it the label sits ~0.10em low). */
 .chip-editor-tile-label {
   min-width: 0;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.03em;
-  line-height: 1.2;
+  line-height: 1;
+  transform: translateY(-0.103em);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1278,7 +1291,9 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 .chip-editor-dd-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(128, 128, 128, 0.35); }
 .chip-editor-dd-name { flex: 1; white-space: nowrap; }
 .chip-editor-dd-hex { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; font-size: 0.6rem; color: var(--muted); }
-.chip-editor-dd-check { flex-shrink: 0; color: var(--pass); }
+/* Fixed-width slot reserved on every row (even unselected, where it is empty)
+   so the hex column never shifts when the ✓ appears. */
+.chip-editor-dd-check { flex-shrink: 0; width: 0.9em; text-align: center; color: var(--pass); }
 .chip-editor-cmp {
   display: flex;
   align-items: center;
@@ -1286,8 +1301,11 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   font-size: 0.66rem;
   color: var(--muted);
 }
-.chip-editor-cmp-role { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; }
-.chip-editor-cmp-ratio { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); }
+/* Free text in this row (role + ratio) gets the NATS optical-centre nudge so it
+   aligns with the badge chips on the right, whose bordered boxes are already
+   centred by the flex row. */
+.chip-editor-cmp-role { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1; transform: translateY(-0.103em); }
+.chip-editor-cmp-ratio { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1; transform: translateY(-0.103em); }
 .chip-editor-badges { display: inline-flex; gap: 0.25rem; }
 .chip-editor-badge {
   font-size: 0.55rem;
@@ -1431,6 +1449,9 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   flex-shrink: 0;
   white-space: nowrap;
   user-select: none;
+  /* NATS ink sits ~0.10em below the box centre; nudge up so the rank is
+     optically centred against the hex (which gets the same correction). */
+  transform: translateY(-0.103em);
 }
 /* Plain label — loading a color back into a picker happens via the dedicated
    eyedropper button, and the rest of the chip surface (label included) is the
@@ -1441,6 +1462,10 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   padding: 0.5rem 0.3rem 0.5rem 0.35rem;
   flex: 1;
   text-align: left;
+  /* Match the rank's NATS optical-centre correction so hex and rank align.
+     (Ink sits ~0.10em below the box centre regardless of line-height, so no
+     line-height change is needed here — keeps the chip's touch height intact.) */
+  transform: translateY(-0.103em);
 }
 .palette-chip-edit {
   display: flex;
@@ -1654,23 +1679,32 @@ body.about-modal-open { overflow: hidden; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 0.9rem 1rem;
   display: none;
   flex-direction: column;
-  gap: 0.75rem;
   z-index: 200;
   /* The always-on export preview can make the panel taller than short
      viewports — scroll inside instead of running off-screen. JS sets a precise
      px max-height on open (visible viewport − the panel's top − a bottom gap
      matching the side margins); this dvh value is the fallback. */
   max-height: calc(100dvh - 6rem);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  overscroll-behavior: contain;
+  /* The rounded, opaque shell does NOT scroll — the inner element does — because
+     a rounded overflow:auto box flashes unpainted (transparent) corners during
+     momentum scroll. */
+  overflow: hidden;
 }
-.settings-panel::-webkit-scrollbar { width: 8px; }
-.settings-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-.settings-panel::-webkit-scrollbar-track { background: transparent; }
+.settings-panel-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.settings-panel-scroll::-webkit-scrollbar { width: 8px; }
+.settings-panel-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.settings-panel-scroll::-webkit-scrollbar-track { background: transparent; }
 
 /* Invisible bridge over the gap so hover doesn't break when moving to panel
    (lives on the wrap, not the panel, so the panel's overflow can't clip it;
@@ -2007,88 +2041,107 @@ body.about-modal-open { overflow: hidden; }
    420px render buffer (dot-by-dot on Retina). Replaces the old fixed steps,
    so squarish and short viewports degrade continuously instead of jumping. */
 @media (min-width: 861px) {
-  .app-body { --wheel-col: clamp(210px, min(30vw, calc(100vh - 440px)), 420px); }
+  .app-body { --wheel-col: clamp(210px, min(30vw, calc(100vh - 500px)), 420px); }
   .wheel-wrap,
   #wheel,
   #overlay { width: var(--wheel-col); height: var(--wheel-col); }
 }
 
-/* Mild: just absorb the About row (~900px inner height) */
-@media (min-width: 861px) and (max-height: 919px) {
-  #app-wrapper { gap: 0.6rem; }
+/* Mild: absorb the About row + a little slack (~900px inner height) */
+@media (min-width: 861px) and (max-height: 960px) {
+  #app-wrapper { gap: 0.55rem; padding: 0.7rem 2rem 0.55rem; }
+  .col-left, .col-right { gap: 0.55rem; }
+  .preview-tile { padding: 0.62rem 1rem; gap: 0.32rem; }
+  .custom-panel { padding: 0.55rem 0.9rem; }
   .about summary { padding: 0.15rem 0; }
 }
 
-@media (min-width: 861px) and (max-height: 849px) {
-  #app-wrapper { padding: 0.7rem 2rem 0.6rem; gap: 0.4rem; }
+@media (min-width: 861px) and (max-height: 920px) {
+  #app-wrapper { padding: 0.6rem 2rem 0.5rem; gap: 0.4rem; }
   .app-body { gap: 1.25rem; }
-  .col-left, .col-right { gap: 0.5rem; }
-  .swatch { height: 38px; }
-  .about summary { padding: 0.1rem 0; font-size: 0.7rem; }
-  .data-cell { padding: 0.26rem 0.5rem; gap: 0.14rem; }
-  .contrast-section { gap: 0.3rem; }
-  .contrast-lock-row { margin: 0.1rem 0 0; }
-  .preview-tiles { gap: 0.6rem; }
-  .preview-tile { padding: 0.55rem 1rem; gap: 0.3rem; }
-  .preview-display { font-size: 1.6rem; }
-  .custom-panel { padding: 0.55rem 1rem; }
-}
-
-/* Even shorter windows (e.g. 1280×800 laptops with browser chrome) */
-@media (min-width: 861px) and (max-height: 769px) {
-  #app-wrapper { padding: 0.5rem 2rem 0.45rem; gap: 0.45rem; }
-  .swatch { height: 36px; }
   .col-left, .col-right { gap: 0.45rem; }
-  .data-cell { padding: 0.26rem 0.5rem; }
+  .swatch { height: 34px; }
+  .about summary { padding: 0.1rem 0; font-size: 0.7rem; }
+  .data-cell { padding: 0.22rem 0.5rem; gap: 0.12rem; }
+  .contrast-section { gap: 0.26rem; }
+  .contrast-lock-row { margin: 0.1rem 0 0; }
+  .preview-tiles { gap: 0.55rem; }
   .preview-tile { padding: 0.5rem 0.9rem; gap: 0.26rem; }
-  .preview-display { font-size: 1.4rem; }
-  .custom-panel { padding: 0.5rem 0.9rem; }
+  .preview-display { font-size: 1.5rem; }
+  .preview-wcag { gap: 0.3rem; }
+  .preview-section { gap: 0.08rem; }
+  .preview-ui-row { --share-btn-h: 1.5rem; }
+  .custom-panel { padding: 0.5rem 0.9rem; gap: 0.5rem 1rem; }
 }
 
-/* ~800px-tall displays (effective inner height ≤ ~720px) */
-@media (min-width: 861px) and (max-height: 719px) {
-  #app-wrapper { padding: 0.4rem 1.5rem 0.35rem; gap: 0.25rem; }
-  header { padding: 0.3rem 0; }
-  .app-body { gap: 1rem; }
-  .about summary { padding: 0.05rem 0; font-size: 0.66rem; }
-  .swatch { height: 30px; }
+/* ~800px-tall windows (1280x800, 1366x768 laptops) */
+@media (min-width: 861px) and (max-height: 858px) {
+  #app-wrapper { padding: 0.5rem 2rem 0.45rem; gap: 0.32rem; }
   .col-left, .col-right { gap: 0.38rem; }
-  .data-cell { padding: 0.2rem 0.5rem; gap: 0.08rem; }
+  .swatch { height: 30px; }
+  .data-cell { padding: 0.18rem 0.5rem; gap: 0.08rem; }
   .contrast-section { gap: 0.22rem; }
   .preview-tiles { gap: 0.5rem; }
-  .preview-tile { padding: 0.42rem 0.85rem; gap: 0.2rem; }
-  .preview-display { font-size: 1.25rem; }
-  .custom-panel { padding: 0.45rem 0.85rem; }
+  .preview-tile { padding: 0.42rem 0.82rem; gap: 0.2rem; }
+  .preview-display { font-size: 1.35rem; }
+  .preview-body { font-size: 0.76rem; line-height: 1.4; }
+  .preview-wcag { gap: 0.25rem; }
+  .preview-wcag-rows { gap: 0.12rem; }
+  .preview-ui-row { --share-btn-h: 1.4rem; }
+  .preview-palette-bg { width: 12px; height: 12px; }
+  .custom-panel { padding: 0.42rem 0.82rem; gap: 0.4rem 0.9rem; }
+  .custom-wheel-canvas { width: 104px; height: 104px; min-width: 104px; min-height: 104px; }
+  .custom-slider-group { gap: 0.3rem; }
+  .about summary { padding: 0.05rem 0; font-size: 0.66rem; }
   .copyright { font-size: 0.62rem; }
-  .contrast-lock-row { margin: 0; }
-  .contrast-lock-btn { padding: 0.16rem 0.5rem; }
 }
 
-/* Very short windows (squarish displays, heavily-chromed small laptops):
-   hardest compression that still keeps every feature visible */
-@media (min-width: 861px) and (max-height: 659px) {
-  #app-wrapper { padding: 0.3rem 1.25rem 0.25rem; gap: 0.2rem; }
-  header { padding: 0.2rem 0; }
-  .col-left, .col-right { gap: 0.3rem; }
+/* ~720px inner height (small laptops with chrome) */
+@media (min-width: 861px) and (max-height: 790px) {
+  #app-wrapper { padding: 0.35rem 1.5rem 0.3rem; gap: 0.22rem; }
+  header { padding: 0.25rem 0; }
+  .app-body { gap: 1rem; }
+  .col-left, .col-right { gap: 0.28rem; }
   .lum-row { margin-bottom: 0.12rem; }
   .swatch { height: 26px; }
   .data-cell { padding: 0.12rem 0.5rem; gap: 0.05rem; }
-  .about summary { padding: 0; font-size: 0.62rem; }
   .contrast-section { gap: 0.18rem; }
   .contrast-lock-row { margin: 0; }
-  .contrast-lock-btn { padding: 0.12rem 0.45rem; }
-  .preview-tiles { gap: 0.4rem; }
-  .preview-tile { padding: 0.3rem 0.7rem; gap: 0.1rem; }
+  .contrast-lock-btn { padding: 0.14rem 0.5rem; }
+  .preview-tiles { gap: 0.45rem; }
+  .preview-tile { padding: 0.32rem 0.72rem; gap: 0.14rem; }
   /* keep >= 18.66px so the bold sample still qualifies as WCAG large text */
   .preview-display { font-size: 1.2rem; }
-  .preview-body { font-size: 0.8rem; }
-  .preview-section-label { font-size: 0.58rem; }
-  .preview-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; }
-  .preview-ui-row { --share-btn-h: 1.35rem; }
-  .custom-panel { padding: 0.3rem 0.7rem; gap: 0.35rem 0.8rem; }
+  .preview-body { font-size: 0.73rem; line-height: 1.35; }
+  .preview-section-label { font-size: 0.55rem; }
+  .preview-wcag { gap: 0.22rem; }
+  .preview-badge { font-size: 0.6rem; padding: 0.08rem 0.28rem; }
+  .preview-ui-row { --share-btn-h: 1.3rem; }
+  .preview-palette-bg { width: 11px; height: 11px; }
+  .custom-panel { padding: 0.34rem 0.72rem; gap: 0.32rem 0.8rem; }
   .custom-wheel-canvas { width: 96px; height: 96px; min-width: 96px; min-height: 96px; }
-  .custom-slider-group { gap: 0.28rem; }
+  .custom-slider-group { gap: 0.26rem; }
+  .about summary { padding: 0; font-size: 0.64rem; }
   .copyright { font-size: 0.58rem; }
+}
+
+/* Very short (squarish / heavily-chromed laptops): hardest compression */
+@media (min-width: 861px) and (max-height: 675px) {
+  #app-wrapper { padding: 0.24rem 1.25rem 0.2rem; gap: 0.14rem; }
+  header { padding: 0.15rem 0; }
+  .col-left, .col-right { gap: 0.18rem; }
+  .swatch { height: 20px; }
+  .data-cell { padding: 0.06rem 0.5rem; gap: 0.03rem; }
+  .contrast-section { gap: 0.12rem; }
+  .preview-tiles { gap: 0.4rem; }
+  .preview-tile { padding: 0.2rem 0.58rem; gap: 0.06rem; }
+  .preview-body { font-size: 0.68rem; line-height: 1.28; }
+  .preview-section-label { font-size: 0.52rem; }
+  .preview-ui-row { --share-btn-h: 1.15rem; }
+  .custom-panel { padding: 0.2rem 0.58rem; gap: 0.2rem 0.65rem; }
+  .custom-wheel-canvas { width: 84px; height: 84px; min-width: 84px; min-height: 84px; }
+  .custom-slider-group { gap: 0.2rem; }
+  .copyright { font-size: 0.55rem; }
 }
 
 /* ── Large displays: roomier gutters (the fluid wheel already reaches its
@@ -2104,7 +2157,7 @@ body.about-modal-open { overflow: hidden; }
 
 
 /* Short wide windows: compress both columns back into the height budget */
-@media (min-width: 1360px) and (max-height: 719px) {
+@media (min-width: 1360px) and (max-height: 720px) {
   .col-left { gap: 0.3rem; }
   .swatch { height: 26px; }
   .data-cell { padding: 0.15rem 0.5rem; }
@@ -2118,7 +2171,7 @@ body.about-modal-open { overflow: hidden; }
 }
 
 /* Narrow + short (e.g. 1366×768 laptops): one notch tighter */
-@media (min-width: 1360px) and (max-width: 1439px) and (max-height: 719px) {
+@media (min-width: 1360px) and (max-width: 1439px) and (max-height: 720px) {
   .swatch { height: 24px; }
   .data-cell { padding: 0.13rem 0.5rem; }
   .col-left, .col-right { gap: 0.26rem; }
