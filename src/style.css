@@ -991,12 +991,19 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   align-items: center;
   gap: 0.9rem; /* Palette · Undo/Redo · Clear all, left-aligned */
 }
+/* "Palette" and "Clear all" are different sizes; NATS' ink sits ~0.103em below
+   the line-box centre (its ascent/descent are asymmetric), so nudge each up by
+   that em amount. With the boxes already centre-aligned, both texts' ink centres
+   then land on the exact same line regardless of font size. */
+.palette-head .section-label,
+.palette-clear { transform: translateY(-0.103em); }
 /* Undo / Redo — icon buttons in the same style as the Preferences/icon buttons
    (.theme-toggle), sat between the "Palette" label and "Clear all". */
 .palette-history {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  margin-left: auto; /* push Undo/Redo to the right edge of the header */
 }
 .palette-history-btn { font-size: 0.92rem; }
 .palette-history-btn:disabled { opacity: 0.28; cursor: default; }
