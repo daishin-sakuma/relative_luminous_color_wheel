@@ -2821,8 +2821,11 @@ function rgbCssToHex(c) {
     const syncPanelHeight = () => {
       const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
       const gap = parseFloat(getComputedStyle(document.getElementById('app-wrapper') || document.body).paddingLeft) || 16; // match side margins
-      const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap
-      panel.style.maxHeight = Math.max(140, vh - top - gap) + 'px';
+      const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap (real px)
+      // The panel lives inside the fit-to-viewport zoomed wrapper, so a CSS px
+      // set here renders zoom× larger — divide the real-px budget back out.
+      const zoom = parseFloat((document.getElementById('app-wrapper') || {}).style?.zoom) || 1;
+      panel.style.maxHeight = Math.max(140, (vh - top - gap) / zoom) + 'px';
     };
     wrap.addEventListener('pointerenter', syncPanelHeight);
     window.addEventListener('resize', syncPanelHeight);
@@ -2933,13 +2936,122 @@ function syncSidebarHeight() {
   const vv = window.visualViewport;
   if (!vv) return; // bottom:0 already matches the viewport on older browsers
   // rect.bottom is set by bottom:0, independent of the padding this feeds.
-  // Set on the root so both the sidebar's padding and the underlay's fade
-  // height (which must cover the same toolbar band) inherit it.
   const gap = Math.max(0, Math.round(paletteSection.getBoundingClientRect().bottom - (vv.offsetTop + vv.height)));
   document.documentElement.style.setProperty('--palette-vv-gap', gap + 'px');
 }
 window.addEventListener('resize', syncSidebarHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', syncSidebarHeight);
+
+// ─── Desktop fit-to-viewport scale ────────────────────────────────────────────
+// On PC-width layouts the app must always fit without scrolling AND use the
+// whole screen: instead of stepped max-height media queries, continuously scale
+// the app (CSS zoom = window height ÷ natural content height) so every window
+// size — including all the in-between ones — fits exactly. Width still flows
+// naturally: the zoomed layout width is realWidth/zoom, so wide screens keep
+// stretching the flexible columns. A zoom change itself reflows the layout
+// (width changes → content height changes), so the ResizeObserver iterates the
+// fit to its fixed point in a couple of passes; it also re-fits after content
+// changes (opening the inline About, palette strips growing tiles, …).
+// The fit runs as a SINGLE synchronous session per trigger: it iterates zoom to
+// its fixed point in one go (each scrollHeight read forces the reflow), then
+// records the outcome. The ResizeObserver only starts a new session when the
+// content genuinely changed at the recorded zoom (or the window resized) — NOT
+// in response to the session's own writes. Feedback-driven refits (the earlier
+// design) can flicker forever at window widths where a line wrap flips the content
+// height across the fit boundary; a settled session cannot.
+let _fitQueued = false;
+let _fitLast = { zoom: '', natural: 0, w: 0, h: 0 };
+
+function _runFitSession() {
+  _fitQueued = false;
+  const el = document.getElementById('app-wrapper');
+  if (!el) return;
+  if (window.innerWidth < 861 || !CSS.supports('zoom', '1')) {
+    if (el.style.zoom) el.style.zoom = '';
+    const ab = el.querySelector('.app-body');
+    if (ab) ab.style.removeProperty('--wheel-col'); // let the mobile CSS var apply
+    _fitLast = { zoom: '', natural: el.scrollHeight, w: window.innerWidth, h: window.innerHeight };
+    return;
+  }
+  let z = parseFloat(el.style.zoom) || 1;
+  const appBody = el.querySelector('.app-body');
+  const colLeft = el.querySelector('.col-left');
+  const colRight = el.querySelector('.col-right');
+  const wheelWrap = el.querySelector('.wheel-wrap');
+  // Iterate to the fixed point (a zoom change reflows the layout width, which
+  // changes the content height). Each pass also sizes the wheel column in
+  // layout px so the LEFT column's height matches the RIGHT column's: spare
+  // width grows the wheel and sliders instead of leaving dead side space, while
+  // the wheel can never inflate the page height (which previously pinned the
+  // zoom to its floor on short-and-wide windows). Capped defensively; a
+  // two-state wrap flip (some widths toggle a line wrap) settles on the
+  // smaller, fitting zoom.
+  let prevNz = 0;
+  for (let i = 0; i < 10; i++) {
+    if (appBody && colLeft && colRight && wheelWrap) {
+      const lw = appBody.clientWidth;
+      const overhead = colLeft.offsetHeight - wheelWrap.offsetHeight; // sliders/swatch/data grid
+      const balance = colRight.offsetHeight - overhead; // wheel size that levels the columns
+      // Level the columns by default; when the window is wide, let the wheel
+      // grow past the balance point (up to +35%) — a bigger wheel and longer
+      // left-column sliders beat perfectly even column bottoms there. The
+      // 1.35 bound keeps the wheel from re-inflating the page height on
+      // short-and-wide windows (which would pin the zoom to its floor).
+      const wheel = Math.max(240, Math.min(600, 0.28 * lw,
+        Math.max(balance, Math.min(0.22 * lw, 1.35 * balance))));
+      appBody.style.setProperty('--wheel-col', Math.round(wheel) + 'px');
+    }
+    const natural = el.scrollHeight;
+    if (!natural) break;
+    let nz = (window.innerHeight - 1) / natural; // −1: keep rounding on the no-scroll side
+    // Never squeeze the layout narrower than the two-column desktop design
+    // (very tall portrait windows hit this cap first — the leftover height is
+    // then centered by the body flex rule); clamp the extremes (below ~0.55
+    // the UI stops being usable — allow scroll there; above 3 a huge display
+    // just gets a proportionally huge app).
+    nz = Math.min(nz, window.innerWidth / 880);
+    nz = Math.max(0.55, Math.min(3, nz));
+    if (Math.abs(nz - z) < 0.002) break;
+    if (Math.abs(nz - prevNz) < 0.002) { // 2-cycle wrap flip: take the fitting (smaller) state
+      z = Math.min(nz, z);
+      el.style.zoom = z.toFixed(4);
+      break;
+    }
+    prevNz = z;
+    z = nz;
+    el.style.zoom = z.toFixed(4);
+  }
+  // If the landed state still spills (e.g. the iteration cap hit an alternating
+  // wrap flip), shrink from the RENDERED height until it fits — this always
+  // ends below the flip point. Compare real rendered px against the window
+  // directly: document.scrollHeight can under-report the spill when the body
+  // flex-centering clips the top edge.
+  for (let i = 0; i < 4 && el.getBoundingClientRect().height > window.innerHeight - 0.5; i++) {
+    z = Math.max(0.55, z * (window.innerHeight - 1) / el.getBoundingClientRect().height);
+    el.style.zoom = z.toFixed(4);
+  }
+  _fitLast = { zoom: el.style.zoom, natural: el.scrollHeight, w: window.innerWidth, h: window.innerHeight };
+}
+
+function fitDesktopScale() {
+  if (_fitQueued) return; // coalesce bursts into one session per frame
+  _fitQueued = true;
+  requestAnimationFrame(_runFitSession);
+}
+window.addEventListener('resize', fitDesktopScale);
+if (window.ResizeObserver) {
+  new ResizeObserver(() => {
+    const el = document.getElementById('app-wrapper');
+    if (!el) return;
+    // Ignore echoes of the session's own writes: same window, same zoom, and a
+    // content height within the wrap-flip noise band → already settled.
+    if (window.innerWidth === _fitLast.w && window.innerHeight === _fitLast.h
+        && el.style.zoom === _fitLast.zoom
+        && Math.abs(el.scrollHeight - _fitLast.natural) < 8) return;
+    fitDesktopScale();
+  }).observe(/** @type {Element} */ (document.getElementById('app-wrapper')));
+}
+fitDesktopScale();
 
 // After the sidebar height re-syncs to the keyboard-shrunk viewport, keep the
 // chip editor tidy in the rail (registered after syncSidebarHeight so the rail's
