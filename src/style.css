@@ -1818,14 +1818,16 @@ body.about-modal-open { overflow: hidden; }
   gap: 0.35rem 0.7rem; /* row-gap (only used once wrapped) / column-gap */
   margin: 0.55rem 0 0.2rem;
 }
-/* Groups keep their size and wrap as whole units; the error flexes/truncates */
-.contrast-lock-label,
+/* Groups keep their size and wrap as whole units; the error flexes/truncates.
+   The row leads directly with the Off / WCAG 2 / APCA switch (the "Contrast"
+   label was dropped — the switch itself conveys the row's purpose, and losing it
+   keeps the row on one line at more widths). */
 .contrast-lock-btns { flex-shrink: 0; }
 /* inline-flex above beats the UA [hidden] rule — restore it explicitly
    (the WCAG 2 / APCA mode switch and target groups toggle via [hidden]) */
 .contrast-lock-btns[hidden] { display: none; }
-/* Narrow screens: compact the controls so label + switch + targets + a
-   (truncating) error all still fit on the single line */
+/* Narrow screens: compact the controls so the switch + targets + a (truncating)
+   error still fit on the single line at as many widths as possible */
 @media (max-width: 639px) {
   .contrast-lock-row { gap: 0.4rem; }
   .contrast-lock-btn { padding: 0.18rem 0.44rem; font-size: 0.62rem; letter-spacing: 0.04em; }
@@ -1834,20 +1836,6 @@ body.about-modal-open { overflow: hidden; }
   .contrast-lock-row { gap: 0.32rem; }
   .contrast-lock-btn { padding: 0.16rem 0.36rem; font-size: 0.58rem; }
   .contrast-lock-error { font-size: 0.62rem; }
-}
-/* Only on the very smallest screens does even the short label get dropped —
-   the mode switch (Off / WCAG 2 / APCA) still conveys the row's purpose */
-@media (max-width: 360px) {
-  .contrast-lock-label { display: none; }
-}
-.contrast-lock-label {
-  font-size: 0.68rem;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
 }
 .contrast-lock-btns {
   display: inline-flex;
