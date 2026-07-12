@@ -938,17 +938,20 @@ input.custom-val:focus {
   position: fixed;
   top: 0;
   right: 0;
-  /* Height tracks the *visible* viewport. iOS Safari's fixed containing block
-     is the large (toolbar-hidden) viewport, so top:0/bottom:0 let the sidebar
-     run under the address/toolbar and leave the bottom strip unpainted; 100dvh
-     matches what's actually on screen. 100vh stays as the older-browser fallback. */
-  height: 100vh;
-  height: 100dvh;
+  /* Fill the *full* fixed containing block — on iOS Safari that's the large
+     (toolbar-hidden) viewport, so the sidebar reaches behind the bottom bar and
+     matches the page's own height. Sizing it shorter (a JS px height pinned to
+     visualViewport.height) made Safari re-rasterise the page tiles to that
+     smaller height while the overlay was up, leaving the page's bottom strip
+     behind the toolbar unpainted. The sidebar's CONTENT is kept clear of the
+     toolbar instead via --palette-vv-gap (JS: full bottom − visible bottom),
+     folded into the bottom padding. */
+  bottom: 0;
   width: var(--palette-w);
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 1rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  padding: 1rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px) + var(--palette-vv-gap, 0px));
   border-left: 1px solid var(--border);
   background: var(--ground);
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);

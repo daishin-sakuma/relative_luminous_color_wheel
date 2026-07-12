@@ -2752,7 +2752,7 @@ function applyPaletteOpen() {
     paletteSection.classList.remove('palette-section--closing');
     paletteSection.classList.add('palette-section--opening');
     paletteSection.hidden = false;
-    syncSidebarHeight(); // pin to the visible viewport now that it's showing
+    syncSidebarHeight(); // measure the toolbar gap now that it's showing
     _paletteOpenTimer = setTimeout(() => {
       paletteSection.classList.remove('palette-section--opening');
     }, 220);
@@ -2775,18 +2775,26 @@ function setPaletteOpen(open) {
   saveToStorage('palette-open', open ? '1' : '0');
 }
 
-// Pin the sidebar to the *visible* viewport. iOS Safari's 100dvh can briefly
-// report the toolbar-hidden (large) height while the toolbar is actually shown
-// — notably as the drawer opens — pushing the pinned-to-bottom export footer
-// under the toolbar so the bottom looks cut off. visualViewport.height is the
-// ground truth; the inline px height overrides the CSS 100dvh fallback.
+// Keep the sidebar's CONTENT clear of iOS Safari's bottom toolbar. The sidebar
+// element itself spans the full fixed containing block (top:0/bottom:0 — behind
+// the toolbar), because shrinking the overlay to a JS px height pinned at
+// visualViewport.height made Safari re-rasterise the page tiles to that smaller
+// height while the sidebar was open, clipping the page's bottom strip behind the
+// toolbar. Instead, measure how far the sidebar's bottom extends past the
+// visible viewport (toolbar and/or keyboard) and fold that into the bottom
+// padding via --palette-vv-gap, so the export footer stays fully visible.
+// visualViewport.height is the ground truth (100dvh can briefly report the
+// toolbar-hidden height while the toolbar is actually shown).
 // Only mutate while the sidebar is showing, and NOT on every visualViewport
-// scroll tick: resizing a fixed overlay each scroll frame made iOS drop the
+// scroll tick: restyling a fixed overlay each scroll frame made iOS drop the
 // paint of the content behind it (the preview tiles vanished while open).
 function syncSidebarHeight() {
   if (paletteSection.hidden) return;
-  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  if (h) paletteSection.style.height = h + 'px';
+  const vv = window.visualViewport;
+  if (!vv) return; // bottom:0 already matches the viewport on older browsers
+  // rect.bottom is set by bottom:0, independent of the padding this feeds.
+  const gap = Math.max(0, Math.round(paletteSection.getBoundingClientRect().bottom - (vv.offsetTop + vv.height)));
+  paletteSection.style.setProperty('--palette-vv-gap', gap + 'px');
 }
 window.addEventListener('resize', syncSidebarHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', syncSidebarHeight);
