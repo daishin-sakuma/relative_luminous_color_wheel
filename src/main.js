@@ -184,16 +184,51 @@ const CVD_MATRICES = {
   ]
 };
 
+// The simulation is applied HERE, in the app's own rendering (every canvas
+// pixel loop, inline style, and theme variable goes through these), NOT via a
+// CSS/SVG reference filter on a wrapper. A `filter: url(#...)` ancestor filter
+// silently skips hardware-composited descendant layers on iOS WebKit (the WebGL
+// wheel, scrollable poppers, transitioned thumbs all escaped it), so self-
+// rendered transforms are the only approach that behaves identically on every
+// engine. Machado et al. 2009 matrices, applied in linear-light space.
 function cvdTransformRgb(r, g, b) {
-  return [r, g, b];
+  if (!currentCvd) return [r, g, b];
+  const m = CVD_MATRICES[currentCvd];
+  if (!m) return [r, g, b];
+
+  const lr = LINEAR[r];
+  const lg = LINEAR[g];
+  const lb = LINEAR[b];
+
+  const nr = m[0] * lr + m[1] * lg + m[2] * lb;
+  const ng = m[3] * lr + m[4] * lg + m[5] * lb;
+  const nb = m[6] * lr + m[7] * lg + m[8] * lb;
+
+  const toSRGB = n => {
+    const c = n <= 0.0031308 ? n * 12.92 : 1.055 * Math.pow(n, 1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(255, Math.round(c * 255)));
+  };
+
+  return [toSRGB(nr), toSRGB(ng), toSRGB(nb)];
 }
 
 function cvdTransformHex(hex) {
-  return hex;
+  if (!currentCvd) return hex;
+  const [r, g, b] = hexToRgb(hex);
+  const [tr, tg, tb] = cvdTransformRgb(r, g, b);
+  return toHex(tr, tg, tb);
 }
 
 function cvdTransformRgba(rgbaStr) {
-  return rgbaStr;
+  if (!currentCvd) return rgbaStr;
+  const m = rgbaStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (!m) return rgbaStr;
+  const r = parseInt(m[1], 10);
+  const g = parseInt(m[2], 10);
+  const b = parseInt(m[3], 10);
+  const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+  const [tr, tg, tb] = cvdTransformRgb(r, g, b);
+  return `rgba(${tr}, ${tg}, ${tb}, ${a})`;
 }
 
 
@@ -410,9 +445,21 @@ function drawWheel(lum) {
   const { gl, uLum, uCvdMatrix, uCvdActive } = glState;
   gl.uniform1f(uLum, lum);
   
-  // Pass CVD uniforms - disabled because CSS filter on HTML root handles this globally
-  gl.uniform1f(uCvdActive, 0.0);
-  
+  // CVD simulation runs in the shader (linear space) — an ancestor CSS filter
+  // can't reach this composited WebGL layer on iOS WebKit.
+  if (currentCvd) {
+    gl.uniform1f(uCvdActive, 1.0);
+    // transpose must be false in WebGL 1.0; supply the data column-major
+    const m = CVD_MATRICES[currentCvd];
+    gl.uniformMatrix3fv(uCvdMatrix, false, new Float32Array([
+      m[0], m[3], m[6],
+      m[1], m[4], m[7],
+      m[2], m[5], m[8]
+    ]));
+  } else {
+    gl.uniform1f(uCvdActive, 0.0);
+  }
+
   gl.viewport(0, 0, BUF_SZ, BUF_SZ);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -2636,19 +2683,114 @@ function downloadExport(format) {
 }
 
 // ─── Color-vision-deficiency simulation ───────────────────────────────────────
-// Machado et al. 2009 matrices live as SVG feColorMatrix filters in index.html.
-// Apply the SVG filter directly to the html root element to cover the whole app,
-// including fixed overlays (like the sidebar) and canvases across all browsers.
+// The whole app is simulated by transforming every color the app itself renders
+// (cvdTransform* + the wheel shader) — see the note above cvdTransformRgb for why
+// a CSS/SVG reference filter cannot cover composited layers on iOS WebKit.
+// The pieces not covered by the render pipeline are handled here:
+//   1. Theme CSS variables (--ground/--surface/--text/… drive every themed color,
+//      including the page background and both fixed overlays): resolve each
+//      variable's untransformed color via a probe element, transform it, and pin
+//      the result as an inline override on <html>. Re-runs whenever the theme
+//      inputs (data-theme / --ui-hue / --ui-sat / --ui-ground-l) change.
+//   2. Static chromatic bits outside the theme system: the Preferences hue
+//      slider's rainbow, the saturation slider's endpoint, and the R/G/B channel
+//      letter colors.
 // Intentionally not persisted: a simulation surviving reload would look broken.
+
+// Theme-derived variables to override under simulation. --accent is excluded:
+// applyAll() already writes it from the (transformed) selected color.
+const CVD_THEME_VARS = ['--ground', '--surface', '--surface2', '--border', '--text', '--muted', '--pass', '--pass-border', '--pass-bg', '--error'];
+let _cvdProbe = null;
+
+function applyCvdThemeVars() {
+  const root = document.documentElement;
+  // Clear previous overrides first so the probe resolves the raw theme values.
+  for (const v of CVD_THEME_VARS) root.style.removeProperty(v);
+  if (!currentCvd) return;
+  if (!_cvdProbe) {
+    _cvdProbe = document.createElement('span');
+    _cvdProbe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;';
+    document.body.appendChild(_cvdProbe);
+  }
+  const cs = getComputedStyle(_cvdProbe);
+  for (const v of CVD_THEME_VARS) {
+    _cvdProbe.style.color = `var(${v})`;
+    root.style.setProperty(v, cvdTransformRgba(cs.color));
+  }
+}
+
+// Static chromatic colors that are not routed through the render pipeline.
+function applyCvdStaticUi() {
+  // Preferences hue slider: regenerate its rainbow through the simulation
+  // (matches the CSS rule's 13 hsl stops; !important there needs it here too).
+  const hueSlider = document.getElementById('ui-hue-slider');
+  if (hueSlider) {
+    if (currentCvd) {
+      const stops = [];
+      for (let h = 0; h <= 360; h += 30) stops.push(cvdTransformHex(toHex(...hslToRgb(h % 360, 0.7, 0.55))));
+      hueSlider.style.setProperty('background-image', `linear-gradient(to right, ${stops.join(', ')})`, 'important');
+    } else {
+      hueSlider.style.removeProperty('background-image');
+    }
+  }
+  // Preferences saturation slider: its endpoint carries the current UI hue.
+  const satSlider = /** @type {HTMLInputElement} */ (document.getElementById('ui-sat-slider'));
+  const hueVal = hueSlider ? +(/** @type {HTMLInputElement} */ (hueSlider).value) : 240;
+  if (satSlider) {
+    satSlider.style.backgroundImage =
+      `linear-gradient(to right, ${cvdTransformHex(toHex(...hslToRgb(hueVal, 0, 0.55)))}, ${cvdTransformHex(toHex(...hslToRgb(hueVal, 0.75, 0.55)))})`;
+  }
+  // R/G/B channel letters (inline colors in the markup and the chip-editor clone).
+  applyCvdChannelLetters(document);
+}
+
+/** Transform the R/G/B letter colors under `root` (idempotent — the original
+    color is stashed in dataset so the simulation can be re-derived or removed). */
+function applyCvdChannelLetters(root) {
+  for (const el of root.querySelectorAll('.custom-ch[style], .custom-ch[data-cvd-base]')) {
+    const base = el.dataset.cvdBase || el.style.color;
+    if (!base) continue;
+    el.dataset.cvdBase = base;
+    el.style.color = currentCvd ? cvdTransformHex(rgbCssToHex(base)) : base;
+  }
+}
+
+/** Normalize a CSS color that may be `#rrggbb` or `rgb(r, g, b)` to hex. */
+function rgbCssToHex(c) {
+  if (c.startsWith('#')) return c;
+  const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  return m ? toHex(+m[1], +m[2], +m[3]) : c;
+}
+
+// Re-derive the variable overrides whenever the theme inputs change (dark/light
+// switch, UI tint sliders, brightness, URL restore, reset) — watching the inputs
+// beats hooking every writer. The derived-var overrides written by
+// applyCvdThemeVars don't alter these inputs, so this cannot loop.
+{
+  const root = document.documentElement;
+  const themeSig = () => [
+    root.dataset.theme,
+    root.style.getPropertyValue('--ui-hue'),
+    root.style.getPropertyValue('--ui-sat'),
+    root.style.getPropertyValue('--ui-ground-l'),
+  ].join('|');
+  let _lastThemeSig = themeSig();
+  new MutationObserver(() => {
+    const s = themeSig();
+    if (s === _lastThemeSig) return;
+    _lastThemeSig = s;
+    if (currentCvd) { applyCvdThemeVars(); applyCvdStaticUi(); }
+  }).observe(root, { attributes: true, attributeFilter: ['style', 'data-theme'] });
+}
 
 {
   const cvdBtns = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.settings-theme-btn[data-cvd]')]);
   cvdBtns.forEach(btn => btn.addEventListener('click', () => {
     cvdBtns.forEach(b => b.classList.toggle('active', b === btn));
     const v = btn.dataset.cvd || '';
-    
+
     currentCvd = v;
-    
+
     // Invalidate custom wheel, slider tracks, and chip editor caches
     _cwLumCache = null;
     _cwColorCache = null;
@@ -2658,10 +2800,8 @@ function downloadExport(format) {
     _cuTracksKey = '';
     _ceWheelCache = null;
 
-    document.documentElement.classList.remove('cvd-protan', 'cvd-deutan', 'cvd-tritan');
-    if (v) {
-      document.documentElement.classList.add(`cvd-${v}`);
-    }
+    applyCvdThemeVars();
+    applyCvdStaticUi();
 
     // Repaint all canvas layers and sync UI after toggling so the renderer sees fresh pixels
     scheduleRender(true, true);
@@ -3410,6 +3550,7 @@ function chipEditorActiveIdx() { return _ceIdx; }
 
 function buildChipEditor() {
   _ceEl = /** @type {HTMLElement} */ (_chipEditorTpl.content.firstElementChild.cloneNode(true));
+  applyCvdChannelLetters(_ceEl); // fresh clone: simulate its R/G/B letters too
   const q = sel => _ceEl.querySelector(sel);
   _ceRefs = {
     tabs:   [..._ceEl.querySelectorAll('[data-emode]')],

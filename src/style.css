@@ -2248,25 +2248,10 @@ body.about-modal-open { overflow: hidden; }
   .custom-panel { padding: 0.32rem 0.7rem; gap: 0.4rem 0.9rem; }
 }
 
-/* ── Color-vision-deficiency simulation stability for WebKit/Safari ────────── */
-
-/* The underlay is filtered too so its --ground fade matches the simulated page
-   background it dissolves into (an unfiltered fade would show a color seam). */
-html.cvd-protan #app-wrapper,
-html.cvd-protan .palette-underlay,
-html.cvd-protan .palette-section {
-  filter: url(#cvd-protan);
-  will-change: filter;
-}
-html.cvd-deutan #app-wrapper,
-html.cvd-deutan .palette-underlay,
-html.cvd-deutan .palette-section {
-  filter: url(#cvd-deutan);
-  will-change: filter;
-}
-html.cvd-tritan #app-wrapper,
-html.cvd-tritan .palette-underlay,
-html.cvd-tritan .palette-section {
-  filter: url(#cvd-tritan);
-  will-change: filter;
-}
+/* ── Color-vision-deficiency simulation ──────────────────────────────────────
+   No CSS/SVG filter here on purpose: `filter: url(#…)` on a wrapper silently
+   skips hardware-composited descendant layers on iOS WebKit (the WebGL wheel,
+   scrollable poppers, transitioned slider thumbs all escaped it). The simulation
+   is instead applied in the app's own rendering — every canvas pixel loop,
+   inline color, and theme variable goes through the cvdTransform helpers or the
+   wheel shader in main.js — which behaves identically on every engine. */

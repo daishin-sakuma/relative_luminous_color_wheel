@@ -184,35 +184,10 @@
 </head>
 <body>
 
-<!-- SVG filters for color vision deficiency simulation -->
-<svg style="position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none;" aria-hidden="true">
-  <defs>
-    <filter id="cvd-protan" color-interpolation-filters="linearRGB">
-      <feColorMatrix type="matrix" values="
-        0.152286  1.052583 -0.204868  0  0
-        0.114503  0.786281  0.099216  0  0
-       -0.003882 -0.048116  1.051998  0  0
-        0         0         0         1  0
-      " />
-    </filter>
-    <filter id="cvd-deutan" color-interpolation-filters="linearRGB">
-      <feColorMatrix type="matrix" values="
-        0.367322  0.860646 -0.227968  0  0
-        0.280085  0.672501  0.047413  0  0
-       -0.011820  0.042940  0.968881  0  0
-        0         0         0         1  0
-      " />
-    </filter>
-    <filter id="cvd-tritan" color-interpolation-filters="linearRGB">
-      <feColorMatrix type="matrix" values="
-        1.255528 -0.076749 -0.178779  0  0
-       -0.078411  0.930809  0.147602  0  0
-        0.004733  0.691367  0.303900  0  0
-        0         0         0         1  0
-      " />
-    </filter>
-  </defs>
-</svg>
+<!-- Color-vision-deficiency simulation is rendered by the app itself (every
+     canvas pixel, inline color, and theme variable is transformed in main.js) —
+     no SVG filter defs here: `filter: url(#…)` on a wrapper cannot reach
+     hardware-composited descendant layers on iOS WebKit. -->
 
 <div id="app-wrapper">
 
@@ -223,7 +198,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.34.2</span>
+    <span class="app-version">ver. 1.34.3</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -731,7 +706,7 @@
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
         <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked; tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors by dragging each chip's grip handle (reliable on Android, iOS, and desktop, while the chip body still scrolls the list), drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
-        <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app (including the layout, sliders, and preferences modal) using high-fidelity, hardware-accelerated CSS and SVG filters (fully optimized for iOS/Safari, Android, and desktop browsers)</li>
+        <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app — the theme colors, color wheel, sliders, preferences, and palette sidebar included — with the Machado et&nbsp;al. 2009 matrices applied in linear-light space directly inside the app's own rendering, so the preview is identical on iOS/Safari, Android, and desktop browsers</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
       <h3>Who it's for</h3>
