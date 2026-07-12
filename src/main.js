@@ -3420,6 +3420,12 @@ function attachChipDrag(chip, index, role, listEl) {
     const onHandle = !!(/** @type {HTMLElement} */ (e.target).closest('.palette-chip-grip'));
     if (isTouch && !onHandle) return;
     const startY = e.clientY, startX = e.clientX;
+    // The dragged chip's own centre at grab time. Target detection tracks THIS
+    // centre (start centre + drag delta), not the pointer, so a swap happens when
+    // the dragged chip's middle — not wherever the finger grabbed it — passes
+    // another chip's middle.
+    const chipRect0 = chip.getBoundingClientRect();
+    const chipStartCenterY = chipRect0.top + chipRect0.height / 2;
 
     // Gather boundary and chips across BOTH lists for cross-role drag-and-drop
     const fgListEl = paletteRail.querySelector('.palette-group:nth-child(1) .palette-group-list');
@@ -3502,7 +3508,11 @@ function attachChipDrag(chip, index, role, listEl) {
     };
 
     const determineTarget = (clientY) => {
-      let tr = clientY < boundaryY ? 'fg' : 'bg';
+      // Compare the dragged chip's CURRENT centre (start centre + how far the
+      // pointer has moved) — not the raw pointer position — so ordering flips as
+      // the chip's middle crosses each neighbour's middle.
+      const refY = chipStartCenterY + (clientY - startY);
+      let tr = refY < boundaryY ? 'fg' : 'bg';
 
       // Limit check: do not allow dragging into a group that is already full
       if (tr !== role) {
@@ -3515,7 +3525,7 @@ function attachChipDrag(chip, index, role, listEl) {
       const targetRoleChips = chipData.filter(d => d.role === tr);
       let ti = targetRoleChips.length; // Default to end of target list
       for (let i = 0; i < targetRoleChips.length; i++) {
-        if (clientY < targetRoleChips[i].centerY) {
+        if (refY < targetRoleChips[i].centerY) {
           ti = i;
           break;
         }
