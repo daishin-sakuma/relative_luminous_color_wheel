@@ -3502,14 +3502,7 @@ function attachChipDrag(chip, index, role, listEl) {
     };
 
     const determineTarget = (clientY) => {
-      // The Background header visually slides one slot when a cross-group
-      // preview is active (see applyVisualShift), so track the boundary WITH
-      // it: without this hysteresis there is a slot-tall band where the chip
-      // previews inside the other group but still commits to its own — drops
-      // there looked accepted and then sprang back.
-      let effBoundary = boundaryY;
-      if (targetRole !== role) effBoundary += role === 'fg' ? -slot : slot;
-      let tr = clientY < effBoundary ? 'fg' : 'bg';
+      let tr = clientY < boundaryY ? 'fg' : 'bg';
 
       // Limit check: do not allow dragging into a group that is already full
       if (tr !== role) {
