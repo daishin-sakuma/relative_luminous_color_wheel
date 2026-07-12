@@ -4069,12 +4069,16 @@ function renderChipEditorWheel() {
     for (let y = 0; y < SZ; y++) {
       for (let x = 0; x < SZ; x++) {
         const dx = x - R + 0.5, dy = y - R + 0.5, dist = Math.hypot(dx, dy), idx = (y * SZ + x) * 4;
-        if (dist > R) { d[idx + 3] = 0; continue; }
+        // Antialias the circular edge: full coverage inside, ramping to 0 across
+        // the ~1px boundary band. A hard dist>R cutoff left the edge jagged (the
+        // canvas composites this per-pixel alpha over the sidebar background).
+        const cov = R + 0.5 - dist;
+        if (cov <= 0) { d[idx + 3] = 0; continue; }
         let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360;
         const sat = Math.min(1, dist / R);
         const rgb = lumMode ? hslToRgb(hue, sat, findLightness(hue, sat, lumT)) : hslToRgb(hue, sat, L);
         const [tr, tg, tb] = cvdTransformRgb(rgb[0], rgb[1], rgb[2]);
-        d[idx] = tr; d[idx + 1] = tg; d[idx + 2] = tb; d[idx + 3] = 255;
+        d[idx] = tr; d[idx + 1] = tg; d[idx + 2] = tb; d[idx + 3] = cov >= 1 ? 255 : Math.round(cov * 255);
       }
     }
     _ceWheelCache = { key, img };
