@@ -3420,12 +3420,16 @@ function attachChipDrag(chip, index, role, listEl) {
     const onHandle = !!(/** @type {HTMLElement} */ (e.target).closest('.palette-chip-grip'));
     if (isTouch && !onHandle) return;
     const startY = e.clientY, startX = e.clientX;
-    // The dragged chip's own centre at grab time. Target detection tracks THIS
-    // centre (start centre + drag delta), not the pointer, so a swap happens when
-    // the dragged chip's middle — not wherever the finger grabbed it — passes
-    // another chip's middle.
+    // The dragged chip's own centre at grab time; target detection tracks THIS
+    // centre (start centre + drag delta), not the pointer, independent of where
+    // the finger grabbed the chip.
     const chipRect0 = chip.getBoundingClientRect();
     const chipStartCenterY = chipRect0.top + chipRect0.height / 2;
+    // Bias the swap threshold up by half a chip so ordering flips a touch early:
+    // dragging down, the swap fires when the chip's LEADING (bottom) edge reaches
+    // a neighbour's centre — i.e. the trigger line sits ~half an element above
+    // the chip's centre (requested feel).
+    const swapBias = chipRect0.height / 2;
 
     // Gather boundary and chips across BOTH lists for cross-role drag-and-drop
     const fgListEl = paletteRail.querySelector('.palette-group:nth-child(1) .palette-group-list');
@@ -3525,7 +3529,7 @@ function attachChipDrag(chip, index, role, listEl) {
       const targetRoleChips = chipData.filter(d => d.role === tr);
       let ti = targetRoleChips.length; // Default to end of target list
       for (let i = 0; i < targetRoleChips.length; i++) {
-        if (refY < targetRoleChips[i].centerY) {
+        if (refY < targetRoleChips[i].centerY - swapBias) {
           ti = i;
           break;
         }
