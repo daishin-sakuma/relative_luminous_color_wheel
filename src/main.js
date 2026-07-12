@@ -3607,7 +3607,17 @@ function attachChipDrag(chip, index, role, listEl) {
       }
       settle(true);
     };
-    const onCancel = () => settle(false);
+    // iOS Safari fires pointercancel (and drops pointer capture) during
+    // legitimate touch drags — its scroll/gesture recognizer competes with our
+    // grip drag, most often when dragging DOWNWARD (Text→Background) along the
+    // rail's scroll axis. Treat a canceled *lifted* drag like a normal release:
+    // commit to the last previewed target instead of springing back, so a
+    // deliberate cross-group move isn't silently lost. (settle() is guarded by
+    // `ended`, so a follow-up pointerup can't double-commit.)
+    const onCancel = ev => {
+      if (lifted) { onUp(ev); return; }
+      settle(false);
+    };
 
     _forceEndActiveDrag = forceEnd;
     window.addEventListener('pointermove', onMove);
