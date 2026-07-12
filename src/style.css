@@ -933,6 +933,28 @@ input.custom-val:focus {
    sliders have room for fine adjustment on desktop without dominating the app. */
 :root { --palette-w: min(90vw, 480px); }
 
+/* Bottom fade shown beside the open drawer. iOS 26 Safari can drop the page
+   tiles behind the bottom toolbar while a composited fixed overlay is up
+   (WebKit tiling — the strip beside the drawer showed a hard black cut where
+   painted content ended). Those tiles can't be forced to paint, so instead the
+   strip's bottom dissolves into the page background: identical whether or not
+   the tiles exist. Height = the toolbar band (--palette-vv-gap, measured in JS)
+   kept fully opaque, plus a 120px fade above it. */
+.palette-underlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--palette-vv-gap, 0px) + 150px);
+  background: linear-gradient(to bottom, transparent, var(--ground) 120px);
+  opacity: 0;
+  transition: opacity 0.22s ease; /* tracks the drawer's slide duration */
+  pointer-events: none; /* outside-press close still reaches the page */
+  z-index: 4; /* just under the sidebar (5) */
+  transform: translateZ(0); /* own layer so iOS paints it behind the toolbar */
+}
+body.palette-open .palette-underlay { opacity: 1; }
+
 /* An overlay layer above the app: opening/closing never moves the content */
 .palette-section {
   position: fixed;
@@ -2228,17 +2250,22 @@ body.about-modal-open { overflow: hidden; }
 
 /* ── Color-vision-deficiency simulation stability for WebKit/Safari ────────── */
 
+/* The underlay is filtered too so its --ground fade matches the simulated page
+   background it dissolves into (an unfiltered fade would show a color seam). */
 html.cvd-protan #app-wrapper,
+html.cvd-protan .palette-underlay,
 html.cvd-protan .palette-section {
   filter: url(#cvd-protan);
   will-change: filter;
 }
 html.cvd-deutan #app-wrapper,
+html.cvd-deutan .palette-underlay,
 html.cvd-deutan .palette-section {
   filter: url(#cvd-deutan);
   will-change: filter;
 }
 html.cvd-tritan #app-wrapper,
+html.cvd-tritan .palette-underlay,
 html.cvd-tritan .palette-section {
   filter: url(#cvd-tritan);
   will-change: filter;

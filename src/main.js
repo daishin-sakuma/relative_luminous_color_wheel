@@ -2793,8 +2793,10 @@ function syncSidebarHeight() {
   const vv = window.visualViewport;
   if (!vv) return; // bottom:0 already matches the viewport on older browsers
   // rect.bottom is set by bottom:0, independent of the padding this feeds.
+  // Set on the root so both the sidebar's padding and the underlay's fade
+  // height (which must cover the same toolbar band) inherit it.
   const gap = Math.max(0, Math.round(paletteSection.getBoundingClientRect().bottom - (vv.offsetTop + vv.height)));
-  paletteSection.style.setProperty('--palette-vv-gap', gap + 'px');
+  document.documentElement.style.setProperty('--palette-vv-gap', gap + 'px');
 }
 window.addEventListener('resize', syncSidebarHeight);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', syncSidebarHeight);
