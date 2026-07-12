@@ -3431,7 +3431,11 @@ function attachChipDrag(chip, index, role, listEl) {
     const fgListEl = paletteRail.querySelector('.palette-group:nth-child(1) .palette-group-list');
     const bgListEl = paletteRail.querySelector('.palette-group:nth-child(2) .palette-group-list');
     const bgGroupHead = paletteRail.querySelector('.palette-group:nth-child(2) .palette-group-head');
-    const boundaryY = bgGroupHead ? bgGroupHead.getBoundingClientRect().top : 0;
+    // Cross-group threshold = the Background label's CENTRE axis, so switching
+    // groups uses the same "leading edge crosses centre" rule as reordering
+    // between chips (rather than the label's top edge).
+    const bhr = bgGroupHead ? bgGroupHead.getBoundingClientRect() : null;
+    const boundaryY = bhr ? bhr.top + bhr.height / 2 : 0;
 
     const fgChips = /** @type {HTMLElement[]} */ ([...fgListEl.querySelectorAll('.palette-chip')]);
     const bgChips = /** @type {HTMLElement[]} */ ([...bgListEl.querySelectorAll('.palette-chip')]);
@@ -3516,7 +3520,9 @@ function attachChipDrag(chip, index, role, listEl) {
       // and behaves identically in both directions. `lead` is the leading edge.
       const dir = Math.sign(clientY - startY) || 1;
       const lead = refY + dir * halfChip;
-      let tr = refY < boundaryY ? 'fg' : 'bg';
+      // Same leading-edge rule for the group boundary: cross into the other group
+      // when the leading edge passes the Background label's centre axis.
+      let tr = lead < boundaryY ? 'fg' : 'bg';
 
       // Limit check: do not allow dragging into a group that is already full
       if (tr !== role) {
