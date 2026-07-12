@@ -5,8 +5,14 @@
   font-style: normal;
   font-display: swap;
   size-adjust: 113%;
-  ascent-override: 88%;
-  descent-override: 12%;
+  /* NATS ships tall, asymmetric metrics that seat the glyph ink ~0.13em below the
+     line-box centre, so every NATS label/button/tab reads low. Rebalancing ascent
+     and descent (sum kept at 100%, so line-box height — and every layout that
+     depends on it — is unchanged) lifts the baseline until the ink is optically
+     centred globally. Measured: 76/24 centres cap-and-digit text (the bulk of the
+     UI) to within ~0.005em. This replaces the per-element translateY nudges. */
+  ascent-override: 76%;
+  descent-override: 24%;
   line-gap-override: 0%;
   unicode-range: U+0020-02FF, U+2000-22FF;
 }
@@ -551,7 +557,10 @@ input.custom-val {
   cursor: text;
   transition: background 0.12s, border-color 0.12s, border-style 0.12s;
 }
-input.field-value { width: 4.4ch; min-width: 0; }
+/* Fixed to fit the widest 5-char value ("0.000"–"1.000") and never shrink: as a
+   flex child it would otherwise be squeezed below its width in a narrow left
+   column (short viewports shrink the wheel column), clipping the number. */
+input.field-value { width: 5ch; min-width: 5ch; flex-shrink: 0; }
 input.custom-val  { width: 100%; }
 input.field-value:hover,
 input.custom-val:hover,
@@ -688,9 +697,10 @@ input.custom-val:focus {
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.02em;
-  /* NATS' ink sits ~0.1em below its line-box centre, so "Ag" reads lower than
-     the swatch squares next to it — nudge it up to share the same centre axis. */
-  transform: translateY(-0.103em);
+  /* The @font-face override centres cap/x-height text, but "Ag" carries a
+     descender that pulls its ink ~0.09em low; nudge just this glyph up so it
+     shares the swatch squares' centre axis. */
+  transform: translateY(-0.091em);
 }
 .preview-palette-bg {
   width: 14px;
@@ -1002,12 +1012,8 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   align-items: center;
   gap: 0.9rem; /* Palette · Undo/Redo · Clear all, left-aligned */
 }
-/* "Palette" and "Clear all" are different sizes; NATS' ink sits ~0.103em below
-   the line-box centre (its ascent/descent are asymmetric), so nudge each up by
-   that em amount. With the boxes already centre-aligned, both texts' ink centres
-   then land on the exact same line regardless of font size. */
-.palette-head .section-label,
-.palette-clear { transform: translateY(-0.103em); }
+/* (NATS vertical centring is now handled globally via the @font-face
+   ascent/descent override, so no per-element nudge is needed here.) */
 /* Undo / Redo — icon buttons in the same style as the Preferences/icon buttons
    (.theme-toggle), sat between the "Palette" label and "Clear all". */
 .palette-history {
@@ -1204,10 +1210,10 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   border: 1px solid var(--border);
   border-radius: 5px;
 }
-/* NATS has tall, asymmetric vertical metrics (ascent 1294 / descent −756 per
-   970 upm), so even at line-height:1 the glyph ink sits ~0.10em below the box
-   centre. Nudge up by that amount so "Ag" is optically centred in the tile. */
-.chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; transform: translateY(-0.103em); flex-shrink: 0; }
+/* The @font-face override centres cap/x-height text, but "Ag" carries a descender
+   that pulls its full ink ~0.09em low; nudge just this glyph up so it sits on the
+   same centre axis as the label/caret. Keep the text exactly "Ag". */
+.chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; transform: translateY(-0.091em); flex-shrink: 0; }
 /* Label + caret form ONE elongated hover/click trigger for the compare-color
    dropdown, filling the row to the right of "Ag" and the full tile height. */
 .chip-editor-cmp-btn {
@@ -1227,15 +1233,16 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   text-align: left;
 }
 /* Role + rank label, painted in the text colour by JS — full opacity so it works
-   as a contrast sample alongside "Ag". Same NATS metric nudge as "Ag" so the two
-   are optically centred on the same line (without it the label sits ~0.10em low). */
+   as a contrast sample alongside "Ag". At line-height:1 the flex row already
+   centres its box in the card; measuring the rendered ink showed an extra nudge
+   pushed it ~1.3px high, so no transform here (this also keeps centring stable
+   across labels with different descenders, since the line box is text-independent). */
 .chip-editor-tile-label {
   min-width: 0;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   line-height: 1;
-  transform: translateY(-0.103em);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1243,6 +1250,8 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 .chip-editor-tile-icon {
   display: block;
   flex-shrink: 0;
+  /* The chevron pair renders a touch below the card centre; nudge it up to match. */
+  transform: translateY(-0.44px);
   opacity: 0.85;
   transition: opacity 0.12s;
 }
@@ -1301,11 +1310,9 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   font-size: 0.66rem;
   color: var(--muted);
 }
-/* Free text in this row (role + ratio) gets the NATS optical-centre nudge so it
-   aligns with the badge chips on the right, whose bordered boxes are already
-   centred by the flex row. */
-.chip-editor-cmp-role { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1; transform: translateY(-0.103em); }
-.chip-editor-cmp-ratio { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1; transform: translateY(-0.103em); }
+/* Role + ratio centre with the badge chips via the global @font-face override. */
+.chip-editor-cmp-role { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.chip-editor-cmp-ratio { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); }
 .chip-editor-badges { display: inline-flex; gap: 0.25rem; }
 .chip-editor-badge {
   font-size: 0.55rem;
@@ -1352,6 +1359,13 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 .chip-editor-done:active { transform: scale(0.98); }
 .palette-chip.editing { outline: 1px solid var(--accent); outline-offset: 1px; }
 .palette-rail {
+  /* Narrow, constant soft-fade band at the top and bottom (Gemini-style). The
+     mask is fixed to the rail viewport, so content dissolves under the header and
+     export footer on scroll AND during elastic overscroll/bounce — never a hard
+     crop, even when the content barely overflows. The vertical padding equals the
+     fade height, so at rest the first/last chips sit just past the band and stay
+     fully opaque (the fade only covers the padding gap until you actually scroll). */
+  --pal-fade: 15px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -1363,9 +1377,12 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   /* keep the rail's own scroll from chaining out to the page behind the
      fixed sidebar (a JS touchmove guard covers the non-overflowing case) */
   overscroll-behavior: contain;
-  /* breathing room so a lifted (scaled) chip isn't clipped at the edges */
-  padding: 3px;
+  /* Vertical = fade height (the at-rest gap under each band); 3px sides keep
+     breathing room for a lifted chip's shadow. */
+  padding: var(--pal-fade) 3px;
   margin: -3px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--pal-fade), #000 calc(100% - var(--pal-fade)), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 var(--pal-fade), #000 calc(100% - var(--pal-fade)), transparent 100%);
 }
 .palette-rail--editor-transition { pointer-events: none; }
 .palette-chip {
@@ -1446,13 +1463,33 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   flex-direction: column;
   gap: 0.4rem;
 }
+/* Drag handle. touch-action:none is the whole point: the browser never claims a
+   press that starts here for scrolling, so Android can't fire the early
+   pointercancel that was killing the grab — the grip grabs instantly and
+   reliably. The chip body keeps touch-action:pan-y for native momentum scroll. */
+.palette-chip-grip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  padding: 0 0.35rem 0 0.45rem;
+  font-size: 1.05rem;
+  cursor: grab;
+  opacity: 0.55;
+  touch-action: none;
+  transition: opacity 0.12s;
+}
+.palette-chip-grip svg { display: block; pointer-events: none; }
+@media (hover: hover) { .palette-chip-grip:hover { opacity: 0.9; } }
+.palette-chip--lifted .palette-chip-grip { cursor: grabbing; }
 /* Primary / Secondary / ordinal rank within a group */
 .palette-chip-rank {
   font-size: 0.5rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   opacity: 0.7;
-  padding-left: 0.55rem;
+  padding-left: 0.2rem;
   /* Reserve a fixed column so the hex starts at the same x on every row.
      Must clear the widest label incl. letter-spacing + padding-left:
      "Quaternary" incl. trailing letter-spacing + padding-left ≈ 7.6em,
@@ -1461,23 +1498,16 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   flex-shrink: 0;
   white-space: nowrap;
   user-select: none;
-  /* NATS ink sits ~0.10em below the box centre; nudge up so the rank is
-     optically centred against the hex (which gets the same correction). */
-  transform: translateY(-0.103em);
 }
 /* Plain label — loading a color back into a picker happens via the dedicated
    eyedropper button, and the rest of the chip surface (label included) is the
-   drag handle */
+   drag handle. (NATS centring is handled globally by the @font-face override.) */
 .palette-chip-hex {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   padding: 0.5rem 0.3rem 0.5rem 0.35rem;
   flex: 1;
   text-align: left;
-  /* Match the rank's NATS optical-centre correction so hex and rank align.
-     (Ink sits ~0.10em below the box centre regardless of line-height, so no
-     line-height change is needed here — keeps the chip's touch height intact.) */
-  transform: translateY(-0.103em);
 }
 .palette-chip-edit {
   display: flex;

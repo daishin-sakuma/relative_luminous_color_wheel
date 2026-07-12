@@ -3128,12 +3128,9 @@ function reorderAcrossRoles(srcRole, from, dstRole, to) {
 // 1:1 while siblings slide out of the way with a transform transition; on
 // release it settles into its slot before the order is committed.
 let _chipDragActive = false;
-// Touch grab tuning. The hold must fire before the finger travels SLOP px, or the
-// gesture is treated as a scroll. Kept forgiving so a chip is easy to pick up on
-// mobile: a shorter hold engages quickly, and a wider slop tolerates the natural
-// finger drift during a press (a fast scroll flick still outruns the slop first).
-const CHIP_TOUCH_HOLD_MS = 160;
-const CHIP_TOUCH_HOLD_SLOP = 24;
+// Touch drags are triggered by the grip handle only (see attachChipDrag), so the
+// grab engages immediately on press — no scroll-vs-drag hold delay for Android to
+// cancel. Mouse still lifts after a 5px move so a click isn't read as a drag.
 // Hard-reset hook for a wedged drag. A dropped pointerup (mouse released
 // off-window, capture lost mid-transform) can otherwise leave a drag stuck in
 // its lifted state and _chipDragActive latched true; the next press calls this
@@ -3152,10 +3149,14 @@ function attachChipDrag(chip, index, role, listEl) {
     // press (previously the user had to click repeatedly to jog it loose).
     if (_forceEndActiveDrag) _forceEndActiveDrag();
     if (_chipDragActive || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    // Buttons (edit / copy / remove) own their clicks — everything else on
-    // the chip is a drag handle, so the two gestures never compete
+    // Buttons (edit / copy / remove) own their clicks
     if (/** @type {HTMLElement} */ (e.target).closest('button')) return;
     const isTouch = e.pointerType !== 'mouse';
+    // Touch drags start ONLY from the grip handle (touch-action:none), so the
+    // chip body scrolls the rail natively and Android can't hijack the press for
+    // scroll/long-press and cancel the grab. Mouse still drags from anywhere.
+    const onHandle = !!(/** @type {HTMLElement} */ (e.target).closest('.palette-chip-grip'));
+    if (isTouch && !onHandle) return;
     const startY = e.clientY, startX = e.clientX;
 
     // Gather boundary and chips across BOTH lists for cross-role drag-and-drop
@@ -3301,11 +3302,8 @@ function attachChipDrag(chip, index, role, listEl) {
     const onMove = ev => {
       const rawDy = ev.clientY - startY;
       if (!lifted) {
-        // Touch before the hold fires = scroll intent; mouse needs a 5px move
-        if (isTouch) {
-          if (Math.hypot(ev.clientX - startX, rawDy) > CHIP_TOUCH_HOLD_SLOP) forceEnd();
-          return;
-        }
+        // Only mouse reaches here un-lifted (touch lifts immediately from the
+        // grip); a 5px move confirms an intentional drag over a click.
         if (Math.hypot(ev.clientX - startX, rawDy) <= 5) return;
         lift();
       }
@@ -3354,7 +3352,9 @@ function attachChipDrag(chip, index, role, listEl) {
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
     chip.addEventListener('lostpointercapture', onCancel);
-    if (isTouch) holdTimer = setTimeout(lift, CHIP_TOUCH_HOLD_MS);
+    // Touch reaches here only via the grip → grab immediately (an explicit handle
+    // needs no scroll-vs-drag hold; that delay is what Android was cancelling).
+    if (isTouch) lift();
   });
 }
 
@@ -3369,6 +3369,9 @@ function paletteRankLabel(pos) {
 // Icons for the palette chips / group headers
 const PENCIL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>';
 const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
+// Six-dot grip for the chip's drag handle (touch-action:none, so Android can't
+// hijack the press for scroll/long-press before the grab engages).
+const GRIP_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
 
 // ─── Inline palette-chip editor ───────────────────────────────────────────────
 // Re-editing a saved swatch happens in place, inside the sidebar: the edit
@@ -4101,6 +4104,12 @@ function renderPalette() {
     const cvdLum = relativeLuminance(cvdChipR, cvdChipG, cvdChipB);
     chip.style.color = cvdLum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
 
+    const grip = document.createElement('span');
+    grip.className = 'palette-chip-grip';
+    grip.innerHTML = GRIP_SVG;
+    grip.title = 'Drag to reorder';
+    grip.setAttribute('aria-hidden', 'true');
+
     const rank = document.createElement('span');
     rank.className = 'palette-chip-rank';
     rank.textContent = paletteRankLabel(pos);
@@ -4140,7 +4149,7 @@ function renderPalette() {
 
     attachChipDrag(chip, pos, role, list);
 
-    chip.append(rank, hexLabel, edit, copy, remove);
+    chip.append(grip, rank, hexLabel, edit, copy, remove);
     list.appendChild(chip);
     });
 
