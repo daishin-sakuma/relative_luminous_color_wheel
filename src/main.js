@@ -3882,6 +3882,30 @@ function applyChipEditorMode(mode) {
 }
 
 function setChipEditorMode(mode) {
+  const prev = _ce.mode;
+  if (mode === prev) return;
+
+  // RGB / HSL / LUM share one live colour; Gray is independent (matches the main
+  // BG picker). Switching among the three colour modes just re-derives the
+  // substates from the shared colour.
+  if (mode !== 'gray' && prev !== 'gray') {
+    reseedSubstates();
+    applyChipEditorMode(mode);
+    _ceWheelCache = null;
+    syncChipEditorControls();
+    return;
+  }
+
+  // Crossing the Gray boundary: stash the outgoing side's value and restore the
+  // incoming side's — so Gray keeps its own level and the colour modes keep
+  // their colour independently.
+  if (prev === 'gray') {
+    _ce.savedGray = _ce.gray;
+    _ce.r = _ce.savedColor.r; _ce.g = _ce.savedColor.g; _ce.b = _ce.savedColor.b;
+  } else {
+    _ce.savedColor = { r: _ce.r, g: _ce.g, b: _ce.b };
+    _ce.r = _ce.g = _ce.b = _ce.savedGray; // grayscale immediately on entering Gray
+  }
   reseedSubstates();
   applyChipEditorMode(mode);
   _ceWheelCache = null;
@@ -4227,7 +4251,11 @@ function openChipEditor(idx) {
   _ceWheelCache = null;
   const entry = palette[idx];
   const [r, g, b] = hexToRgb(entry.hex);
-  _ce = { role: entry.role, r, g, b, mode: 'lum', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0 };
+  // savedColor holds the shared RGB/HSL/LUM colour; savedGray holds the
+  // independent Gray value — so switching between Gray and the colour modes
+  // keeps each side's setting (mirroring the main BG picker).
+  _ce = { role: entry.role, r, g, b, mode: 'lum', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0,
+          savedColor: { r, g, b }, savedGray: Math.round((r + g + b) / 3) };
   reseedSubstates();
   applyChipEditorMode('lum');
   syncChipEditorControls();
