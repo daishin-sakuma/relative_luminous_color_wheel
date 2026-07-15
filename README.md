@@ -15,7 +15,7 @@ The usual workflow treats accessibility as an afterthought: pick a color, run it
 
 ## Features
 
-- **Luminance-locked wheel** — rendered by a WebGL fragment shader (per-pixel lightness search), with a chunked 2D canvas fallback
+- **Luminance-locked wheel** — rendered by a WebGL fragment shader (per-pixel lightness search), with a chunked 2D canvas fallback. In APCA mode every wheel (main, custom, and the palette re-edit picker) equalizes APCA screen luminance (Ys) instead of WCAG relative luminance, so exploration stays contrast-stable under whichever method is active
 - **Target contrast lock** — `Off / WCAG 2 / APCA` modes; WCAG 2.2 thresholds where text ratings change (3:1 large text & UI, 4.5:1 normal AA, 7:1 AAA), or experimental APCA Lc 45/60/75/90 (a newer perceptual method — WCAG 2.2 remains the normative default)
 - **Live contrast readouts** — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components against white, black, and a custom color, with APCA Lc values alongside every ratio; saved palette swatches appear as a compact preview strip in every contrast tile
 - **Custom comparison color** — three modes: **Color** (RGB/HSL), **Lum** (relative luminance / saturation / hue), **Gray** (neutral grayscale)

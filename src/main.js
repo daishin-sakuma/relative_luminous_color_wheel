@@ -111,12 +111,22 @@ function relativeLuminance(r, g, b) {
   return 0.2126 * LINEAR[r] + 0.7152 * LINEAR[g] + 0.0722 * LINEAR[b];
 }
 
+/** The luminance definition the wheels (and their lightness solvers) equalize
+    on: WCAG 2.2 relative luminance normally, APCA screen luminance Ys while the
+    APCA contrast mode is active — so in APCA mode every colour on a wheel
+    shares the same APCA Ys instead. (apcaY is hoisted; contrastLockMode is
+    'off' until the user touches the mode switch, long after module init.) */
+function wheelLum(r, g, b) {
+  return contrastLockMode === 'apca' ? apcaY(r, g, b) : relativeLuminance(r, g, b);
+}
+
 function contrastRatio(l1, l2) {
   return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 }
 
 /**
- * Binary search: find HSL lightness so relativeLuminance(hsl(H,S,L)) ≈ target.
+ * Binary search: find HSL lightness so wheelLum(hsl(H,S,L)) ≈ target
+ * (WCAG relative luminance, or APCA Ys in APCA mode).
  * L=0→black(0), L=1→white(1) for any H,S — every target is reachable.
  */
 function findLightness(h, s, target) {
@@ -124,7 +134,7 @@ function findLightness(h, s, target) {
   for (let i = 0; i < 18; i++) {
     const mid = (lo + hi) * 0.5;
     const [r, g, b] = hslToRgb(h, s, mid);
-    if (relativeLuminance(r, g, b) < target) lo = mid; else hi = mid;
+    if (wheelLum(r, g, b) < target) lo = mid; else hi = mid;
   }
   return (lo + hi) * 0.5;
 }
@@ -143,7 +153,7 @@ function findLightnessBiased(h, s, target, dir) {
   if (!dir) return l;
   const STEP = 1 / 512; // ~half an 8-bit channel step in lightness
   for (let i = 0; i < 12; i++) {
-    const lum = relativeLuminance(...hslToRgb(h, s, l));
+    const lum = wheelLum(...hslToRgb(h, s, l));
     if (dir > 0 ? lum >= target : lum <= target) break;
     const next = Math.max(0, Math.min(1, l + dir * STEP));
     if (next === l) break; // hit black/white — can't go further
@@ -156,7 +166,7 @@ function findLightnessBiased(h, s, target, dir) {
     custom background's luminance so the fg:bg contrast never dips below what
     the continuous target luminance promises, for any hue/sat. */
 function selectedRgbBiased() {
-  const dir = Math.sign(targetLum - relativeLuminance(cR, cG, cB));
+  const dir = Math.sign(targetLum - wheelLum(cR, cG, cB));
   return hslToRgb(selHue, selSat, findLightnessBiased(selHue, selSat, targetLum, dir));
 }
 
@@ -338,11 +348,16 @@ uniform float uRadius;
 uniform vec2  uCenter;
 uniform mat3  uCvdMatrix;
 uniform float uCvdActive;
+uniform float uApcaLum; // 1.0 → equalize APCA Ys instead of WCAG luminance
 
 float sL(float c) {
   return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
 }
 float lum(vec3 c) {
+  if (uApcaLum > 0.5) {
+    // APCA screen luminance: simple 2.4 power, APCA coefficients
+    return 0.2126729 * pow(c.r, 2.4) + 0.7151522 * pow(c.g, 2.4) + 0.0721750 * pow(c.b, 2.4);
+  }
   return 0.2126 * sL(c.r) + 0.7152 * sL(c.g) + 0.0722 * sL(c.b);
 }
 vec3 hsl(float h, float s, float l) {
@@ -430,6 +445,7 @@ function initGL() {
   const uRadius    = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uRadius'));
   const uCvdMatrix = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uCvdMatrix'));
   const uCvdActive = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uCvdActive'));
+  const uApcaLum   = /** @type {WebGLUniformLocation} */ (gl.getUniformLocation(prog, 'uApcaLum'));
   
   gl.uniform2f(uCenter, BUF_SZ / 2, BUF_SZ / 2);
   gl.uniform1f(uRadius, R_BUF);
@@ -437,13 +453,14 @@ function initGL() {
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.clearColor(0, 0, 0, 0);
 
-  return { gl, uLum, uCvdMatrix, uCvdActive };
+  return { gl, uLum, uCvdMatrix, uCvdActive, uApcaLum };
 }
 
 function drawWheel(lum) {
   if (!glState) return;
-  const { gl, uLum, uCvdMatrix, uCvdActive } = glState;
+  const { gl, uLum, uCvdMatrix, uCvdActive, uApcaLum } = glState;
   gl.uniform1f(uLum, lum);
+  gl.uniform1f(uApcaLum, contrastLockMode === 'apca' ? 1.0 : 0.0);
   
   // CVD simulation runs in the shader (linear space) — an ancestor CSS filter
   // can't reach this composited WebGL layer on iOS WebKit.
@@ -1033,7 +1050,7 @@ function lockFreeRgbAt(changed, lum) {
     }
     return hslToRgb(cH, cS, findLightnessBiased(cH, cS, lum, dir));
   }
-  const dir = Math.sign(lum - relativeLuminance(cR, cG, cB));
+  const dir = Math.sign(lum - wheelLum(cR, cG, cB));
   return hslToRgb(selHue, selSat, findLightnessBiased(selHue, selSat, lum, dir));
 }
 
@@ -1110,7 +1127,7 @@ function enforceApcaLock(changed) {
     return Math.abs(changed === 'fg' ? apcaLc(fgRgb, rgb) : apcaLc(rgb, bgRgb));
   };
 
-  const split   = relativeLuminance(...(changed === 'fg' ? fgRgb : bgRgb));
+  const split   = wheelLum(...(changed === 'fg' ? fgRgb : bgRgb));
   const currentLc = Math.abs(apcaLc(fgRgb, bgRgb));
 
   // On each branch the satisfying region ends at a boundary: binary-search
@@ -1680,7 +1697,7 @@ function setCustomMode(mode) {
     saveToStorage('custom-mode', mode);
     if (mode === 'lum') {
       // Derive Lum-mode params from the current color
-      cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
+      cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
       cuHue = cH;
       cuSat = cS;
     }
@@ -1707,7 +1724,7 @@ function setCustomMode(mode) {
     // Entering 'color' or 'lum' from gray: restore shared color
     setCustomFromRgb(customColorSaved.r, customColorSaved.g, customColorSaved.b);
     if (mode === 'lum') {
-      cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
+      cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
       cuHue = cH;
       cuSat = cS;
     }
@@ -1938,7 +1955,52 @@ document.addEventListener('click', e => {
 
   modeBtns.forEach(btn => btn.addEventListener('click', () => {
     const m = btn.dataset.lockmode;
-    contrastLockMode = m === 'apca' || m === 'off' ? m : 'wcag2';
+    const next = m === 'apca' || m === 'off' ? m : 'wcag2';
+    // Entering/leaving APCA changes the luminance definition the wheels equalize
+    // on (WCAG relative luminance ↔ APCA Ys). Keep every currently-chosen colour
+    // IDENTICAL across the switch by re-expressing its number under the new
+    // definition, then rebuild everything solved from luminance.
+    const defChanged = (next === 'apca') !== (contrastLockMode === 'apca');
+    if (defChanged) {
+      const selRgb = selectedRgbBiased(); // rendered under the old definition
+      contrastLockMode = next;
+      // Re-express the wheel colour's number under the new definition, then pin
+      // the EXACT same quantized RGB: the re-derived target sits on a
+      // quantization-plateau boundary, where the solver's rounding/bias can
+      // land one 8-bit step away — walk the target a hair into the plateau
+      // until the rendered colour reproduces.
+      const want = selRgb.join(',');
+      const t = Math.max(0, Math.min(1, wheelLum(...selRgb)));
+      targetLum = t;
+      if (selectedRgbBiased().join(',') !== want) {
+        for (const eps of [1e-4, -1e-4, 3e-4, -3e-4, 6e-4, -6e-4, 1e-3, -1e-3]) {
+          targetLum = Math.max(0, Math.min(1, t + eps));
+          if (selectedRgbBiased().join(',') === want) break;
+        }
+        if (selectedRgbBiased().join(',') !== want) targetLum = t; // give up gracefully
+      }
+      lumSlider.value = String(Math.round(targetLum * 1000));
+      if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
+      saveToStorage('sel-lum', String(targetLum));
+      if (customMode === 'lum') cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
+      // Everything below is cached against the old definition
+      _cwLumCache = null;
+      _lumTrackKey = '';
+      _hueTrackKey = -1;
+      _satTrackKey = '';
+      _cuTracksKey = '';
+      _ceWheelCache = null;
+      if (_ce) { reseedSubstates(); syncChipEditorControls(); }
+      // This render is the mode switch itself, not a user touch: don't let it
+      // overwrite _lastTouchedSide (syncCustom=true would record 'bg' and the
+      // follow-up enforcement would then move the side the user touched last),
+      // and skip the frame's own enforcement pass — the explicit
+      // enforceContrastLock(_lastTouchedSide) below handles it.
+      _skipEnforceOnce = true;
+      scheduleRender(true, true);
+    } else {
+      contrastLockMode = next;
+    }
     setContrastLockError('');
     refreshLockUI();
     if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
@@ -2168,7 +2230,7 @@ if (customMode === 'gray') {
   cR = customColorSaved.r; cG = customColorSaved.g; cB = customColorSaved.b;
   if (customMode === 'lum') {
     [cH, cS, cL] = rgbToHsl(cR, cG, cB);
-    cuLum = Math.max(0.001, relativeLuminance(cR, cG, cB));
+    cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
     cuHue = cH; cuSat = cS;
   }
 }
@@ -3917,7 +3979,7 @@ function reseedSubstates() {
   const { r, g, b } = _ce;
   const [h, s, l] = rgbToHsl(r, g, b);
   _ce.hsl  = [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
-  _ce.lum  = [Math.round(relativeLuminance(r, g, b) * 1000), Math.round(s * 100), Math.round(h)];
+  _ce.lum  = [Math.round(wheelLum(r, g, b) * 1000), Math.round(s * 100), Math.round(h)];
   _ce.gray = Math.round((r + g + b) / 3);
 }
 
