@@ -831,9 +831,9 @@ function updateUI() {
   const swatchHexEl = /** @type {HTMLInputElement} */ (document.getElementById('swatch-hex'));
   // Don't clobber the field while the user is typing/editing it.
   if (document.activeElement !== swatchHexEl) swatchHexEl.value = formatHex(selHex);
-  const legible = cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
-  /** @type {HTMLElement} */ (document.getElementById('swatch-hex-wrap')).style.color = legible;
-  /** @type {HTMLElement} */ (document.getElementById('swatch-tools')).style.color = legible;
+  // The pin overlays the coloured swatch, so tint it to stay legible on top.
+  /** @type {HTMLElement} */ (document.getElementById('pin-selected')).style.color =
+    cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
   document.documentElement.style.setProperty('--accent', cvdSelHex);
 
   // Data grid

@@ -198,7 +198,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.36.0</span>
+    <span class="app-version">ver. 1.36.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -332,17 +332,15 @@
     </div>
 
     <div class="swatch-data-row">
-      <div class="swatch" id="swatch">
-        <div class="swatch-row">
-          <div class="swatch-hex-wrap" id="swatch-hex-wrap">
-            <input type="text" class="swatch-hex" id="swatch-hex" value="#808080" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Text color hex">
-            <span class="swatch-hex-copy" id="swatch-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
-          </div>
-          <div class="swatch-tools" id="swatch-tools">
-            <button class="pin-btn" id="pin-selected" title="Add this color to the palette">
-              <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg>
-            </button>
-          </div>
+      <div class="swatch-col">
+        <div class="swatch" id="swatch">
+          <button class="pin-btn pin-btn--mini" id="pin-selected" title="Add this color to the palette">
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg>
+          </button>
+        </div>
+        <div class="custom-hex-wrap swatch-hex-wrap">
+          <input type="text" class="custom-hex-input swatch-hex" id="swatch-hex" value="#808080" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Text color hex">
+          <span class="custom-hex-copy-icon swatch-hex-copy" id="swatch-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
         </div>
       </div>
       <div class="data-grid">

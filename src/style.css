@@ -187,73 +187,26 @@ header {
 #overlay { pointer-events: none; }
 
 /* ── Swatch ─────────────────────────────────────────────────────────────────── */
+/* Colour preview on top, editable hex box below (same split as the custom BG
+   picker). The pin button overlays the preview, flush right. */
+.swatch-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
 .swatch {
-  position: relative;
+  position: relative; /* anchors the pin button */
   width: 100%;
   height: 52px;
-  /* Never shrink below what the hex value + copy/pin buttons need — this floors
-     the aggressive height tiers so the row can't clip (the swatch sits in the
-     left column, which isn't the height bottleneck). */
   min-height: 40px;
   border-radius: 3px;
   border: 1px solid var(--border);
-  display: flex;
-  align-items: flex-end;
-  padding: 0.5rem 0.6rem 0.15rem;
   transition: background 0.06s;
   overflow: hidden;
 }
-
-/* Hex value + pin button share one bottom-aligned row and are centred against
-   each other (so the two never look vertically staggered). */
-.swatch-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-/* Hex is an editable input sitting on the coloured swatch: transparent, sized to
-   its 7-char value, with the copy icon right after it. Its colour (and the copy
-   icon's, via inherit) is set by JS to stay legible on the swatch background. */
-.swatch-hex-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  min-width: 0;
-  color: rgba(255,255,255,0.75);
-}
-.swatch-hex {
-  font-size: 0.82rem;
-  letter-spacing: 0.10em;
-  font-family: ui-monospace, monospace;
-  color: inherit;
-  background: none;
-  border: none;
-  outline: none;
-  padding: 0;
-  margin: 0;
-  /* 7 chars ("#RRGGBB") plus the 0.10em tracking after each, so the last digit
-     never clips. */
-  width: calc(7ch + 0.8em);
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.swatch-hex:focus { cursor: text; }
-.swatch-hex-copy {
-  font-size: 0.8rem;
-  line-height: 1;
-  color: inherit;
-  opacity: 0.5;
-  cursor: pointer;
-  user-select: none;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
-}
-.swatch-hex-copy::after { content: '⧉'; }
-@media (hover: hover) { .swatch-hex-copy:hover { opacity: 0.85; } }
-.swatch-hex-copy.hex-copied { opacity: 1; }
-.swatch-hex-copy.hex-copied::after { content: '✓'; }
+/* The hex box reuses the custom BG picker's field styling (.custom-hex-input /
+   .custom-hex-copy-icon) verbatim so the two pickers match. */
 
 /* ── Luminance / Hue / Sat controls ─────────────────────────────────────────── */
 .lum-row {
@@ -844,12 +797,6 @@ input.custom-val:focus {
 /* Bottom-right. 0.5rem lands the icon's visual bottom on the hex text's
    baseline (matching the ⧉ copy icon): the button's 0.2rem padding and the
    svg's internal inset together offset the text's descent below the baseline */
-.swatch-tools {
-  display: flex;
-  align-items: center;
-  gap: 0.1rem;
-  flex-shrink: 0;
-}
 .pin-btn {
   background: none;
   border: none;
@@ -2063,7 +2010,8 @@ body.about-modal-open { overflow: hidden; }
   .wheel-wrap { align-self: center; }
   /* Swatch + data cards side by side */
   .swatch-data-row { flex-direction: row; align-items: stretch; gap: 0.75rem; }
-  .swatch { height: auto; flex: 1; min-height: 80px; }
+  .swatch-col { flex: 1; }
+  .swatch { height: auto; flex: 1; min-height: 60px; }
   .data-grid { flex: 1.6; }
   .preview-display { font-size: 2rem; }
   .custom-color-subgroups { grid-template-columns: 1fr 1fr; }
