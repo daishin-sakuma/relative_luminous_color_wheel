@@ -198,7 +198,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.38.0</span>
+    <span class="app-version">ver. 2.0.0-beta.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -487,6 +487,20 @@
           <button class="contrast-lock-btn" data-apca-target="60" title="Lc 60 — content text other than body copy (24px / 16px bold)">60</button>
           <button class="contrast-lock-btn" data-apca-target="75" title="Lc 75 — minimum for body text (18px+)">75</button>
           <button class="contrast-lock-btn" data-apca-target="90" title="Lc 90 — preferred for body text (14px+)">90</button>
+        </div>
+        <!-- v2 beta: APCA is size/weight-dependent — the tiles judge this font -->
+        <div class="apca-font-ctrl" id="apca-font-ctrl" hidden>
+          <label class="apca-font-label" for="apca-font-size">Font</label>
+          <select id="apca-font-size" class="apca-font-select" title="Font size the APCA verdicts judge against">
+            <option>10</option><option>12</option><option>14</option><option>15</option>
+            <option selected>16</option><option>18</option><option>21</option><option>24</option>
+            <option>28</option><option>32</option><option>36</option><option>42</option>
+            <option>48</option><option>60</option><option>72</option><option>96</option>
+          </select><span class="apca-font-unit">px</span>
+          <select id="apca-font-weight" class="apca-font-select" title="Font weight the APCA verdicts judge against">
+            <option>100</option><option>200</option><option>300</option><option selected>400</option>
+            <option>500</option><option>600</option><option>700</option><option>800</option><option>900</option>
+          </select>
         </div>
         <span class="contrast-lock-error" id="contrast-lock-error" role="alert"></span>
       </div>

@@ -334,6 +334,58 @@ function apcaLc(txtRgb, bgRgb) {
   return S > -0.1 ? 0 : (S + 0.027) * 100;
 }
 
+// ─── APCA font-size/weight lookup (v2 beta) ──────────────────────────────────
+// fontMatrixAscend from the official apca-w3 package: for each |Lc| row, the
+// minimum font px per weight 100–900. 999 = text prohibited at this contrast,
+// 777 = spot/non-text only. Between rows the minimum size is interpolated
+// linearly; a sentinel in the lower bracketing row wins (conservative).
+const APCA_FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+const APCA_FONT_MATRIX = [
+  [0,   [999,999,999,999,999,999,999,999,999]],
+  [10,  [999,999,999,999,999,999,999,999,999]],
+  [15,  [777,777,777,777,777,777,777,777,777]],
+  [20,  [777,777,777,777,777,777,777,777,777]],
+  [25,  [777,777,777,120,120,108,96,96,96]],
+  [30,  [777,777,120,108,108,96,72,72,72]],
+  [35,  [777,120,108,96,72,60,48,48,48]],
+  [40,  [120,108,96,60,48,42,32,32,32]],
+  [45,  [108,96,72,42,32,28,24,24,24]],
+  [50,  [96,72,60,32,28,24,21,21,21]],
+  [55,  [80,60,48,28,24,21,18,18,18]],
+  [60,  [72,48,42,24,21,18,16,16,18]],
+  [65,  [68,46,32,21.75,19,17,15,16,18]],
+  [70,  [64,44,28,19.5,18,16,14.5,16,18]],
+  [75,  [60,42,24,18,16,15,14,16,18]],
+  [80,  [56,38.25,23,17.25,15.81,14.81,14,16,18]],
+  [85,  [52,34.5,22,16.5,15.625,14.625,14,16,18]],
+  [90,  [48,32,21,16,15.5,14.5,14,16,18]],
+  [95,  [45,28,19.5,15.5,15,14,13.5,16,18]],
+  [100, [42,26.5,18.5,15,14.5,13.5,13,16,18]],
+  [105, [39,25,18,14.5,14,13,12,16,18]],
+  [110, [36,24,18,14,13,12,11,16,18]],
+  [115, [34.5,22.5,17.25,12.5,11.875,11.25,10.625,14.5,16.5]],
+  [120, [33,21,16.5,11,10.75,10.5,10.25,13,15]],
+  [125, [32,20,16,10,10,10,10,12,14]],
+];
+
+/** Minimum font px for |Lc| at `weight`; 999 = prohibited, 777 = non-text only. */
+function apcaMinFontSize(lcAbs, weight) {
+  const wi = APCA_FONT_WEIGHTS.indexOf(weight);
+  if (wi < 0) return 999;
+  const rows = APCA_FONT_MATRIX;
+  if (lcAbs <= rows[0][0]) return rows[0][1][wi];
+  if (lcAbs >= rows[rows.length - 1][0]) return rows[rows.length - 1][1][wi];
+  let i = 0;
+  while (rows[i + 1][0] <= lcAbs) i++;
+  const [la, va] = rows[i], [lb, vb] = rows[i + 1];
+  const a = va[wi], b = vb[wi];
+  if (a >= 777 || b >= 777) return a; // sentinel holds until the numeric row is reached
+  return a + (b - a) * (lcAbs - la) / (lb - la);
+}
+
+// v2 beta: the font the APCA verdicts judge against (persisted).
+let apcaFontSize = 16, apcaFontWeight = 400;
+
 // ─── WebGL wheel renderer ──────────────────────────────────────────────────────
 
 const VS_SRC = /* glsl */`
@@ -666,7 +718,13 @@ function buildPreviewWcag(el) {
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
   }
-  const dom = { ratioEl, apcaEl, cats, badges };
+  let apcaFontEl = null;
+  if (apcaEl) {
+    apcaFontEl = document.createElement('span');
+    apcaFontEl.className = 'preview-apca-font';
+    apcaEl.insertAdjacentElement('afterend', apcaFontEl);
+  }
+  const dom = { ratioEl, apcaEl, apcaFontEl, cats, badges };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -696,8 +754,33 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       const lc = apcaLc(txtRgb, bgRgb);
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = cvdTransformRgba(dim);
+      // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
+      // font against the minimum Lc-derived size from the official lookup.
+      if (dom.apcaFontEl) {
+        if (contrastLockMode === 'apca') {
+          const min = apcaMinFontSize(Math.abs(lc), apcaFontWeight);
+          const label = apcaFontSize + 'px/' + apcaFontWeight;
+          let pass = false, text;
+          if (min >= 999)      text = '✗ ' + label + ' — too low for text';
+          else if (min >= 777) text = '✗ ' + label + ' — non-text only';
+          else if (apcaFontSize >= min - 1e-9) { pass = true; text = '✓ ' + label; }
+          else text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
+          dom.apcaFontEl.textContent = text;
+          dom.apcaFontEl.title = pass
+            ? 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + Math.abs(lc).toFixed(0)
+            : (min >= 777
+              ? 'APCA: |Lc| ' + Math.abs(lc).toFixed(0) + ' is below the readable-text floor for this weight'
+              : 'APCA: at |Lc| ' + Math.abs(lc).toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px');
+          dom.apcaFontEl.style.color = cvdTransformHex(pass
+            ? (isLight ? '#1a7a42' : '#5dde8a')
+            : (isLight ? '#b3261e' : '#ff7076'));
+        } else {
+          dom.apcaFontEl.textContent = '';
+        }
+      }
     } else {
       dom.apcaEl.textContent = '';
+      if (dom.apcaFontEl) dom.apcaFontEl.textContent = '';
     }
   }
 
@@ -1813,7 +1896,7 @@ const swatchHexInput = /** @type {HTMLInputElement} */ (document.getElementById(
 const swatchHexCopy  = /** @type {HTMLElement} */ (document.getElementById('swatch-hex-copy'));
 
 function applyMainHex(r, g, b) {
-  targetLum = relativeLuminance(r, g, b);
+  targetLum = wheelLum(r, g, b); // interpret under the active definition (WCAG / APCA Ys)
   const [h, s] = rgbToHsl(r, g, b);
   selHue = h;
   selSat = s;
@@ -1955,6 +2038,8 @@ document.addEventListener('click', e => {
     modeBtns.forEach(b => b.classList.toggle('active', b.dataset.lockmode === contrastLockMode));
     wcagWrap.hidden = contrastLockMode !== 'wcag2';
     apcaWrap.hidden = contrastLockMode !== 'apca';
+    const fc = document.getElementById('apca-font-ctrl');
+    if (fc) fc.hidden = contrastLockMode !== 'apca';
   }
 
   function setLockTarget(target, persist) {
@@ -2045,6 +2130,26 @@ document.addEventListener('click', e => {
   apcaBtns.forEach(btn => btn.addEventListener('click', () => {
     setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
   }));
+
+  // v2 beta: font size/weight the APCA verdicts judge against
+  const fontSizeSel = /** @type {HTMLSelectElement} */ (document.getElementById('apca-font-size'));
+  const fontWghtSel = /** @type {HTMLSelectElement} */ (document.getElementById('apca-font-weight'));
+  if (fontSizeSel && fontWghtSel) {
+    const fs = parseFloat(localStorage.getItem('apca-font-px') ?? '16');
+    const fw = parseInt(localStorage.getItem('apca-font-wght') ?? '400', 10);
+    if ([...fontSizeSel.options].some(o => +o.value === fs)) { apcaFontSize = fs; fontSizeSel.value = String(fs); }
+    if (APCA_FONT_WEIGHTS.includes(fw)) { apcaFontWeight = fw; fontWghtSel.value = String(fw); }
+    fontSizeSel.addEventListener('change', () => {
+      apcaFontSize = +fontSizeSel.value;
+      saveToStorage('apca-font-px', String(apcaFontSize));
+      updateUI(); // verdicts only — not a colour touch
+    });
+    fontWghtSel.addEventListener('change', () => {
+      apcaFontWeight = +fontWghtSel.value;
+      saveToStorage('apca-font-wght', String(apcaFontWeight));
+      updateUI();
+    });
+  }
 }
 
 {
