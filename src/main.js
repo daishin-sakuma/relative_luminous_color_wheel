@@ -760,11 +760,11 @@ function buildPreviewWcag(el) {
 // single frame and the pass/fail chips flicker. The DISCRETE verdict state
 // (badge passes, APCA tier, font verdict) therefore only switches after the
 // new state has persisted for VERDICT_STABLE_MS — one-frame artifacts never
-// render, real changes appear ~40–60ms late while dragging, and a trailing
+// render, real changes appear ~50–70ms late while dragging, and a trailing
 // settle pass guarantees the exact state once input stops. Ratio/Lc numbers
-// and all colour adaptation stay per-frame. (40ms ≈ 2–3 frames: enough to
-// swallow the lock's one-frame repin artifact, low enough to feel immediate.)
-const VERDICT_STABLE_MS = 40;
+// and all colour adaptation stay per-frame. (50ms ≈ 3 frames: swallows the
+// lock's repin transients incl. the occasional 2-frame one, still immediate.)
+const VERDICT_STABLE_MS = 50;
 let _verdictSettleTimer = 0;
 function scheduleVerdictSettle() {
   clearTimeout(_verdictSettleTimer);
