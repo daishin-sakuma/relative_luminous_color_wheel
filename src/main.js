@@ -792,8 +792,12 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
           // usage ladder's 0.3-tolerance thresholds (14.7 / 29.7) rather than
           // the tool's internal 15 / 29.8, so this verdict and the tier row
           // above it always switch on exactly the same |Lc|.
+          // No `min >= 999` here: the 999 rows live entirely below the Lc-15
+          // hard minimum, but the sentinel-holding lookup can still return 999
+          // in the 14.7–15 band — which must read as the NO-TEXT zone (spot &
+          // non-text) to stay in lockstep with the tier row above.
           let pass = false, text, title;
-          if (lcAbs <= 14.7 || min >= 999) {
+          if (lcAbs <= 14.7) {
             text = '✗ ' + label + ' — contrast too low';
             title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — too low for any use';
           } else if (lcAbs <= 29.7 || min >= 777) {
