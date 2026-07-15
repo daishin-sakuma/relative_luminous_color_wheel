@@ -786,18 +786,20 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
           const min = apcaMinFontSize(lcAbs, apcaFontWeight);
           const label = apcaFontSize + 'px/' + apcaFontWeight;
           // The reference tool gates the whole font table before the lookup
-          // matrix: |Lc| < 15 (minScoreG) is too low for ANY use, and
-          // |Lc| < 29.8 (nonTextScoreG) renders every weight as non-text —
-          // matrix sentinels (999/777) only matter past those gates. Mirroring
-          // both keeps this verdict consistent with the usage-tier ladder.
+          // matrix: below the hard minimum nothing is usable, and below the
+          // any-text floor every weight renders as non-text — matrix sentinels
+          // (999/777) only matter past those gates. The gate values use the
+          // usage ladder's 0.3-tolerance thresholds (14.7 / 29.7) rather than
+          // the tool's internal 15 / 29.8, so this verdict and the tier row
+          // above it always switch on exactly the same |Lc|.
           let pass = false, text, title;
-          if (lcAbs < 15 || min >= 999) {
+          if (lcAbs <= 14.7 || min >= 999) {
             text = '✗ ' + label + ' — contrast too low';
             title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — too low for any use';
-          } else if (lcAbs < 29.8 || min >= 777) {
+          } else if (lcAbs <= 29.7 || min >= 777) {
             text = '✗ ' + label + ' — spot & non-text only';
             title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the readable-text floor'
-              + (lcAbs < 29.8 ? ' (Lc 29.8)' : ' for weight ' + apcaFontWeight)
+              + (lcAbs <= 29.7 ? ' (Lc ~30)' : ' for weight ' + apcaFontWeight)
               + ' — spot text and non-text elements only';
           } else if (apcaFontSize >= min - 1e-9) {
             pass = true;
