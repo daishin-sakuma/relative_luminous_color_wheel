@@ -663,6 +663,12 @@ function buildPreviewWcag(el) {
   const rowsEl = document.createElement('div');
   rowsEl.className = 'preview-wcag-rows';
 
+  // v2 beta: the APCA font verdict lives on its own right-aligned row above the
+  // Normal/Large WCAG badge rows (shown in APCA mode only).
+  const apcaFontEl = document.createElement('div');
+  apcaFontEl.className = 'preview-apca-font';
+  rowsEl.appendChild(apcaFontEl);
+
   // Note: WCAG 1.4.11 (non-text contrast, 3:1) is Level AA only — UI
   // components have no AAA criterion, so the AAA badge in the Large row
   // applies to large text (1.4.6) exclusively.
@@ -717,12 +723,6 @@ function buildPreviewWcag(el) {
     apcaEl.className = 'preview-apca';
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
-  }
-  let apcaFontEl = null;
-  if (apcaEl) {
-    apcaFontEl = document.createElement('span');
-    apcaFontEl.className = 'preview-apca-font';
-    apcaEl.insertAdjacentElement('afterend', apcaFontEl);
   }
   const dom = { ratioEl, apcaEl, apcaFontEl, cats, badges };
   _wcagDom.set(el, dom);
