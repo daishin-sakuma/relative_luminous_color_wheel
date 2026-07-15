@@ -905,6 +905,17 @@ input.custom-val:focus {
   white-space: nowrap;
   flex-shrink: 0;
 }
+/* v2 beta: per-tile APCA usage tier (official reference-tool wording) — a
+   right-aligned row above the font verdict (populated in APCA mode only). */
+.preview-apca-tier {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-align: right;
+  align-self: flex-end;
+  font-weight: 600;
+}
+.preview-apca-tier:empty { display: none; }
 /* v2 beta: per-tile APCA font verdict — its own right-aligned row above the
    Normal/Large WCAG badge rows (populated in APCA mode only). */
 .preview-apca-font {

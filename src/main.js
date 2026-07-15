@@ -386,6 +386,18 @@ function apcaMinFontSize(lcAbs, weight) {
 // v2 beta: the font the APCA verdicts judge against (persisted).
 let apcaFontSize = 16, apcaFontWeight = 400;
 
+/** Official APCA usage-level ladder (verbatim from the reference tool at
+    apcacontrast.com, including its 0.3-tolerance thresholds). */
+function apcaUsageTier(lcAbs) {
+  if (lcAbs > 89.7) return 'SMALL BODY TEXT ONLY';
+  if (lcAbs > 74.7) return 'BODY TEXT OKAY';
+  if (lcAbs > 59.7) return 'FLUENT TEXT OKAY';
+  if (lcAbs > 44.7) return 'LARGE & SUB-FLUENT TEXT';
+  if (lcAbs > 29.7) return 'SPOT & NON TEXT ONLY';
+  if (lcAbs > 14.7) return '\u{1F6AB} NO TEXT USAGE';
+  return 'INVISIBLE';
+}
+
 // ─── WebGL wheel renderer ──────────────────────────────────────────────────────
 
 const VS_SRC = /* glsl */`
@@ -663,8 +675,11 @@ function buildPreviewWcag(el) {
   const rowsEl = document.createElement('div');
   rowsEl.className = 'preview-wcag-rows';
 
-  // v2 beta: the APCA font verdict lives on its own right-aligned row above the
-  // Normal/Large WCAG badge rows (shown in APCA mode only).
+  // v2 beta: APCA usage tier + font verdict live on their own right-aligned
+  // rows above the Normal/Large WCAG badge rows (shown in APCA mode only).
+  const apcaTierEl = document.createElement('div');
+  apcaTierEl.className = 'preview-apca-tier';
+  rowsEl.appendChild(apcaTierEl);
   const apcaFontEl = document.createElement('div');
   apcaFontEl.className = 'preview-apca-font';
   rowsEl.appendChild(apcaFontEl);
@@ -724,7 +739,7 @@ function buildPreviewWcag(el) {
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
   }
-  const dom = { ratioEl, apcaEl, apcaFontEl, cats, badges };
+  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, cats, badges };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -756,6 +771,15 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
       // font against the minimum Lc-derived size from the official lookup.
+      if (dom.apcaTierEl) {
+        if (contrastLockMode === 'apca') {
+          dom.apcaTierEl.textContent = apcaUsageTier(Math.abs(lc));
+          dom.apcaTierEl.title = 'APCA usage level for |Lc| ' + Math.abs(lc).toFixed(0) + ' (reference-tool ladder)';
+          dom.apcaTierEl.style.color = cvdTransformRgba(dim);
+        } else {
+          dom.apcaTierEl.textContent = '';
+        }
+      }
       if (dom.apcaFontEl) {
         if (contrastLockMode === 'apca') {
           const min = apcaMinFontSize(Math.abs(lc), apcaFontWeight);
@@ -780,6 +804,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       }
     } else {
       dom.apcaEl.textContent = '';
+      if (dom.apcaTierEl) dom.apcaTierEl.textContent = '';
       if (dom.apcaFontEl) dom.apcaFontEl.textContent = '';
     }
   }
