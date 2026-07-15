@@ -754,6 +754,22 @@ function buildPreviewWcag(el) {
  * @param {number[]} [txtRgb]  text color RGB (for the experimental APCA readout)
  * @param {number[]} [bgRgb]   bg color RGB (for the experimental APCA readout)
  */
+// ─── Verdict anti-flicker (v2 beta) ──────────────────────────────────────────
+// During a drag the contrast lock re-pins the free side a frame behind the
+// user's input, so the pair can sit on the wrong side of a threshold for a
+// single frame and the pass/fail chips flicker. The DISCRETE verdict state
+// (badge passes, APCA tier, font verdict) therefore only switches after the
+// new state has persisted for VERDICT_STABLE_MS — one-frame artifacts never
+// render, real changes appear ~90ms late while dragging, and a trailing
+// settle pass guarantees the exact state once input stops. Ratio/Lc numbers
+// and all colour adaptation stay per-frame.
+const VERDICT_STABLE_MS = 90;
+let _verdictSettleTimer = 0;
+function scheduleVerdictSettle() {
+  clearTimeout(_verdictSettleTimer);
+  _verdictSettleTimer = setTimeout(() => updateUI(), VERDICT_STABLE_MS + 40);
+}
+
 function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
@@ -764,6 +780,9 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
     dom.ratioEl.textContent = ratio.toFixed(2) + ':1';
     dom.ratioEl.style.color = cvdTransformRgba(dim);
   }
+  // Discrete verdict state for this frame (filled below, then debounced).
+  const disc = { passes: dom.badges.map(({ threshold }) => ratio >= threshold), tier: '', tierTitle: '', font: null };
+
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
       const lc = apcaLc(txtRgb, bgRgb);
@@ -771,16 +790,9 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
       // font against the minimum Lc-derived size from the official lookup.
-      if (dom.apcaTierEl) {
-        if (contrastLockMode === 'apca') {
-          dom.apcaTierEl.textContent = apcaUsageTier(Math.abs(lc));
-          dom.apcaTierEl.title = 'APCA usage level for |Lc| ' + Math.abs(lc).toFixed(0) + ' (reference-tool ladder)';
-          dom.apcaTierEl.style.color = cvdTransformRgba(dim);
-        } else {
-          dom.apcaTierEl.textContent = '';
-        }
-      }
-      if (dom.apcaFontEl) {
+      // The tier/font texts are DISCRETE verdict state: computed here, but
+      // routed through the stability debounce below before being displayed.
+      if (true) {
         if (contrastLockMode === 'apca') {
           const lcAbs = Math.abs(lc);
           const min = apcaMinFontSize(lcAbs, apcaFontWeight);
@@ -816,17 +828,14 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
             text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
             title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
           }
-          dom.apcaFontEl.textContent = text;
-          dom.apcaFontEl.title = title;
-          dom.apcaFontEl.style.color = cvdTransformHex(pass
-            ? (isLight ? '#1a7a42' : '#5dde8a')
-            : (isLight ? '#b3261e' : '#ff7076'));
-        } else {
-          dom.apcaFontEl.textContent = '';
+          disc.tier = apcaUsageTier(lcAbs);
+          disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+          disc.font = { text, title, pass };
         }
       }
     } else {
       dom.apcaEl.textContent = '';
+      dom._shownKey = undefined; // reset the debounce when the readouts vanish
       if (dom.apcaTierEl) dom.apcaTierEl.textContent = '';
       if (dom.apcaFontEl) dom.apcaFontEl.textContent = '';
     }
@@ -853,8 +862,44 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
 
   for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
-  for (const { el: b, threshold } of dom.badges) {
-    if (ratio >= threshold) {
+  // ── Stability debounce: adopt `disc` only once it has persisted ──
+  const key = JSON.stringify(disc);
+  const now = performance.now();
+  if (dom._shownKey === undefined) {
+    dom._shownKey = key; dom._shownDisc = disc; dom._pendKey = null;
+  } else if (key === dom._shownKey) {
+    dom._pendKey = null; dom._shownDisc = disc; // same state; refresh payload
+  } else if (key === dom._pendKey) {
+    if (now - dom._pendTs >= VERDICT_STABLE_MS) {
+      dom._shownKey = key; dom._shownDisc = disc; dom._pendKey = null;
+    } else {
+      scheduleVerdictSettle(); // still maturing — guarantee a trailing commit
+    }
+  } else {
+    dom._pendKey = key; dom._pendTs = now;
+    scheduleVerdictSettle();
+  }
+  const shown = dom._shownDisc;
+
+  if (dom.apcaTierEl) {
+    dom.apcaTierEl.textContent = shown.tier;
+    dom.apcaTierEl.title = shown.tierTitle;
+    if (shown.tier) dom.apcaTierEl.style.color = cvdTransformRgba(dim);
+  }
+  if (dom.apcaFontEl) {
+    if (shown.font) {
+      dom.apcaFontEl.textContent = shown.font.text;
+      dom.apcaFontEl.title = shown.font.title;
+      dom.apcaFontEl.style.color = cvdTransformHex(shown.font.pass
+        ? (isLight ? '#1a7a42' : '#5dde8a')
+        : (isLight ? '#b3261e' : '#ff7076'));
+    } else {
+      dom.apcaFontEl.textContent = '';
+    }
+  }
+
+  dom.badges.forEach(({ el: b }, i) => {
+    if (shown.passes[i]) {
       b.style.color       = cvdTransformHex(passColor);
       b.style.borderColor = cvdTransformRgba(passBorder);
       b.style.background  = cvdTransformRgba(passBg);
@@ -865,7 +910,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       b.style.background  = cvdTransformRgba(isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)');
       b.style.boxShadow   = 'none';
     }
-  }
+  });
 }
 
 /**
