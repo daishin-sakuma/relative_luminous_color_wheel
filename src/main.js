@@ -782,19 +782,33 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       }
       if (dom.apcaFontEl) {
         if (contrastLockMode === 'apca') {
-          const min = apcaMinFontSize(Math.abs(lc), apcaFontWeight);
+          const lcAbs = Math.abs(lc);
+          const min = apcaMinFontSize(lcAbs, apcaFontWeight);
           const label = apcaFontSize + 'px/' + apcaFontWeight;
-          let pass = false, text;
-          if (min >= 999)      text = '✗ ' + label + ' — too low for text';
-          else if (min >= 777) text = '✗ ' + label + ' — non-text only';
-          else if (apcaFontSize >= min - 1e-9) { pass = true; text = '✓ ' + label; }
-          else text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
+          // The reference tool gates the whole font table before the lookup
+          // matrix: |Lc| < 15 (minScoreG) is too low for ANY use, and
+          // |Lc| < 29.8 (nonTextScoreG) renders every weight as non-text —
+          // matrix sentinels (999/777) only matter past those gates. Mirroring
+          // both keeps this verdict consistent with the usage-tier ladder.
+          let pass = false, text, title;
+          if (lcAbs < 15 || min >= 999) {
+            text = '✗ ' + label + ' — contrast too low';
+            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — too low for any use';
+          } else if (lcAbs < 29.8 || min >= 777) {
+            text = '✗ ' + label + ' — spot & non-text only';
+            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the readable-text floor'
+              + (lcAbs < 29.8 ? ' (Lc 29.8)' : ' for weight ' + apcaFontWeight)
+              + ' — spot text and non-text elements only';
+          } else if (apcaFontSize >= min - 1e-9) {
+            pass = true;
+            text = '✓ ' + label;
+            title = 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + lcAbs.toFixed(0);
+          } else {
+            text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
+            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
+          }
           dom.apcaFontEl.textContent = text;
-          dom.apcaFontEl.title = pass
-            ? 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + Math.abs(lc).toFixed(0)
-            : (min >= 777
-              ? 'APCA: |Lc| ' + Math.abs(lc).toFixed(0) + ' is below the readable-text floor for this weight'
-              : 'APCA: at |Lc| ' + Math.abs(lc).toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px');
+          dom.apcaFontEl.title = title;
           dom.apcaFontEl.style.color = cvdTransformHex(pass
             ? (isLight ? '#1a7a42' : '#5dde8a')
             : (isLight ? '#b3261e' : '#ff7076'));
