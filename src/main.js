@@ -1151,7 +1151,10 @@ function scheduleRender(redrawWheel, syncCustom) {
   // Remember which side the user touched last (wheel = fg, custom = bg) so a
   // contrast-target change adjusts the other one. Renders scheduled by the
   // contrast-lock enforcement itself (_skipEnforceOnce set) don't count.
-  if (!_skipEnforceOnce) { _lastTouchedSide = syncCustom ? 'bg' : 'fg'; _pendingUserSide = _lastTouchedSide; _userDirty = true; }
+  // Classify by _inEnforcement, NOT _skipEnforceOnce: the skip flag stays
+  // armed until the next frame, so an input arriving just after a lock
+  // adjustment was misread as lock-origin and went un-enforced for a frame.
+  if (!_inEnforcement) { _lastTouchedSide = syncCustom ? 'bg' : 'fg'; _pendingUserSide = _lastTouchedSide; _userDirty = true; }
   if (redrawWheel)  _pendingWheelDraw  = true;
   if (syncCustom)   _pendingCustomSync = true;
   if (_rafId !== null) return;
@@ -1166,6 +1169,7 @@ function scheduleRender(redrawWheel, syncCustom) {
 let _skipEnforceOnce = false;
 let _userDirty = false; // fresh user input coalesced into an enforcement-scheduled frame
 let _pendingUserSide = null; // side ('fg'|'bg') the user touched for the pending frame
+let _inEnforcement = false;  // renders scheduled while true originate from the lock, not the user
 let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
 
 /**
@@ -1253,6 +1257,11 @@ function lockFreeAtRgb(changed, rgb) {
 
 function enforceContrastLock(changed) {
   if (contrastLockMode === 'off') return;
+  _inEnforcement = true;
+  try { _enforceContrastLockInner(changed); } finally { _inEnforcement = false; }
+}
+
+function _enforceContrastLockInner(changed) {
   if (apcaLockActive()) { enforceApcaLock(changed); return; }
   if (!contrastLockTarget) return;
   const R = contrastLockTarget;
