@@ -798,13 +798,16 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
           // non-text) to stay in lockstep with the tier row above.
           let pass = false, text, title;
           if (lcAbs <= 14.7) {
-            text = '✗ ' + label + ' — contrast too low';
-            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — too low for any use';
-          } else if (lcAbs <= 29.7 || min >= 777) {
-            text = '✗ ' + label + ' — spot & non-text only';
-            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the readable-text floor'
-              + (lcAbs <= 29.7 ? ' (Lc ~30)' : ' for weight ' + apcaFontWeight)
-              + ' — spot text and non-text elements only';
+            text = '✗ ' + label + ' — contrast too low: not usable for anything';
+            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — invisible; too low for any use, text or non-text';
+          } else if (lcAbs <= 29.7) {
+            // The NO-TEXT band: NOT even spot text — only non-text elements
+            // (icons, dividers, large UI shapes) are sanctioned here.
+            text = '✗ ' + label + ' — no text at any size: non-text elements only';
+            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the any-text floor (Lc ~30) — no text of any size or weight, including spot text; usable for non-text elements only';
+          } else if (min >= 777) {
+            text = '✗ ' + label + ' — this weight: spot text & non-text only';
+            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' has no fluent-text size — usable for spot text and non-text elements only';
           } else if (apcaFontSize >= min - 1e-9) {
             pass = true;
             text = '✓ ' + label;
