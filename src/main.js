@@ -828,12 +828,12 @@ function updateUI() {
   const cvdSelLum = relativeLuminance(cvdSelR, cvdSelG, cvdSelB);
 
   document.getElementById('swatch').style.background = cvdSelHex;
-  const swatchHexEl = /** @type {HTMLElement} */ (document.getElementById('swatch-hex'));
-  swatchHexEl.textContent = formatHex(selHex);
-  swatchHexEl.style.color = cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
-  swatchHexEl.style.setProperty('--icon-clr', cvdSelLum > 0.179 ? '#000' : '#fff');
-  /** @type {HTMLElement} */ (document.getElementById('swatch-tools')).style.color =
-    cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
+  const swatchHexEl = /** @type {HTMLInputElement} */ (document.getElementById('swatch-hex'));
+  // Don't clobber the field while the user is typing/editing it.
+  if (document.activeElement !== swatchHexEl) swatchHexEl.value = formatHex(selHex);
+  const legible = cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
+  /** @type {HTMLElement} */ (document.getElementById('swatch-hex-wrap')).style.color = legible;
+  /** @type {HTMLElement} */ (document.getElementById('swatch-tools')).style.color = legible;
   document.documentElement.style.setProperty('--accent', cvdSelHex);
 
   // Data grid
@@ -1754,6 +1754,53 @@ customHexInput.addEventListener('blur', () => {
 });
 customHexInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') customHexInput.blur();
+});
+
+// ─── Main TEXT picker hex input (editable, click-to-select, copy icon) ────────
+// Mirrors the custom BG hex field. Typing/pasting a valid hex drives the
+// luminance-locked main picker: set the target luminance + hue + sat from the
+// colour, sync the sliders/marker, and re-render.
+const swatchHexInput = /** @type {HTMLInputElement} */ (document.getElementById('swatch-hex'));
+const swatchHexCopy  = /** @type {HTMLElement} */ (document.getElementById('swatch-hex-copy'));
+
+function applyMainHex(r, g, b) {
+  targetLum = relativeLuminance(r, g, b);
+  const [h, s] = rgbToHsl(r, g, b);
+  selHue = h;
+  selSat = s;
+  lumSlider.value = String(Math.round(targetLum * 1000));
+  hueSlider.value = String(Math.round(selHue));
+  satSlider.value = String(Math.round(selSat * 100));
+  if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
+  setUnitVal(hueValEl, Math.round(selHue), '°');
+  setUnitVal(satValEl, Math.round(selSat * 100), '%');
+  updateMarkerPosition();
+  scheduleRender(true);
+  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-hue', String(selHue));
+  saveToStorage('sel-sat', String(selSat));
+}
+
+swatchHexInput.addEventListener('input', () => {
+  let val = swatchHexInput.value.replace(/[^0-9a-fA-F#]/g, '');
+  if (val && !val.startsWith('#')) val = '#' + val;
+  if (val.length > 7) val = val.slice(0, 7);
+  swatchHexInput.value = val.toUpperCase();
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) applyMainHex(...hexToRgb(val));
+});
+swatchHexInput.addEventListener('click', () => swatchHexInput.select());
+swatchHexInput.addEventListener('blur', () => {
+  const [r, g, b] = selectedRgbBiased();
+  swatchHexInput.value = formatHex(toHex(r, g, b)); // normalize / revert invalid
+});
+swatchHexInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') swatchHexInput.blur();
+});
+swatchHexCopy.addEventListener('click', () => {
+  const [r, g, b] = selectedRgbBiased();
+  copyToClipboard(formatHex(toHex(r, g, b)));
+  swatchHexCopy.classList.add('hex-copied');
+  setTimeout(() => swatchHexCopy.classList.remove('hex-copied'), 1500);
 });
 
 // ─── Clipboard copy ───────────────────────────────────────────────────────────

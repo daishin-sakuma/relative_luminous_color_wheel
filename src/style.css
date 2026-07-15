@@ -213,12 +213,47 @@ header {
   justify-content: space-between;
   gap: 0.5rem;
 }
+/* Hex is an editable input sitting on the coloured swatch: transparent, sized to
+   its 7-char value, with the copy icon right after it. Its colour (and the copy
+   icon's, via inherit) is set by JS to stay legible on the swatch background. */
+.swatch-hex-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  color: rgba(255,255,255,0.75);
+}
 .swatch-hex {
   font-size: 0.82rem;
   letter-spacing: 0.10em;
-  color: rgba(255,255,255,0.75);
   font-family: ui-monospace, monospace;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  /* 7 chars ("#RRGGBB") plus the 0.10em tracking after each, so the last digit
+     never clips. */
+  width: calc(7ch + 0.8em);
+  text-transform: uppercase;
+  cursor: pointer;
 }
+.swatch-hex:focus { cursor: text; }
+.swatch-hex-copy {
+  font-size: 0.8rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.swatch-hex-copy::after { content: '⧉'; }
+@media (hover: hover) { .swatch-hex-copy:hover { opacity: 0.85; } }
+.swatch-hex-copy.hex-copied { opacity: 1; }
+.swatch-hex-copy.hex-copied::after { content: '✓'; }
 
 /* ── Luminance / Hue / Sat controls ─────────────────────────────────────────── */
 .lum-row {
