@@ -594,10 +594,10 @@ input.custom-val:focus {
   flex-shrink: 0;
 }
 
-.preview-wcag { display: flex; gap: 0.4rem; align-items: flex-start; flex-wrap: wrap; align-self: flex-end; }
+.preview-wcag { display: flex; gap: 0.4rem; align-items: flex-start; flex-wrap: wrap; align-self: flex-end; max-width: 100%; }
 /* Each row (usage tier, font verdict, Normal/Large badge rows) right-aligns
    independently, so one row's length never shifts another's right edge. */
-.preview-wcag-rows { display: flex; flex-direction: column; gap: 0.18rem; align-items: flex-end; }
+.preview-wcag-rows { display: flex; flex-direction: column; gap: 0.18rem; align-items: flex-end; min-width: 0; max-width: 100%; }
 .preview-wcag-row { display: flex; gap: 0.15rem; align-items: center; flex-wrap: wrap; }
 .preview-wcag-cat {
   font-size: 0.6rem;
@@ -912,8 +912,9 @@ input.custom-val:focus {
 .preview-apca-tier {
   font-size: 0.6rem;
   letter-spacing: 0.08em;
-  white-space: nowrap;
   font-weight: 600;
+  max-width: 100%;
+  text-align: right; /* wrapped lines stay right-aligned */
 }
 .preview-apca-tier:empty { display: none; }
 /* v2 beta: per-tile APCA font verdict — its own right-aligned row above the
@@ -921,7 +922,8 @@ input.custom-val:focus {
 .preview-apca-font {
   font-size: 0.6rem;
   letter-spacing: 0.03em;
-  white-space: nowrap;
+  max-width: 100%;
+  text-align: right; /* wrapped lines stay right-aligned */
 }
 .preview-apca-font:empty { display: none; }
 
