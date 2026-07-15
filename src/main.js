@@ -760,11 +760,13 @@ function buildPreviewWcag(el) {
 // single frame and the pass/fail chips flicker. The DISCRETE verdict state
 // (badge passes, APCA tier, font verdict) therefore only switches after the
 // new state has persisted for VERDICT_STABLE_MS — one-frame artifacts never
-// render, real changes appear ~60–80ms late while dragging, and a trailing
+// render, real changes appear ~50–70ms late while dragging, and a trailing
 // settle pass guarantees the exact state once input stops. Ratio/Lc numbers
-// and all colour adaptation stay per-frame. (60ms ≈ 4 frames: swallows the
-// lock's repin transients incl. multi-frame ones, still feels immediate.)
-const VERDICT_STABLE_MS = 60;
+// and all colour adaptation stay per-frame. (The frame now enforces the lock
+// BEFORE drawing, so lock transients no longer exist at the render layer —
+// this window only guards residual jitter, e.g. slider tracks rebuilt
+// mid-drag on slow devices.)
+const VERDICT_STABLE_MS = 50;
 let _verdictSettleTimer = 0;
 function scheduleVerdictSettle() {
   clearTimeout(_verdictSettleTimer);
@@ -1111,24 +1113,31 @@ let _lockSettleTimer = null;
 function _renderFrame() {
   _rafId = null;
   const customChanged = _pendingCustomSync;
+  // Contrast lock FIRST, then draw: every frame renders the post-enforcement
+  // pair, so the pass/fail chips can never show the transient un-enforced
+  // state (the old draw-then-enforce order flickered on every drag tick).
+  // Renders scheduled by the enforcement itself skip re-enforcement to
+  // prevent ping-ponging — UNLESS fresh user input coalesced into the same
+  // frame (_userDirty), which previously left that input un-enforced for a
+  // frame. Wheel hue/sat renders arrive with neither flag set, but still
+  // shift the fg color (RGB quantization; APCA's Lc is hue-dependent even at
+  // equal luminance) — treat them as fg-touched so the lock tracks every
+  // tick. Redundant runs are cheap: enforcement no-ops unless the free
+  // side's rendered color would actually change.
+  const skipEnforce = _skipEnforceOnce && !_userDirty;
+  _skipEnforceOnce = false;
+  _userDirty = false;
+  if (!skipEnforce) {
+    if (customChanged) enforceContrastLock('bg');
+    else enforceContrastLock('fg');
+  }
+  // An adjustment above may have flagged the wheel/custom sync for this
+  // same frame — draw AFTER it so the frame shows the corrected state.
   if (_pendingWheelDraw)  { drawWheel(targetLum); _pendingWheelDraw  = false; }
   if (_pendingCustomSync) { syncCustomUI();        _pendingCustomSync = false; }
   updateUI();
-  // Contrast lock: adjust the side the user did NOT touch. Renders
-  // scheduled by the enforcement itself are skipped to prevent ping-ponging.
-  // Wheel hue/sat renders arrive with neither flag set, but still shift the
-  // fg color (RGB quantization; APCA's Lc is hue-dependent even at equal
-  // luminance) — treat them as fg-touched so the lock tracks every tick.
-  // Redundant runs are cheap: enforcement no-ops unless the free side's
-  // rendered color would actually change.
-  if (_skipEnforceOnce) { _skipEnforceOnce = false; }
-  else if (customChanged) enforceContrastLock('bg');
-  else enforceContrastLock('fg');
-  // Settle pass: during fast drags the newest input can land in the one
-  // frame that skips enforcement (it coalesced with the lock's own
-  // adjustment) and would otherwise stay un-enforced when the drag stops.
-  // Once the frame stream goes quiet, verify and correct. Idempotent: the
-  // enforcement no-ops when the pair is already pinned.
+  // Settle pass: verify and correct once the frame stream goes quiet.
+  // Idempotent: the enforcement no-ops when the pair is already pinned.
   clearTimeout(_lockSettleTimer);
   _lockSettleTimer = setTimeout(() => {
     if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
@@ -1139,7 +1148,7 @@ function scheduleRender(redrawWheel, syncCustom) {
   // Remember which side the user touched last (wheel = fg, custom = bg) so a
   // contrast-target change adjusts the other one. Renders scheduled by the
   // contrast-lock enforcement itself (_skipEnforceOnce set) don't count.
-  if (!_skipEnforceOnce) _lastTouchedSide = syncCustom ? 'bg' : 'fg';
+  if (!_skipEnforceOnce) { _lastTouchedSide = syncCustom ? 'bg' : 'fg'; _userDirty = true; }
   if (redrawWheel)  _pendingWheelDraw  = true;
   if (syncCustom)   _pendingCustomSync = true;
   if (_rafId !== null) return;
@@ -1152,6 +1161,7 @@ function scheduleRender(redrawWheel, syncCustom) {
 // the luminance of the untouched side moves (via findLightness).
 
 let _skipEnforceOnce = false;
+let _userDirty = false; // fresh user input coalesced into an enforcement-scheduled frame
 let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
 
 /**
