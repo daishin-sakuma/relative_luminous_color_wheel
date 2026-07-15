@@ -1298,7 +1298,7 @@ function handleCustomWheelPointer(e) {
   if (customMode === 'lum') {
     setCustomFromLumHueSat(cuLum, hue, sat);
   } else {
-    setCustomFromHsl(hue, sat, cL);
+    setCustomHueSat(hue, sat);
   }
 }
 
@@ -1446,6 +1446,39 @@ function setCustomFromHsl(h, s, l) {
   scheduleRender(false, true);
 }
 
+// ─── Luminance-holding hue/sat for the custom COLOR mode ─────────────────────
+// Classically the Color-mode H/S controls hold HSL lightness, which lets the
+// colour's LUMINANCE wander — so a hue sweep could drag the background into a
+// mid luminance no text can contrast against ("can't reach" errors while
+// locked). With a contrast target active, or once the user has deliberately
+// set BOTH sides' luminance values, hue/sat must not change the achieved
+// contrast: re-solve the lightness to hold the colour's wheel-luminance
+// (quantization biased away from the text side so the achieved contrast
+// stays at-or-above, never below). Otherwise keep the classic HSL behaviour.
+let _textLumTouched = false; // main TEXT target-luminance operated
+let _bgLumTouched = false;   // BG Lum-mode luminance operated
+function customHueSatHoldsLum() {
+  return activeContrastTarget() > 0 || (_textLumTouched && _bgLumTouched);
+}
+// Anchor luminance for consecutive H/S ops. Re-deriving y from the previous
+// step's quantized colour lets ±1-step rounding errors random-walk across a
+// sweep (visibly so at low luminance); instead the first H/S op captures the
+// anchor and later ones reuse it, re-capturing only when something else
+// (RGB/L sliders, hex, lock adjustments, mode switches) changed the colour.
+let _bgHeldLum = 0, _bgHeldRgb = '';
+function setCustomHueSat(h, s) {
+  if (customMode === 'color' && customHueSatHoldsLum()) {
+    const key = cR + ',' + cG + ',' + cB;
+    if (_bgHeldRgb !== key) _bgHeldLum = wheelLum(cR, cG, cB);
+    const y = _bgHeldLum;
+    const dir = Math.sign(y - wheelLum(...selectedRgbBiased()));
+    setCustomFromHsl(h, s, findLightnessBiased(h, s, y, dir));
+    _bgHeldRgb = cR + ',' + cG + ',' + cB;
+  } else {
+    setCustomFromHsl(h, s, cL);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 function updateMarkerPosition() {
@@ -1514,6 +1547,7 @@ const hueValEl  = /** @type {HTMLInputElement} */ (document.getElementById('hue-
 const satValEl  = /** @type {HTMLInputElement} */ (document.getElementById('sat-val'));
 
 lumSlider.addEventListener('input', () => {
+  _textLumTouched = true;
   targetLum = lumSlider.value / 1000;
   if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
   scheduleRender(true);
@@ -1554,14 +1588,10 @@ document.getElementById('c-b-slider').addEventListener('input', e => {
   scheduleRender(false, true);
 });
 document.getElementById('c-h-slider').addEventListener('input', e => {
-  cH = +/** @type {HTMLInputElement} */ (e.target).value;
-  [cR, cG, cB] = hslToRgb(cH, cS, cL);
-  scheduleRender(false, true);
+  setCustomHueSat(+/** @type {HTMLInputElement} */ (e.target).value, cS);
 });
 document.getElementById('c-s-slider').addEventListener('input', e => {
-  cS = +/** @type {HTMLInputElement} */ (e.target).value / 100;
-  [cR, cG, cB] = hslToRgb(cH, cS, cL);
-  scheduleRender(false, true);
+  setCustomHueSat(cH, +/** @type {HTMLInputElement} */ (e.target).value / 100);
 });
 document.getElementById('c-l-slider').addEventListener('input', e => {
   cL = +/** @type {HTMLInputElement} */ (e.target).value / 100;
@@ -1590,6 +1620,7 @@ function setCustomFromLumHueSat(lum, hue, sat) {
 }
 
 document.getElementById('cu-lum-slider').addEventListener('input', e => {
+  _bgLumTouched = true;
   setCustomFromLumHueSat(+/** @type {HTMLInputElement} */ (e.target).value / 1000, cuHue, cuSat);
 });
 document.getElementById('cu-sat-slider').addEventListener('input', e => {
@@ -1602,6 +1633,7 @@ document.getElementById('cu-hue-slider').addEventListener('input', e => {
 // ─── Wire editable value inputs ──────────────────────────────────────────────
 
 wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
+  _textLumTouched = true;
   targetLum = v;
   lumSlider.value = String(Math.round(v * 1000));
   scheduleRender(true);
@@ -1640,13 +1672,13 @@ wireValInput(
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-h-val')),
   0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°',
-  v => { cH = v; /** @type {HTMLInputElement} */ (document.getElementById('c-h-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); scheduleRender(false, true); },
+  v => { /** @type {HTMLInputElement} */ (document.getElementById('c-h-slider')).value = String(v); setCustomHueSat(v, cS); },
   true
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-s-val')),
   0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%',
-  v => { cS = v / 100; /** @type {HTMLInputElement} */ (document.getElementById('c-s-slider')).value = String(v); [cR, cG, cB] = hslToRgb(cH, cS, cL); scheduleRender(false, true); }
+  v => { /** @type {HTMLInputElement} */ (document.getElementById('c-s-slider')).value = String(v); setCustomHueSat(cH, v / 100); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-l-val')),
@@ -1661,7 +1693,7 @@ wireValInput(
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-val')),
   0, 1, 0.001, parseFloat, v => v.toFixed(3),
-  v => { /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider')).value = String(Math.round(v * 1000)); setCustomFromLumHueSat(v, cuHue, cuSat); }
+  v => { _bgLumTouched = true; /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider')).value = String(Math.round(v * 1000)); setCustomFromLumHueSat(v, cuHue, cuSat); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-val')),
