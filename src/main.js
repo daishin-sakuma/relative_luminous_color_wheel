@@ -321,10 +321,12 @@ function apcaY(r, g, b) {
   return 0.2126729 * c(r) + 0.7151522 * c(g) + 0.0721750 * c(b);
 }
 
-function apcaLc(txtRgb, bgRgb) {
+/** APCA-W3 Lc from raw screen luminances (Ys). Shared by the RGB path and the
+    anchor-luminance path (display invariance under hue/sat — see apcaAnchorLc). */
+function apcaLcYs(YtRaw, YbRaw) {
   const soft = Y => (Y <= 0.022 ? Y + Math.pow(0.022 - Y, 1.414) : Y);
-  const Yt = soft(apcaY(...txtRgb));
-  const Yb = soft(apcaY(...bgRgb));
+  const Yt = soft(YtRaw);
+  const Yb = soft(YbRaw);
   if (Math.abs(Yb - Yt) < 0.0005) return 0;
   if (Yb > Yt) {
     const S = (Math.pow(Yb, 0.56) - Math.pow(Yt, 0.57)) * 1.14;
@@ -332,6 +334,35 @@ function apcaLc(txtRgb, bgRgb) {
   }
   const S = (Math.pow(Yb, 0.65) - Math.pow(Yt, 0.62)) * 1.14;
   return S > -0.1 ? 0 : (S + 0.027) * 100;
+}
+
+function apcaLc(txtRgb, bgRgb) {
+  return apcaLcYs(apcaY(...txtRgb), apcaY(...bgRgb));
+}
+
+/** The custom BG's continuous (pre-quantization) wheel-luminance anchor: the
+    Lum-mode value, the hue/sat hold anchor while it matches the current colour,
+    or the live colour's luminance otherwise. In APCA mode wheelLum ≡ apcaY, so
+    this is an APCA Ys. */
+function bgLumAnchor() {
+  if (customMode === 'lum') return cuLum;
+  if (_bgHeldRgb === cR + ',' + cG + ',' + cB) return _bgHeldLum;
+  return wheelLum(cR, cG, cB);
+}
+
+/** Anchor-based Lc for a tile in APCA mode. The 8-bit RGB quantization makes
+    the per-hex Lc wobble ~±0.7 as hue/sat sweep even though the CONTINUOUS
+    luminances are held exactly — enough to flick the usage tier and required
+    text size near their thresholds. The APCA readouts therefore judge the
+    continuous anchor pair (targetLum is the wheel's Ys anchor in APCA mode;
+    white/black are exact), which is hue/sat-invariant by construction and
+    moves only when a luminance actually changes (Lum/RGB edits, lock repins). */
+function apcaAnchorLc(tile) {
+  if (contrastLockMode !== 'apca') return undefined;
+  if (tile === 'pvw') return apcaLcYs(targetLum, 1);
+  if (tile === 'pvb') return apcaLcYs(targetLum, 0);
+  if (tile === 'pa')  return apcaLcYs(targetLum, bgLumAnchor());
+  return apcaLcYs(bgLumAnchor(), targetLum); // 'pb'
 }
 
 // ─── APCA font-size/weight lookup (v2 beta) ──────────────────────────────────
@@ -773,7 +804,7 @@ function scheduleVerdictSettle() {
   _verdictSettleTimer = setTimeout(() => updateUI(), VERDICT_STABLE_MS + 40);
 }
 
-function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
+function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
   const isLight = bgLum > 0.179;
@@ -788,7 +819,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
 
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
-      const lc = apcaLc(txtRgb, bgRgb);
+      const lc = (lcOverride !== undefined) ? lcOverride : apcaLc(txtRgb, bgRgb);
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
@@ -936,6 +967,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
     selectedLum, 1, 1,
     hexToRgb(selectedHex), [255, 255, 255],
+    apcaAnchorLc('pvw'),
   );
 
   // vs Black (bg lum = 0, isLight = false)
@@ -952,6 +984,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
     selectedLum, 0, 0,
     hexToRgb(selectedHex), [0, 0, 0],
+    apcaAnchorLc('pvb'),
   );
 }
 
@@ -984,6 +1017,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
     selectedLum, customLum, customLum,
     hexToRgb(selectedHex), hexToRgb(customHex),
+    apcaAnchorLc('pa'),
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
@@ -1007,6 +1041,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
     customLum, selectedLum, selectedLum,
     hexToRgb(customHex), hexToRgb(selectedHex),
+    apcaAnchorLc('pb'),
   );
 }
 
@@ -1218,6 +1253,10 @@ function applyLockAdjustment(changed, desired) {
     } else {
       setCustomFromHsl(cH, cS, findLightnessBiased(cH, cS, desired, dir));
     }
+    // Keep the continuous anchor on the solved boundary so the anchor-based
+    // APCA readouts stay frozen through locked sweeps too.
+    _bgHeldLum = desired;
+    _bgHeldRgb = cR + ',' + cG + ',' + cB;
   } else {
     // Free side = wheel fg; selectedRgbBiased() biases away from the bg
     targetLum = desired;
