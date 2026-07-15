@@ -1112,7 +1112,6 @@ let _lockSettleTimer = null;
 
 function _renderFrame() {
   _rafId = null;
-  const customChanged = _pendingCustomSync;
   // Contrast lock FIRST, then draw: every frame renders the post-enforcement
   // pair, so the pass/fail chips can never show the transient un-enforced
   // state (the old draw-then-enforce order flickered on every drag tick).
@@ -1124,13 +1123,17 @@ function _renderFrame() {
   // equal luminance) — treat them as fg-touched so the lock tracks every
   // tick. Redundant runs are cheap: enforcement no-ops unless the free
   // side's rendered color would actually change.
+  // Which side did the USER touch this frame? _pendingCustomSync can't answer
+  // that: the lock's own bg adjustment also sets it, and in a coalesced frame
+  // that misread made us enforce the WRONG side — moving the user's Lum value
+  // and landing the pair just below the target until the settle pass. Only
+  // scheduleRender calls without _skipEnforceOnce record the user's side.
+  const userSide = _pendingUserSide;
+  _pendingUserSide = null;
   const skipEnforce = _skipEnforceOnce && !_userDirty;
   _skipEnforceOnce = false;
   _userDirty = false;
-  if (!skipEnforce) {
-    if (customChanged) enforceContrastLock('bg');
-    else enforceContrastLock('fg');
-  }
+  if (!skipEnforce) enforceContrastLock(userSide || _lastTouchedSide);
   // An adjustment above may have flagged the wheel/custom sync for this
   // same frame — draw AFTER it so the frame shows the corrected state.
   if (_pendingWheelDraw)  { drawWheel(targetLum); _pendingWheelDraw  = false; }
@@ -1148,7 +1151,7 @@ function scheduleRender(redrawWheel, syncCustom) {
   // Remember which side the user touched last (wheel = fg, custom = bg) so a
   // contrast-target change adjusts the other one. Renders scheduled by the
   // contrast-lock enforcement itself (_skipEnforceOnce set) don't count.
-  if (!_skipEnforceOnce) { _lastTouchedSide = syncCustom ? 'bg' : 'fg'; _userDirty = true; }
+  if (!_skipEnforceOnce) { _lastTouchedSide = syncCustom ? 'bg' : 'fg'; _pendingUserSide = _lastTouchedSide; _userDirty = true; }
   if (redrawWheel)  _pendingWheelDraw  = true;
   if (syncCustom)   _pendingCustomSync = true;
   if (_rafId !== null) return;
@@ -1162,6 +1165,7 @@ function scheduleRender(redrawWheel, syncCustom) {
 
 let _skipEnforceOnce = false;
 let _userDirty = false; // fresh user input coalesced into an enforcement-scheduled frame
+let _pendingUserSide = null; // side ('fg'|'bg') the user touched for the pending frame
 let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
 
 /**
