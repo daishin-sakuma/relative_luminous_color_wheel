@@ -321,10 +321,12 @@ function apcaY(r, g, b) {
   return 0.2126729 * c(r) + 0.7151522 * c(g) + 0.0721750 * c(b);
 }
 
-function apcaLc(txtRgb, bgRgb) {
+/** APCA-W3 Lc from raw screen luminances (Ys). Shared by the RGB path and the
+    anchor-luminance path (display invariance under hue/sat — see apcaAnchorLc). */
+function apcaLcYs(YtRaw, YbRaw) {
   const soft = Y => (Y <= 0.022 ? Y + Math.pow(0.022 - Y, 1.414) : Y);
-  const Yt = soft(apcaY(...txtRgb));
-  const Yb = soft(apcaY(...bgRgb));
+  const Yt = soft(YtRaw);
+  const Yb = soft(YbRaw);
   if (Math.abs(Yb - Yt) < 0.0005) return 0;
   if (Yb > Yt) {
     const S = (Math.pow(Yb, 0.56) - Math.pow(Yt, 0.57)) * 1.14;
@@ -332,6 +334,102 @@ function apcaLc(txtRgb, bgRgb) {
   }
   const S = (Math.pow(Yb, 0.65) - Math.pow(Yt, 0.62)) * 1.14;
   return S > -0.1 ? 0 : (S + 0.027) * 100;
+}
+
+function apcaLc(txtRgb, bgRgb) {
+  return apcaLcYs(apcaY(...txtRgb), apcaY(...bgRgb));
+}
+
+/** The custom BG's continuous (pre-quantization) wheel-luminance anchor: the
+    Lum-mode value, the hue/sat hold anchor while it matches the current colour,
+    or the live colour's luminance otherwise. In APCA mode wheelLum ≡ apcaY, so
+    this is an APCA Ys. */
+function bgLumAnchor() {
+  if (customMode === 'lum') return cuLum;
+  if (_bgHeldRgb === cR + ',' + cG + ',' + cB) return _bgHeldLum;
+  return wheelLum(cR, cG, cB);
+}
+
+/** Anchor-based Lc for a tile in APCA mode. The 8-bit RGB quantization makes
+    the per-hex Lc wobble ~±0.7 as hue/sat sweep even though the CONTINUOUS
+    luminances are held exactly — enough to flick the usage tier and required
+    text size near their thresholds. The APCA readouts therefore judge the
+    continuous anchor pair (targetLum is the wheel's Ys anchor in APCA mode;
+    white/black are exact), which is hue/sat-invariant by construction and
+    moves only when a luminance actually changes (Lum/RGB edits, lock repins). */
+function apcaAnchorLc(tile) {
+  if (contrastLockMode !== 'apca') return undefined;
+  if (tile === 'pvw') return apcaLcYs(targetLum, 1);
+  if (tile === 'pvb') return apcaLcYs(targetLum, 0);
+  if (tile === 'pa')  return apcaLcYs(targetLum, bgLumAnchor());
+  return apcaLcYs(bgLumAnchor(), targetLum); // 'pb'
+}
+
+// ─── APCA font-size/weight lookup (v2 beta) ──────────────────────────────────
+// fontMatrixAscend from the official apca-w3 package: for each |Lc| row, the
+// minimum font px per weight 100–900. 999 = text prohibited at this contrast,
+// 777 = spot/non-text only. Between rows the minimum size is interpolated
+// linearly; a sentinel in the lower bracketing row wins (conservative).
+const APCA_FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+const APCA_FONT_MATRIX = [
+  [0,   [999,999,999,999,999,999,999,999,999]],
+  [10,  [999,999,999,999,999,999,999,999,999]],
+  [15,  [777,777,777,777,777,777,777,777,777]],
+  [20,  [777,777,777,777,777,777,777,777,777]],
+  [25,  [777,777,777,120,120,108,96,96,96]],
+  [30,  [777,777,120,108,108,96,72,72,72]],
+  [35,  [777,120,108,96,72,60,48,48,48]],
+  [40,  [120,108,96,60,48,42,32,32,32]],
+  [45,  [108,96,72,42,32,28,24,24,24]],
+  [50,  [96,72,60,32,28,24,21,21,21]],
+  [55,  [80,60,48,28,24,21,18,18,18]],
+  [60,  [72,48,42,24,21,18,16,16,18]],
+  [65,  [68,46,32,21.75,19,17,15,16,18]],
+  [70,  [64,44,28,19.5,18,16,14.5,16,18]],
+  [75,  [60,42,24,18,16,15,14,16,18]],
+  [80,  [56,38.25,23,17.25,15.81,14.81,14,16,18]],
+  [85,  [52,34.5,22,16.5,15.625,14.625,14,16,18]],
+  [90,  [48,32,21,16,15.5,14.5,14,16,18]],
+  [95,  [45,28,19.5,15.5,15,14,13.5,16,18]],
+  [100, [42,26.5,18.5,15,14.5,13.5,13,16,18]],
+  [105, [39,25,18,14.5,14,13,12,16,18]],
+  [110, [36,24,18,14,13,12,11,16,18]],
+  [115, [34.5,22.5,17.25,12.5,11.875,11.25,10.625,14.5,16.5]],
+  [120, [33,21,16.5,11,10.75,10.5,10.25,13,15]],
+  [125, [32,20,16,10,10,10,10,12,14]],
+];
+
+/** Minimum font px for |Lc| at `weight`; 999 = prohibited, 777 = non-text only. */
+function apcaMinFontSize(lcAbs, weight) {
+  const wi = APCA_FONT_WEIGHTS.indexOf(weight);
+  if (wi < 0) return 999;
+  const rows = APCA_FONT_MATRIX;
+  if (lcAbs <= rows[0][0]) return rows[0][1][wi];
+  if (lcAbs >= rows[rows.length - 1][0]) return rows[rows.length - 1][1][wi];
+  let i = 0;
+  while (rows[i + 1][0] <= lcAbs) i++;
+  const [la, va] = rows[i], [lb, vb] = rows[i + 1];
+  const a = va[wi], b = vb[wi];
+  if (a >= 777 || b >= 777) return a; // sentinel holds until the numeric row is reached
+  return a + (b - a) * (lcAbs - la) / (lb - la);
+}
+
+// v2 beta: the font the APCA verdicts judge against (persisted). The
+// selectors live inside each tile (in the WCAG chips' slot), synchronized.
+const APCA_FONT_SIZES = [10, 12, 14, 15, 16, 18, 21, 24, 28, 32, 36, 42, 48, 60, 72, 96];
+let apcaFontSize = (() => { const v = parseFloat(localStorage.getItem('apca-font-px') ?? '16'); return APCA_FONT_SIZES.includes(v) ? v : 16; })();
+let apcaFontWeight = (() => { const v = parseInt(localStorage.getItem('apca-font-wght') ?? '400', 10); return APCA_FONT_WEIGHTS.includes(v) ? v : 400; })();
+
+/** Official APCA usage-level ladder (verbatim from the reference tool at
+    apcacontrast.com, including its 0.3-tolerance thresholds). */
+function apcaUsageTier(lcAbs) {
+  if (lcAbs > 89.7) return 'SMALL BODY TEXT ONLY';
+  if (lcAbs > 74.7) return 'BODY TEXT OKAY';
+  if (lcAbs > 59.7) return 'FLUENT TEXT OKAY';
+  if (lcAbs > 44.7) return 'LARGE & SUB-FLUENT TEXT';
+  if (lcAbs > 29.7) return 'SPOT & NON TEXT ONLY';
+  if (lcAbs > 14.7) return '\u{1F6AB} NO TEXT USAGE';
+  return 'INVISIBLE';
 }
 
 // ─── WebGL wheel renderer ──────────────────────────────────────────────────────
@@ -611,6 +709,44 @@ function buildPreviewWcag(el) {
   const rowsEl = document.createElement('div');
   rowsEl.className = 'preview-wcag-rows';
 
+  // v2 beta: APCA usage tier + font verdict live on their own right-aligned
+  // rows above the Normal/Large WCAG badge rows (shown in APCA mode only).
+  const apcaTierEl = document.createElement('div');
+  apcaTierEl.className = 'preview-apca-tier';
+  rowsEl.appendChild(apcaTierEl);
+  const apcaFontEl = document.createElement('div');
+  apcaFontEl.className = 'preview-apca-font';
+  rowsEl.appendChild(apcaFontEl);
+
+  // v2 beta: the font size/weight selectors sit in the WCAG chips' slot
+  // (which is hidden in APCA mode) — one pair per tile, all synchronized.
+  const fontCtrl = document.createElement('div');
+  fontCtrl.className = 'preview-apca-fontctrl';
+  const fontCtrlLabel = document.createElement('span');
+  fontCtrlLabel.className = 'preview-wcag-cat';
+  fontCtrlLabel.textContent = 'Font';
+  fontCtrlLabel.title = 'Font size and weight the APCA verdicts judge against';
+  const sizeSel = document.createElement('select');
+  sizeSel.className = 'apca-font-select';
+  sizeSel.title = 'Font size (px) the APCA verdicts judge against';
+  for (const v of APCA_FONT_SIZES) { const o = document.createElement('option'); o.value = String(v); o.textContent = String(v); sizeSel.appendChild(o); }
+  const wghtSel = document.createElement('select');
+  wghtSel.className = 'apca-font-select';
+  wghtSel.title = 'Font weight the APCA verdicts judge against';
+  for (const v of APCA_FONT_WEIGHTS) { const o = document.createElement('option'); o.value = String(v); o.textContent = String(v); wghtSel.appendChild(o); }
+  sizeSel.addEventListener('change', () => {
+    apcaFontSize = +sizeSel.value;
+    saveToStorage('apca-font-px', String(apcaFontSize));
+    updateUI(); // re-renders every tile: verdicts + the sibling selectors sync
+  });
+  wghtSel.addEventListener('change', () => {
+    apcaFontWeight = +wghtSel.value;
+    saveToStorage('apca-font-wght', String(apcaFontWeight));
+    updateUI();
+  });
+  fontCtrl.append(fontCtrlLabel, sizeSel, wghtSel);
+  rowsEl.appendChild(fontCtrl);
+
   // Note: WCAG 1.4.11 (non-text contrast, 3:1) is Level AA only — UI
   // components have no AAA criterion, so the AAA badge in the Large row
   // applies to large text (1.4.6) exclusively.
@@ -633,10 +769,11 @@ function buildPreviewWcag(el) {
     },
   ];
 
-  const cats = [], badges = [];
+  const cats = [], badges = [], badgeRows = [];
   for (const { label, title, thresholds } of CATEGORIES) {
     const row = document.createElement('div');
     row.className = 'preview-wcag-row';
+    badgeRows.push(row);
 
     const catEl = document.createElement('span');
     catEl.className   = 'preview-wcag-cat';
@@ -666,7 +803,7 @@ function buildPreviewWcag(el) {
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
   }
-  const dom = { ratioEl, apcaEl, cats, badges };
+  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, fontCtrl, sizeSel, wghtSel, cats, badges, badgeRows };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -681,7 +818,26 @@ function buildPreviewWcag(el) {
  * @param {number[]} [txtRgb]  text color RGB (for the experimental APCA readout)
  * @param {number[]} [bgRgb]   bg color RGB (for the experimental APCA readout)
  */
-function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
+// ─── Verdict anti-flicker (v2 beta) ──────────────────────────────────────────
+// During a drag the contrast lock re-pins the free side a frame behind the
+// user's input, so the pair can sit on the wrong side of a threshold for a
+// single frame and the pass/fail chips flicker. The DISCRETE verdict state
+// (badge passes, APCA tier, font verdict) therefore only switches after the
+// new state has persisted for VERDICT_STABLE_MS — one-frame artifacts never
+// render, real changes appear ~50–70ms late while dragging, and a trailing
+// settle pass guarantees the exact state once input stops. Ratio/Lc numbers
+// and all colour adaptation stay per-frame. (The frame now enforces the lock
+// BEFORE drawing, so lock transients no longer exist at the render layer —
+// this window only guards residual jitter, e.g. slider tracks rebuilt
+// mid-drag on slow devices.)
+const VERDICT_STABLE_MS = 50;
+let _verdictSettleTimer = 0;
+function scheduleVerdictSettle() {
+  clearTimeout(_verdictSettleTimer);
+  _verdictSettleTimer = setTimeout(() => updateUI(), VERDICT_STABLE_MS + 40);
+}
+
+function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
   const isLight = bgLum > 0.179;
@@ -691,13 +847,64 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
     dom.ratioEl.textContent = ratio.toFixed(2) + ':1';
     dom.ratioEl.style.color = cvdTransformRgba(dim);
   }
+  // Discrete verdict state for this frame (filled below, then debounced).
+  const disc = { passes: dom.badges.map(({ threshold }) => ratio >= threshold), tier: '', tierTitle: '', font: null };
+
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
-      const lc = apcaLc(txtRgb, bgRgb);
+      const lc = (lcOverride !== undefined) ? lcOverride : apcaLc(txtRgb, bgRgb);
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = cvdTransformRgba(dim);
+      // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
+      // font against the minimum Lc-derived size from the official lookup.
+      // The tier/font texts are DISCRETE verdict state: computed here, but
+      // routed through the stability debounce below before being displayed.
+      if (true) {
+        if (contrastLockMode === 'apca') {
+          const lcAbs = Math.abs(lc);
+          const min = apcaMinFontSize(lcAbs, apcaFontWeight);
+          const label = apcaFontSize + 'px/' + apcaFontWeight;
+          // The reference tool gates the whole font table before the lookup
+          // matrix: below the hard minimum nothing is usable, and below the
+          // any-text floor every weight renders as non-text — matrix sentinels
+          // (999/777) only matter past those gates. The gate values use the
+          // usage ladder's 0.3-tolerance thresholds (14.7 / 29.7) rather than
+          // the tool's internal 15 / 29.8, so this verdict and the tier row
+          // above it always switch on exactly the same |Lc|.
+          // No `min >= 999` here: the 999 rows live entirely below the Lc-15
+          // hard minimum, but the sentinel-holding lookup can still return 999
+          // in the 14.7–15 band — which must read as the NO-TEXT zone (spot &
+          // non-text) to stay in lockstep with the tier row above.
+          let pass = false, text, title;
+          if (lcAbs <= 14.7) {
+            text = '✗ ' + label + ' — contrast too low: not usable for anything';
+            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — invisible; too low for any use, text or non-text';
+          } else if (lcAbs <= 29.7) {
+            // The NO-TEXT band: NOT even spot text — only non-text elements
+            // (icons, dividers, large UI shapes) are sanctioned here.
+            text = '✗ ' + label + ' — no text at any size: non-text elements only';
+            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the any-text floor (Lc ~30) — no text of any size or weight, including spot text; usable for non-text elements only';
+          } else if (min >= 777) {
+            text = '✗ ' + label + ' — this weight: spot text & non-text only';
+            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' has no fluent-text size — usable for spot text and non-text elements only';
+          } else if (apcaFontSize >= min - 1e-9) {
+            pass = true;
+            text = '✓ ' + label;
+            title = 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + lcAbs.toFixed(0);
+          } else {
+            text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
+            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
+          }
+          disc.tier = apcaUsageTier(lcAbs);
+          disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+          disc.font = { text, title, pass };
+        }
+      }
     } else {
       dom.apcaEl.textContent = '';
+      dom._shownKey = undefined; // reset the debounce when the readouts vanish
+      if (dom.apcaTierEl) dom.apcaTierEl.textContent = '';
+      if (dom.apcaFontEl) dom.apcaFontEl.textContent = '';
     }
   }
 
@@ -720,10 +927,59 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
   const passBg     = useBrightStyle ? 'rgba(93,222,138,0.10)' : 'rgba(26,122,66,0.10)';
   const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
 
+  // APCA mode: the usage tier + font verdict are the verdict UI — hide the
+  // WCAG Normal/Large chip rows and show the font selectors in their slot.
+  if (dom.badgeRows) {
+    const apca = contrastLockMode === 'apca';
+    for (const row of dom.badgeRows) row.style.display = apca ? 'none' : '';
+    if (dom.fontCtrl) {
+      dom.fontCtrl.style.display = apca ? '' : 'none';
+      if (apca) {
+        if (dom.sizeSel.value !== String(apcaFontSize))  dom.sizeSel.value = String(apcaFontSize);
+        if (dom.wghtSel.value !== String(apcaFontWeight)) dom.wghtSel.value = String(apcaFontWeight);
+      }
+    }
+  }
   for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
-  for (const { el: b, threshold } of dom.badges) {
-    if (ratio >= threshold) {
+  // ── Stability debounce: adopt `disc` only once it has persisted ──
+  const key = JSON.stringify(disc);
+  const now = performance.now();
+  if (dom._shownKey === undefined) {
+    dom._shownKey = key; dom._shownDisc = disc; dom._pendKey = null;
+  } else if (key === dom._shownKey) {
+    dom._pendKey = null; dom._shownDisc = disc; // same state; refresh payload
+  } else if (key === dom._pendKey) {
+    if (now - dom._pendTs >= VERDICT_STABLE_MS) {
+      dom._shownKey = key; dom._shownDisc = disc; dom._pendKey = null;
+    } else {
+      scheduleVerdictSettle(); // still maturing — guarantee a trailing commit
+    }
+  } else {
+    dom._pendKey = key; dom._pendTs = now;
+    scheduleVerdictSettle();
+  }
+  const shown = dom._shownDisc;
+
+  if (dom.apcaTierEl) {
+    dom.apcaTierEl.textContent = shown.tier;
+    dom.apcaTierEl.title = shown.tierTitle;
+    if (shown.tier) dom.apcaTierEl.style.color = cvdTransformRgba(dim);
+  }
+  if (dom.apcaFontEl) {
+    if (shown.font) {
+      dom.apcaFontEl.textContent = shown.font.text;
+      dom.apcaFontEl.title = shown.font.title;
+      dom.apcaFontEl.style.color = cvdTransformHex(shown.font.pass
+        ? (isLight ? '#1a7a42' : '#5dde8a')
+        : (isLight ? '#b3261e' : '#ff7076'));
+    } else {
+      dom.apcaFontEl.textContent = '';
+    }
+  }
+
+  dom.badges.forEach(({ el: b }, i) => {
+    if (shown.passes[i]) {
       b.style.color       = cvdTransformHex(passColor);
       b.style.borderColor = cvdTransformRgba(passBorder);
       b.style.background  = cvdTransformRgba(passBg);
@@ -734,7 +990,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb) {
       b.style.background  = cvdTransformRgba(isLight ? 'rgba(0,0,0,0.04)'  : 'rgba(255,255,255,0.04)');
       b.style.boxShadow   = 'none';
     }
-  }
+  });
 }
 
 /**
@@ -757,6 +1013,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
     selectedLum, 1, 1,
     hexToRgb(selectedHex), [255, 255, 255],
+    apcaAnchorLc('pvw'),
   );
 
   // vs Black (bg lum = 0, isLight = false)
@@ -773,6 +1030,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
     selectedLum, 0, 0,
     hexToRgb(selectedHex), [0, 0, 0],
+    apcaAnchorLc('pvb'),
   );
 }
 
@@ -805,6 +1063,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
     selectedLum, customLum, customLum,
     hexToRgb(selectedHex), hexToRgb(customHex),
+    apcaAnchorLc('pa'),
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
@@ -828,6 +1087,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
     customLum, selectedLum, selectedLum,
     hexToRgb(customHex), hexToRgb(selectedHex),
+    apcaAnchorLc('pb'),
   );
 }
 
@@ -933,25 +1193,35 @@ let _lockSettleTimer = null;
 
 function _renderFrame() {
   _rafId = null;
-  const customChanged = _pendingCustomSync;
+  // Contrast lock FIRST, then draw: every frame renders the post-enforcement
+  // pair, so the pass/fail chips can never show the transient un-enforced
+  // state (the old draw-then-enforce order flickered on every drag tick).
+  // Renders scheduled by the enforcement itself skip re-enforcement to
+  // prevent ping-ponging — UNLESS fresh user input coalesced into the same
+  // frame (_userDirty), which previously left that input un-enforced for a
+  // frame. Wheel hue/sat renders arrive with neither flag set, but still
+  // shift the fg color (RGB quantization; APCA's Lc is hue-dependent even at
+  // equal luminance) — treat them as fg-touched so the lock tracks every
+  // tick. Redundant runs are cheap: enforcement no-ops unless the free
+  // side's rendered color would actually change.
+  // Which side did the USER touch this frame? _pendingCustomSync can't answer
+  // that: the lock's own bg adjustment also sets it, and in a coalesced frame
+  // that misread made us enforce the WRONG side — moving the user's Lum value
+  // and landing the pair just below the target until the settle pass. Only
+  // scheduleRender calls without _skipEnforceOnce record the user's side.
+  const userSide = _pendingUserSide;
+  _pendingUserSide = null;
+  const skipEnforce = _skipEnforceOnce && !_userDirty;
+  _skipEnforceOnce = false;
+  _userDirty = false;
+  if (!skipEnforce) enforceContrastLock(userSide || _lastTouchedSide);
+  // An adjustment above may have flagged the wheel/custom sync for this
+  // same frame — draw AFTER it so the frame shows the corrected state.
   if (_pendingWheelDraw)  { drawWheel(targetLum); _pendingWheelDraw  = false; }
   if (_pendingCustomSync) { syncCustomUI();        _pendingCustomSync = false; }
   updateUI();
-  // Contrast lock: adjust the side the user did NOT touch. Renders
-  // scheduled by the enforcement itself are skipped to prevent ping-ponging.
-  // Wheel hue/sat renders arrive with neither flag set, but still shift the
-  // fg color (RGB quantization; APCA's Lc is hue-dependent even at equal
-  // luminance) — treat them as fg-touched so the lock tracks every tick.
-  // Redundant runs are cheap: enforcement no-ops unless the free side's
-  // rendered color would actually change.
-  if (_skipEnforceOnce) { _skipEnforceOnce = false; }
-  else if (customChanged) enforceContrastLock('bg');
-  else enforceContrastLock('fg');
-  // Settle pass: during fast drags the newest input can land in the one
-  // frame that skips enforcement (it coalesced with the lock's own
-  // adjustment) and would otherwise stay un-enforced when the drag stops.
-  // Once the frame stream goes quiet, verify and correct. Idempotent: the
-  // enforcement no-ops when the pair is already pinned.
+  // Settle pass: verify and correct once the frame stream goes quiet.
+  // Idempotent: the enforcement no-ops when the pair is already pinned.
   clearTimeout(_lockSettleTimer);
   _lockSettleTimer = setTimeout(() => {
     if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
@@ -962,7 +1232,10 @@ function scheduleRender(redrawWheel, syncCustom) {
   // Remember which side the user touched last (wheel = fg, custom = bg) so a
   // contrast-target change adjusts the other one. Renders scheduled by the
   // contrast-lock enforcement itself (_skipEnforceOnce set) don't count.
-  if (!_skipEnforceOnce) _lastTouchedSide = syncCustom ? 'bg' : 'fg';
+  // Classify by _inEnforcement, NOT _skipEnforceOnce: the skip flag stays
+  // armed until the next frame, so an input arriving just after a lock
+  // adjustment was misread as lock-origin and went un-enforced for a frame.
+  if (!_inEnforcement) { _lastTouchedSide = syncCustom ? 'bg' : 'fg'; _pendingUserSide = _lastTouchedSide; _userDirty = true; }
   if (redrawWheel)  _pendingWheelDraw  = true;
   if (syncCustom)   _pendingCustomSync = true;
   if (_rafId !== null) return;
@@ -975,6 +1248,9 @@ function scheduleRender(redrawWheel, syncCustom) {
 // the luminance of the untouched side moves (via findLightness).
 
 let _skipEnforceOnce = false;
+let _userDirty = false; // fresh user input coalesced into an enforcement-scheduled frame
+let _pendingUserSide = null; // side ('fg'|'bg') the user touched for the pending frame
+let _inEnforcement = false;  // renders scheduled while true originate from the lock, not the user
 let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
 
 /**
@@ -1023,6 +1299,10 @@ function applyLockAdjustment(changed, desired) {
     } else {
       setCustomFromHsl(cH, cS, findLightnessBiased(cH, cS, desired, dir));
     }
+    // Keep the continuous anchor on the solved boundary so the anchor-based
+    // APCA readouts stay frozen through locked sweeps too.
+    _bgHeldLum = desired;
+    _bgHeldRgb = cR + ',' + cG + ',' + cB;
   } else {
     // Free side = wheel fg; selectedRgbBiased() biases away from the bg
     targetLum = desired;
@@ -1062,6 +1342,11 @@ function lockFreeAtRgb(changed, rgb) {
 
 function enforceContrastLock(changed) {
   if (contrastLockMode === 'off') return;
+  _inEnforcement = true;
+  try { _enforceContrastLockInner(changed); } finally { _inEnforcement = false; }
+}
+
+function _enforceContrastLockInner(changed) {
   if (apcaLockActive()) { enforceApcaLock(changed); return; }
   if (!contrastLockTarget) return;
   const R = contrastLockTarget;
@@ -1458,7 +1743,11 @@ function setCustomFromHsl(h, s, l) {
 let _textLumTouched = false; // main TEXT target-luminance operated
 let _bgLumTouched = false;   // BG Lum-mode luminance operated
 function customHueSatHoldsLum() {
-  return activeContrastTarget() > 0 || (_textLumTouched && _bgLumTouched);
+  // Always hold in APCA mode: its readouts (usage tier, required text size)
+  // must be hue/sat-invariant regardless of how the luminances were set.
+  return contrastLockMode === 'apca'
+    || activeContrastTarget() > 0
+    || (_textLumTouched && _bgLumTouched);
 }
 // Anchor luminance for consecutive H/S ops. Re-deriving y from the previous
 // step's quantized colour lets ±1-step rounding errors random-walk across a
@@ -1773,6 +2062,7 @@ customHexInput.addEventListener('input', () => {
   if (val.length > 7) val = val.slice(0, 7);
   customHexInput.value = val.toUpperCase();
   if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    _bgLumTouched = true; // a pasted/typed hex fixes this side's luminance deliberately
     const [r, g, b] = hexToRgb(val);
     cR = r; cG = g; cB = b;
     [cH, cS, cL] = rgbToHsl(r, g, b);
@@ -1813,7 +2103,8 @@ const swatchHexInput = /** @type {HTMLInputElement} */ (document.getElementById(
 const swatchHexCopy  = /** @type {HTMLElement} */ (document.getElementById('swatch-hex-copy'));
 
 function applyMainHex(r, g, b) {
-  targetLum = relativeLuminance(r, g, b);
+  _textLumTouched = true; // a pasted/typed hex fixes this side's luminance deliberately
+  targetLum = wheelLum(r, g, b); // interpret under the active definition (WCAG / APCA Ys)
   const [h, s] = rgbToHsl(r, g, b);
   selHue = h;
   selSat = s;
@@ -2045,6 +2336,7 @@ document.addEventListener('click', e => {
   apcaBtns.forEach(btn => btn.addEventListener('click', () => {
     setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
   }));
+
 }
 
 {
