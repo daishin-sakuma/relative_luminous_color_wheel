@@ -361,7 +361,23 @@ function apcaAnchorLc(tile) {
   if (contrastLockMode !== 'apca') return undefined;
   if (tile === 'pvw') return apcaLcYs(targetLum, 1);
   if (tile === 'pvb') return apcaLcYs(targetLum, 0);
-  if (tile === 'pa')  return apcaLcYs(targetLum, bgLumAnchor());
+  if (tile === 'pa') {
+    const raw = apcaLcYs(targetLum, bgLumAnchor());
+    // Tile A (wheel text on the custom bg) is the exact pair the APCA contrast
+    // lock pins to its target. While the lock is holding, report the target |Lc|
+    // itself so the usage tier, the required font size and the Lc readout are
+    // IDENTICAL no matter which side the user last moved. The lock only
+    // guarantees ≥ T, and the continuous anchors otherwise straddle T by a hair
+    // (the moved side is the exact solved luminance, the other is quantized),
+    // which was flipping the verdicts across a threshold. Only when the pair
+    // actually meets T (lock satisfied, not an unreachable-target error) — a
+    // failed lock still shows the real, lower Lc.
+    if (apcaLockTarget > 0
+        && Math.abs(apcaLc(selectedRgbBiased(), [cR, cG, cB])) >= apcaLockTarget - 1e-6) {
+      return (raw < 0 ? -1 : 1) * apcaLockTarget;
+    }
+    return raw;
+  }
   return apcaLcYs(bgLumAnchor(), targetLum); // 'pb'
 }
 
@@ -430,6 +446,40 @@ function apcaUsageTier(lcAbs) {
   if (lcAbs > 29.7) return 'SPOT & NON TEXT ONLY';
   if (lcAbs > 14.7) return '\u{1F6AB} NO TEXT USAGE';
   return 'INVISIBLE';
+}
+
+/** Verdict for the chosen apcaFontSize / apcaFontWeight at |Lc| → { text, title,
+    pass }. Shared by the contrast tiles and the palette chip editor so both
+    always agree. The reference tool gates the whole font table before the lookup
+    matrix: below the Lc-15 hard minimum nothing is usable, and below the any-text
+    floor (~Lc 30) every weight is non-text; the 999/777 sentinels only matter
+    past those gates. The 14.7 / 29.7 gates use the usage ladder's 0.3-tolerance
+    thresholds so this verdict and apcaUsageTier switch on exactly the same |Lc|.
+    (No `min >= 999` branch: the 999 rows sit below Lc 15, but the sentinel-
+    holding lookup can still return 999 in the 14.7–15 band, which must read as
+    the NO-TEXT zone to stay in lockstep with the tier.) */
+function apcaFontVerdict(lcAbs) {
+  const min = apcaMinFontSize(lcAbs, apcaFontWeight);
+  const label = apcaFontSize + 'px/' + apcaFontWeight;
+  let pass = false, text, title;
+  if (lcAbs <= 14.7) {
+    text = '✗ ' + label + ' — contrast too low: not usable for anything';
+    title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — invisible; too low for any use, text or non-text';
+  } else if (lcAbs <= 29.7) {
+    text = '✗ ' + label + ' — no text at any size: non-text elements only';
+    title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the any-text floor (Lc ~30) — no text of any size or weight, including spot text; usable for non-text elements only';
+  } else if (min >= 777) {
+    text = '✗ ' + label + ' — this weight: spot text & non-text only';
+    title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' has no fluent-text size — usable for spot text and non-text elements only';
+  } else if (apcaFontSize >= min - 1e-9) {
+    pass = true;
+    text = '✓ ' + label;
+    title = 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + lcAbs.toFixed(0);
+  } else {
+    text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
+    title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
+  }
+  return { text, title, pass };
 }
 
 // ─── WebGL wheel renderer ──────────────────────────────────────────────────────
@@ -708,15 +758,24 @@ const _wcagDom = new WeakMap();
 function buildPreviewWcag(el) {
   const rowsEl = document.createElement('div');
   rowsEl.className = 'preview-wcag-rows';
+  // The APCA verdict rows and the WCAG chip rows are stacked in the SAME grid
+  // cell (see .preview-wcag-rows in CSS). Both groups are always laid out, so
+  // the block reserves the height of the taller one (APCA) in every mode —
+  // switching contrast mode flips only their visibility, never the tile height,
+  // which on desktop would otherwise re-fit the whole app's zoom.
+  const apcaGroup = document.createElement('div');
+  apcaGroup.className = 'preview-verdict-group preview-verdict-apca';
+  const wcagGroup = document.createElement('div');
+  wcagGroup.className = 'preview-verdict-group preview-verdict-wcag';
 
   // v2 beta: APCA usage tier + font verdict live on their own right-aligned
-  // rows above the Normal/Large WCAG badge rows (shown in APCA mode only).
+  // rows above the font selectors, inside the APCA group.
   const apcaTierEl = document.createElement('div');
   apcaTierEl.className = 'preview-apca-tier';
-  rowsEl.appendChild(apcaTierEl);
+  apcaGroup.appendChild(apcaTierEl);
   const apcaFontEl = document.createElement('div');
   apcaFontEl.className = 'preview-apca-font';
-  rowsEl.appendChild(apcaFontEl);
+  apcaGroup.appendChild(apcaFontEl);
 
   // v2 beta: the font size/weight selectors sit in the WCAG chips' slot
   // (which is hidden in APCA mode) — one pair per tile, all synchronized.
@@ -738,14 +797,16 @@ function buildPreviewWcag(el) {
     apcaFontSize = +sizeSel.value;
     saveToStorage('apca-font-px', String(apcaFontSize));
     updateUI(); // re-renders every tile: verdicts + the sibling selectors sync
+    if (_ce) chipEditorRenderPreview(); // keep an open chip editor's verdict in sync
   });
   wghtSel.addEventListener('change', () => {
     apcaFontWeight = +wghtSel.value;
     saveToStorage('apca-font-wght', String(apcaFontWeight));
     updateUI();
+    if (_ce) chipEditorRenderPreview();
   });
   fontCtrl.append(fontCtrlLabel, sizeSel, wghtSel);
-  rowsEl.appendChild(fontCtrl);
+  apcaGroup.appendChild(fontCtrl);
 
   // Note: WCAG 1.4.11 (non-text contrast, 3:1) is Level AA only — UI
   // components have no AAA criterion, so the AAA badge in the Large row
@@ -791,9 +852,10 @@ function buildPreviewWcag(el) {
       badges.push({ el: b, threshold });
     }
 
-    rowsEl.appendChild(row);
+    wcagGroup.appendChild(row);
   }
 
+  rowsEl.append(apcaGroup, wcagGroup);
   el.appendChild(rowsEl);
   const ratioEl = document.getElementById(el.id.replace('-wcag', '-ratio'));
   let apcaEl = null;
@@ -803,7 +865,7 @@ function buildPreviewWcag(el) {
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
   }
-  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, fontCtrl, sizeSel, wghtSel, cats, badges, badgeRows };
+  const dom = { rowsEl, ratioEl, apcaEl, apcaTierEl, apcaFontEl, fontCtrl, sizeSel, wghtSel, cats, badges, badgeRows };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -855,50 +917,19 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
       const lc = (lcOverride !== undefined) ? lcOverride : apcaLc(txtRgb, bgRgb);
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = cvdTransformRgba(dim);
-      // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
-      // font against the minimum Lc-derived size from the official lookup.
-      // The tier/font texts are DISCRETE verdict state: computed here, but
-      // routed through the stability debounce below before being displayed.
-      if (true) {
-        if (contrastLockMode === 'apca') {
-          const lcAbs = Math.abs(lc);
-          const min = apcaMinFontSize(lcAbs, apcaFontWeight);
-          const label = apcaFontSize + 'px/' + apcaFontWeight;
-          // The reference tool gates the whole font table before the lookup
-          // matrix: below the hard minimum nothing is usable, and below the
-          // any-text floor every weight renders as non-text — matrix sentinels
-          // (999/777) only matter past those gates. The gate values use the
-          // usage ladder's 0.3-tolerance thresholds (14.7 / 29.7) rather than
-          // the tool's internal 15 / 29.8, so this verdict and the tier row
-          // above it always switch on exactly the same |Lc|.
-          // No `min >= 999` here: the 999 rows live entirely below the Lc-15
-          // hard minimum, but the sentinel-holding lookup can still return 999
-          // in the 14.7–15 band — which must read as the NO-TEXT zone (spot &
-          // non-text) to stay in lockstep with the tier row above.
-          let pass = false, text, title;
-          if (lcAbs <= 14.7) {
-            text = '✗ ' + label + ' — contrast too low: not usable for anything';
-            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — invisible; too low for any use, text or non-text';
-          } else if (lcAbs <= 29.7) {
-            // The NO-TEXT band: NOT even spot text — only non-text elements
-            // (icons, dividers, large UI shapes) are sanctioned here.
-            text = '✗ ' + label + ' — no text at any size: non-text elements only';
-            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the any-text floor (Lc ~30) — no text of any size or weight, including spot text; usable for non-text elements only';
-          } else if (min >= 777) {
-            text = '✗ ' + label + ' — this weight: spot text & non-text only';
-            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' has no fluent-text size — usable for spot text and non-text elements only';
-          } else if (apcaFontSize >= min - 1e-9) {
-            pass = true;
-            text = '✓ ' + label;
-            title = 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + lcAbs.toFixed(0);
-          } else {
-            text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
-            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
-          }
-          disc.tier = apcaUsageTier(lcAbs);
-          disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
-          disc.font = { text, title, pass };
-        }
+      // APCA is size/weight-dependent — judge the chosen font against the
+      // official lookup (apcaFontVerdict, shared with the chip editor so both
+      // always agree). These are DISCRETE verdict state: computed here, then
+      // routed through the stability debounce before being displayed. Computed
+      // in EVERY mode (not only APCA) so the APCA verdict group always reserves
+      // its height — the tile then never changes height when the mode toggles
+      // (which on desktop re-fits the app's zoom); it's just hidden via
+      // visibility in non-APCA modes (see .preview-verdict-apca).
+      {
+        const lcAbs = Math.abs(lc);
+        disc.tier = apcaUsageTier(lcAbs);
+        disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+        disc.font = apcaFontVerdict(lcAbs);
       }
     } else {
       dom.apcaEl.textContent = '';
@@ -927,19 +958,13 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
   const passBg     = useBrightStyle ? 'rgba(93,222,138,0.10)' : 'rgba(26,122,66,0.10)';
   const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
 
-  // APCA mode: the usage tier + font verdict are the verdict UI — hide the
-  // WCAG Normal/Large chip rows and show the font selectors in their slot.
-  if (dom.badgeRows) {
-    const apca = contrastLockMode === 'apca';
-    for (const row of dom.badgeRows) row.style.display = apca ? 'none' : '';
-    if (dom.fontCtrl) {
-      dom.fontCtrl.style.display = apca ? '' : 'none';
-      if (apca) {
-        if (dom.sizeSel.value !== String(apcaFontSize))  dom.sizeSel.value = String(apcaFontSize);
-        if (dom.wghtSel.value !== String(apcaFontWeight)) dom.wghtSel.value = String(apcaFontWeight);
-      }
-    }
-  }
+  // APCA vs WCAG verdict UI: both groups occupy the same grid cell, so switching
+  // modes flips only their visibility (CSS) — the tile height stays put, so the
+  // desktop fit-zoom never rescales the whole app on a mode toggle.
+  const apca = contrastLockMode === 'apca';
+  if (dom.rowsEl) dom.rowsEl.classList.toggle('apca', apca);
+  if (dom.sizeSel && dom.sizeSel.value  !== String(apcaFontSize))   dom.sizeSel.value = String(apcaFontSize);
+  if (dom.wghtSel && dom.wghtSel.value !== String(apcaFontWeight)) dom.wghtSel.value = String(apcaFontWeight);
   for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
   // ── Stability debounce: adopt `disc` only once it has persisted ──
@@ -1090,6 +1115,51 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     apcaAnchorLc('pb'),
   );
 }
+
+// ─── Preview sample text sizes ────────────────────────────────────────────────
+// Each preview states the ON-SCREEN (rendered, post-zoom) px of its sample text:
+// the contrast tiles' "Ag" (large) / body (normal) in their section labels, and
+// the chip editor's "Ag". getBoundingClientRect on a line-height:1 probe returns
+// real on-screen px, so it captures the desktop fit-zoom for the contrast tiles
+// (inside the zoomed #app-wrapper) AND reads correctly for the chip editor (which
+// lives outside it, unzoomed) — no per-context zoom bookkeeping needed.
+function onScreenFontPx(el) {
+  const probe = document.createElement('span');
+  probe.textContent = ' ';
+  probe.style.cssText = 'font:inherit;line-height:1;white-space:pre;display:inline-block;position:absolute;visibility:hidden;padding:0;border:0;';
+  el.appendChild(probe);
+  const h = probe.getBoundingClientRect().height; // ≈ font-size in on-screen px
+  probe.remove();
+  return h;
+}
+
+function setPreviewSizeLabel(sampleEl, px) {
+  const section = sampleEl.closest('.preview-section');
+  const label = section && section.querySelector('.preview-section-label');
+  if (!label) return;
+  let badge = label.querySelector('.preview-size');
+  if (!badge) { badge = document.createElement('span'); badge.className = 'preview-size'; label.appendChild(badge); }
+  badge.textContent = px + 'px';
+}
+
+function updateChipEditorAgSize() {
+  if (!_ceRefs || !_ceRefs.agSize || !_ceRefs.ag || !_ceEl || !_ceEl.isConnected) return;
+  _ceRefs.agSize.textContent = Math.round(onScreenFontPx(_ceRefs.ag)) + 'px';
+}
+
+function updatePreviewFontSizes() {
+  const disp = document.querySelector('.preview-display');
+  const body = document.querySelector('.preview-body');
+  if (disp && body) {
+    const lg = Math.round(onScreenFontPx(disp));   // all tiles share the class → one size each
+    const nm = Math.round(onScreenFontPx(body));
+    document.querySelectorAll('.preview-display').forEach(el => setPreviewSizeLabel(el, lg));
+    document.querySelectorAll('.preview-body').forEach(el => setPreviewSizeLabel(el, nm));
+  }
+  updateChipEditorAgSize();
+}
+window.addEventListener('resize', updatePreviewFontSizes);
+requestAnimationFrame(updatePreviewFontSizes);             // once styles are applied
 
 // ─── Main UI update ───────────────────────────────────────────────────────────
 
@@ -3242,58 +3312,227 @@ function rgbCssToHex(c) {
   }));
 }
 
-// ─── Preferences popper height ────────────────────────────────────────────────
-// Cap the popper to the visible viewport so it never runs off a short screen,
-// leaving a bottom gap equal to the body's side padding; its content then
-// scrolls inside (overflow-y:auto in CSS). Recomputed on open and on resize.
+// ─── Hover/tap popper (Preferences + Layout preview) ──────────────────────────
+// Reusable dropdown wiring shared by the Preferences gear and the Layout-preview
+// window icon. Opens on mouse hover (CSS) and on tap (sticky :hover); a click
+// toggles it and .settings-dismissed force-closes over a lingering :hover.
+// syncPanelHeight caps the popper to the visible viewport so it never runs off a
+// short screen, leaving a bottom gap equal to the body's side padding; its
+// content then scrolls inside (overflow-y:auto in CSS). `onOpen` runs on every
+// (re)open so a panel can refresh its contents lazily.
+function setupHoverPopper(wrap, btn, panel, onOpen) {
+  if (!wrap || !panel) return;
+  const syncPanelHeight = () => {
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    const gap = parseFloat(getComputedStyle(document.getElementById('app-wrapper') || document.body).paddingLeft) || 16; // match side margins
+    const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap (real px)
+    // The panel lives inside the fit-to-viewport zoomed wrapper, so a CSS px set
+    // here renders zoom× larger — divide the real-px budget back out.
+    const zoom = parseFloat((document.getElementById('app-wrapper') || {}).style?.zoom) || 1;
+    panel.style.maxHeight = Math.max(140, (vh - top - gap) / zoom) + 'px';
+  };
+  const refresh = () => { syncPanelHeight(); if (onOpen) onOpen(); };
+  wrap.addEventListener('pointerenter', refresh);
+  window.addEventListener('resize', syncPanelHeight);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
+  syncPanelHeight();
+  if (!btn) return;
+  let sOpen = false;
+  const openIt  = () => { sOpen = true;  wrap.classList.remove('settings-dismissed'); wrap.classList.add('settings-open'); refresh(); };
+  const closeIt = () => { sOpen = false; wrap.classList.remove('settings-open'); wrap.classList.add('settings-dismissed'); btn.blur(); };
+  const reset   = () => { sOpen = false; wrap.classList.remove('settings-open', 'settings-dismissed'); };
+  btn.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') openIt(); });
+  wrap.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') reset(); });
+  btn.addEventListener('click', () => { sOpen ? closeIt() : openIt(); });
+  // Tap/click anywhere outside the control closes it. closeIt sets
+  // .settings-dismissed so it beats a lingering sticky :hover on touch.
+  document.addEventListener('pointerdown', e => {
+    if (sOpen && !wrap.contains(/** @type {Node} */ (e.target))) closeIt();
+  }, true);
+}
 {
-  const wrap = /** @type {HTMLElement} */ (document.querySelector('.settings-wrap'));
-  const panel = document.getElementById('settings-panel');
-  const btn = document.getElementById('settings-btn');
-  if (wrap && panel) {
-    const syncPanelHeight = () => {
-      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const gap = parseFloat(getComputedStyle(document.getElementById('app-wrapper') || document.body).paddingLeft) || 16; // match side margins
-      const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap (real px)
-      // The panel lives inside the fit-to-viewport zoomed wrapper, so a CSS px
-      // set here renders zoom× larger — divide the real-px budget back out.
-      const zoom = parseFloat((document.getElementById('app-wrapper') || {}).style?.zoom) || 1;
-      panel.style.maxHeight = Math.max(140, (vh - top - gap) / zoom) + 'px';
-    };
-    wrap.addEventListener('pointerenter', syncPanelHeight);
-    window.addEventListener('resize', syncPanelHeight);
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
-    syncPanelHeight();
+  const sBtn = document.getElementById('settings-btn');
+  setupHoverPopper(sBtn && sBtn.closest('.settings-wrap'), sBtn, document.getElementById('settings-panel'));
+  const lBtn = document.getElementById('layout-btn');
+  setupHoverPopper(lBtn && lBtn.closest('.layout-wrap'), lBtn, document.getElementById('layout-panel'), renderLayoutPreview);
+}
 
-    // The panel opens on mouse hover (CSS) and on tap (sticky :hover). Add a
-    // click/tap toggle so pressing the button again closes it. `sOpen` tracks the
-    // logical open state: mouse hover-open syncs it so the first click then
-    // closes; .settings-dismissed force-closes over the (sticky) :hover.
-    if (btn) {
-      let sOpen = false;
-      const openIt = () => {
-        sOpen = true;
-        wrap.classList.remove('settings-dismissed');
-        wrap.classList.add('settings-open');
-        syncPanelHeight();
-      };
-      const closeIt = () => {
-        sOpen = false;
-        wrap.classList.remove('settings-open');
-        wrap.classList.add('settings-dismissed');
-        btn.blur();
-      };
-      const reset = () => { sOpen = false; wrap.classList.remove('settings-open', 'settings-dismissed'); };
-      btn.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') openIt(); });
-      wrap.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') reset(); });
-      btn.addEventListener('click', () => { sOpen ? closeIt() : openIt(); });
-      // Tap/click anywhere outside the control closes it. Use closeIt (which sets
-      // .settings-dismissed) so it beats a lingering sticky :hover on touch.
-      document.addEventListener('pointerdown', e => {
-        if (sOpen && !wrap.contains(/** @type {Node} */ (e.target))) closeIt();
-      }, true);
-    }
+// ─── Layout preview ───────────────────────────────────────────────────────────
+// A live mock UI that dresses a small landing page (nav → hero → card grid) in
+// the saved palette so the colours can be judged in context instead of as
+// isolated swatches. Every saved colour is guaranteed to appear: the card grid
+// renders one surface per background colour, and the closing legend lists every
+// text and background colour by rank and hex. All palette colours pass through
+// cvdTransformHex() so the colour-vision simulation applies here too; the chrome
+// uses theme variables for the same reason. With nothing pinned yet, the live
+// picker pair stands in so the preview is never empty.
+const layoutPreviewEl = document.getElementById('layout-preview');
+
+function lpEl(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+function renderLayoutPreview() {
+  if (!layoutPreviewEl) return;
+  const liveText = toHex(...selectedRgbBiased()).toLowerCase();
+  const liveBg   = toHex(cR, cG, cB).toLowerCase();
+  const roleHexes = (role, live) => {
+    const h = palette.filter(e => e.role === role).map(e => e.hex);
+    return h.length ? h : [live];
+  };
+  const texts = roleHexes('fg', liveText);
+  const bgs   = roleHexes('bg', liveBg);
+  const t = i => cvdTransformHex(texts[i % texts.length]); // text colour by rank (cycled)
+  const b = i => cvdTransformHex(bgs[i % bgs.length]);      // bg colour by rank (cycled)
+  const saved = palette.length > 0;
+  // Coloured text node in one call: element with class `cls`, text, colour rank.
+  const tx = (tag, cls, text, ti) => { const n = lpEl(tag, cls, text); n.style.color = t(ti); return n; };
+  // Filled "button": brand-accent bg + label colour (cosmetic hover/active in CSS).
+  const btn = (label, cls, bi = 2, ti = 0) => { const n = lpEl('span', 'lp-btn' + (cls ? ' ' + cls : ''), label); n.style.background = b(bi); n.style.color = t(ti); return n; };
+
+  // Every saved colour is used in the layout itself: the ten sections below are
+  // each a distinct SURFACE painted with bg ranks 0–9 (nav…footer), and the text
+  // ranks 0–9 are spread across their headings, body, links, marks and stats —
+  // so all 10×2 colours appear organically, without a feature-card grid.
+  layoutPreviewEl.innerHTML = '';
+  if (!saved) {
+    layoutPreviewEl.appendChild(lpEl('div', 'lp-hint',
+      'Showing the current picker pair. Pin text and background colours to the palette to preview a full design system here.'));
   }
+
+  const screen = lpEl('div', 'lp-screen');
+
+  // ── Nav (bg 0) ────────────────────────────────────────────────────────────
+  const nav = lpEl('div', 'lp-nav');
+  nav.style.background = b(0);
+  const brandWrap = lpEl('div', 'lp-brand-wrap');
+  const dot = lpEl('span', 'lp-brand-dot'); dot.style.background = t(0);
+  brandWrap.append(dot, tx('span', 'lp-brand', 'Aurora', 0));
+  const navLinks = lpEl('div', 'lp-navlinks');
+  ['Product', 'Pricing', 'Docs'].forEach((txt, i) => navLinks.appendChild(tx('span', 'lp-navlink', txt, i + 1)));
+  const navRight = lpEl('div', 'lp-navright');
+  const search = tx('span', 'lp-search', 'Search', 3); search.style.borderColor = t(3);
+  navRight.append(search, btn('Sign up'));
+  nav.append(brandWrap, navLinks, navRight);
+  screen.appendChild(nav);
+
+  // ── Hero (bg 1) + product-shot window (bg 2) ──────────────────────────────
+  const hero = lpEl('div', 'lp-hero');
+  hero.style.background = b(1);
+  const eyebrow = tx('span', 'lp-eyebrow', '● New — v2 is here', 2); eyebrow.style.borderColor = t(2);
+  const heroBtns = lpEl('div', 'lp-herobtns');
+  const ghost = lpEl('span', 'lp-btn lp-btn-lg lp-btn-ghost', 'Live demo'); ghost.style.color = t(1); ghost.style.borderColor = t(1);
+  heroBtns.append(btn('Get started', 'lp-btn-lg'), ghost);
+  const shot = lpEl('div', 'lp-shot'); shot.style.background = b(2);
+  const shotBar = lpEl('div', 'lp-shot-bar');
+  [1, 2, 3].forEach(i => { const d = lpEl('span', 'lp-shot-dot'); d.style.background = t(i); shotBar.appendChild(d); });
+  const shotBody = lpEl('div', 'lp-shot-body');
+  const bar = (w, ti) => { const n = lpEl('div', 'lp-shot-line'); n.style.width = w; n.style.background = t(ti); return n; };
+  shotBody.append(bar('55%', 0), bar('92%', 1), bar('78%', 4), bar('45%', 5));
+  shot.append(shotBar, shotBody);
+  hero.append(eyebrow,
+    tx('div', 'lp-h1', 'Accessible colour, by construction.', 0),
+    tx('div', 'lp-sub', 'Lock a contrast target and explore hue and saturation without ever breaking readability.', 1),
+    heroBtns, shot);
+  screen.appendChild(hero);
+
+  // ── Trust strip (bg 3) — six wordmarks carry text ranks 4–9 ───────────────
+  const trust = lpEl('div', 'lp-trust'); trust.style.background = b(3);
+  trust.appendChild(tx('span', 'lp-trust-label', 'Trusted by', 2));
+  const marks = lpEl('div', 'lp-trust-marks');
+  ['NOVA', 'Lumen', 'Verdi', 'Halo', 'Onyx', 'Pico'].forEach((m, i) => marks.appendChild(tx('span', 'lp-trust-mark', m, i + 4)));
+  trust.appendChild(marks);
+  screen.appendChild(trust);
+
+  // ── Stats band (bg 4) ─────────────────────────────────────────────────────
+  const stats = lpEl('div', 'lp-stats'); stats.style.background = b(4);
+  [['4.5:1', 'WCAG AA', 0, 1], ['Lc 90', 'APCA', 6, 7], ['10+10', 'colours', 8, 9]].forEach(([num, lab, ni, li]) => {
+    const s = lpEl('div', 'lp-stat');
+    s.append(tx('div', 'lp-stat-num', num, ni), tx('div', 'lp-stat-lab', lab, li));
+    stats.appendChild(s);
+  });
+  screen.appendChild(stats);
+
+  // ── Testimonial (bg 5) ────────────────────────────────────────────────────
+  const quote = lpEl('div', 'lp-quote'); quote.style.background = b(5);
+  quote.appendChild(tx('div', 'lp-quote-text', '“Our whole design system stayed readable the moment we switched.”', 0));
+  const person = lpEl('div', 'lp-person');
+  const av = lpEl('span', 'lp-avatar'); av.style.background = t(2);
+  const pmeta = lpEl('div', 'lp-person-meta');
+  pmeta.append(tx('div', 'lp-person-name', 'Mira Chen', 0), tx('div', 'lp-person-role', 'Design Lead, NOVA', 1));
+  person.append(av, pmeta);
+  quote.appendChild(person);
+  screen.appendChild(quote);
+
+  // ── Pricing panel (bg 6) ──────────────────────────────────────────────────
+  const pricing = lpEl('div', 'lp-pricing'); pricing.style.background = b(6);
+  const priceHead = lpEl('div', 'lp-price-head');
+  priceHead.append(tx('span', 'lp-price-plan', 'Pro', 0), tx('span', 'lp-price-amt', '$12/mo', 3));
+  const feats = lpEl('div', 'lp-price-feats');
+  [['✓ Unlimited palettes', 1], ['✓ APCA verdicts', 7], ['✓ Token export', 8]].forEach(([f, ti]) => feats.appendChild(tx('div', 'lp-price-feat', f, ti)));
+  pricing.append(priceHead, feats, btn('Choose Pro', 'lp-btn-block'));
+  screen.appendChild(pricing);
+
+  // ── Newsletter band (bg 7) — the field reacts on hover/press ──────────────
+  const news = lpEl('div', 'lp-news'); news.style.background = b(7);
+  news.appendChild(tx('div', 'lp-news-title', 'Stay in the loop', 0));
+  const form = lpEl('div', 'lp-news-form');
+  const input = tx('span', 'lp-input', 'you@example.com', 1); input.style.borderColor = t(1);
+  form.append(input, btn('Subscribe'));
+  news.appendChild(form);
+  screen.appendChild(news);
+
+  // ── CTA band (bg 8) ───────────────────────────────────────────────────────
+  const cta = lpEl('div', 'lp-cta'); cta.style.background = b(8);
+  cta.append(tx('div', 'lp-cta-title', 'Start building accessible palettes today.', 0),
+             tx('div', 'lp-cta-sub', 'No account needed — everything runs locally.', 1));
+  cta.appendChild(btn('Get started free', 'lp-btn-lg'));
+  screen.appendChild(cta);
+
+  // ── Footer (bg 9): brand + link columns + brand palette + copyright ───────
+  const footer = lpEl('div', 'lp-footer'); footer.style.background = b(9);
+  const fTop = lpEl('div', 'lp-footer-top');
+  const fBrand = lpEl('div', 'lp-footer-brand');
+  const fdot = lpEl('span', 'lp-brand-dot'); fdot.style.background = t(0);
+  fBrand.append(fdot, tx('span', 'lp-brand', 'Aurora', 0),
+    tx('div', 'lp-footer-tag', 'Accessible colour tooling for design systems.', 1));
+  const cols = lpEl('div', 'lp-footer-cols');
+  [['Product', ['Features', 'Pricing', 'Changelog']], ['Company', ['About', 'Blog', 'Careers']]].forEach(([head, items]) => {
+    const col = lpEl('div', 'lp-footer-col');
+    col.appendChild(tx('div', 'lp-footer-head', head, 2));
+    items.forEach((it, i) => col.appendChild(tx('span', 'lp-footer-link', it, i + 1)));
+    cols.appendChild(col);
+  });
+  fTop.append(fBrand, cols);
+  footer.appendChild(fTop);
+
+  // Brand palette — the coverage guarantee: every text and background colour,
+  // labelled by rank + hex in a tooltip, styled as a footer palette bar.
+  const pal = lpEl('div', 'lp-palette');
+  const addPal = (label, hexes, role) => {
+    const grp = lpEl('div', 'lp-pal-group');
+    grp.appendChild(tx('div', 'lp-pal-label', label, 2));
+    const sws = lpEl('div', 'lp-pal-swatches');
+    hexes.forEach((hex, i) => {
+      const sw = lpEl('span', 'lp-pal-swatch');
+      sw.title = paletteRankLabel(i) + ' · ' + hex.toUpperCase();
+      if (role === 'fg') { sw.textContent = 'Ag'; sw.style.color = cvdTransformHex(hex); }
+      else { sw.classList.add('lp-pal-swatch-fill'); sw.style.background = cvdTransformHex(hex); }
+      sws.appendChild(sw);
+    });
+    grp.appendChild(sws);
+    pal.appendChild(grp);
+  };
+  addPal(saved ? 'Text' : 'Text (live)', texts, 'fg');
+  addPal(saved ? 'Background' : 'Background (live)', bgs, 'bg');
+  footer.appendChild(pal);
+  footer.appendChild(tx('div', 'lp-copy', '© 2026 Aurora — every colour from your palette.', 2));
+  screen.appendChild(footer);
+
+  layoutPreviewEl.appendChild(screen);
 }
 
 // ─── Palette rail + contrast matrix ───────────────────────────────────────────
@@ -3464,6 +3703,7 @@ function _runFitSession() {
     el.style.zoom = z.toFixed(4);
   }
   _fitLast = { zoom: el.style.zoom, natural: el.scrollHeight, w: window.innerWidth, h: window.innerHeight };
+  updatePreviewFontSizes(); // the zoom just changed → refresh the on-screen px labels
 }
 
 function fitDesktopScale() {
@@ -4135,12 +4375,15 @@ function buildChipEditor() {
     hexCopy: q('.chip-editor-hex-copy'),
     tile:   q('.chip-editor-tile'),
     ag:     q('.chip-editor-ag'),
+    agSize: q('.chip-editor-ag-size'),
     tileLabel: q('.chip-editor-tile-label'),
     cmpBtn: q('.chip-editor-cmp-btn'),
     dropdown: q('.chip-editor-dropdown'),
     cmpRole: q('.chip-editor-cmp-role'),
     ratio:  q('.chip-editor-cmp-ratio'),
     badges: q('.chip-editor-badges'),
+    apcaTier: q('.chip-editor-apca-tier'),
+    apcaFont: q('.chip-editor-apca-font'),
     cancel: q('.chip-editor-cancel'),
     done:   q('.chip-editor-done'),
     ranges: {}, vals: {},
@@ -4205,36 +4448,14 @@ function buildChipEditor() {
       _ceRefs.hexCopy.classList.remove('hex-copied');
     }, 1500);
   });
-  // Mouse: hovering the caret opens the compare-color dropdown so you can slide
-  // straight down into it and pick. A short close delay + hover checks bridge
-  // the gap between the caret and the list. Touch keeps tap-to-toggle.
-  // The whole label+caret button is one hover/click trigger for the dropdown.
-  _ceRefs.cmpBtn.addEventListener('pointerenter', e => {
-    if (e.pointerType === 'mouse') { _ceCancelDropdownClose(); openChipEditorDropdown(); }
-  });
-  _ceRefs.cmpBtn.addEventListener('pointerleave', e => {
-    if (e.pointerType === 'mouse') _ceScheduleDropdownClose();
-  });
-  _ceRefs.dropdown.addEventListener('pointerenter', _ceCancelDropdownClose);
-  _ceRefs.dropdown.addEventListener('pointerleave', e => {
-    if (e.pointerType === 'mouse') _ceScheduleDropdownClose();
-  });
+  // The compare-color dropdown opens on CLICK/TAP only (the whole label+caret
+  // button toggles it); clicking again or outside closes it. No hover-open, so
+  // it behaves the same on mouse and touch and never appears unintentionally.
   _ceRefs.cmpBtn.addEventListener('click', toggleChipEditorDropdown);
   attachChipEditorWheel();
 }
 
 // ── Compare-color dropdown (single-select) ────────────────────────────────────
-let _ceDdHoverCloseTimer = 0;
-function _ceCancelDropdownClose() { clearTimeout(_ceDdHoverCloseTimer); _ceDdHoverCloseTimer = 0; }
-function _ceScheduleDropdownClose() {
-  _ceCancelDropdownClose();
-  _ceDdHoverCloseTimer = setTimeout(() => {
-    // Keep it open if the pointer is still over the trigger button or the list.
-    if (!_ceRefs || _ceRefs.dropdown.matches(':hover') || _ceRefs.cmpBtn.matches(':hover')) return;
-    closeChipEditorDropdown();
-  }, 260);
-}
-
 function toggleChipEditorDropdown() {
   if (_ceRefs.dropdown.hidden) openChipEditorDropdown();
   else closeChipEditorDropdown();
@@ -4287,7 +4508,6 @@ function openChipEditorDropdown() {
 }
 
 function closeChipEditorDropdown() {
-  _ceCancelDropdownClose();
   if (!_ceRefs || _ceRefs.dropdown.hidden) return;
   _ceRefs.dropdown.hidden = true;
   _ceRefs.cmpBtn.setAttribute('aria-expanded', 'false');
@@ -4627,9 +4847,39 @@ function chipEditorRenderPreview() {
   }
   _ceRefs.tileLabel.style.color = cvdTransformHex(textHex);
 
+  _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
+
+  if (contrastLockMode === 'apca') {
+    // APCA mode: the WCAG ratio + AA/AAA badges give way to the APCA verdicts —
+    // the usage level and the chosen font-size/weight pass/fail (with the
+    // required minimum size when it fails). Same helpers as the main tiles, so
+    // both always agree. Judge the edited side from its continuous Lum-mode
+    // target when available (hue/sat exploration then can't jitter the verdict
+    // via 8-bit quantization); the partner — and the non-Lum edited side — are
+    // read on the same milli-Ys grid so the SAME pair reads identically no
+    // matter which chip is open.
+    const qYs = rgb => Math.round(apcaY(...rgb) * 1000) / 1000;
+    const editedYs  = _ce.mode === 'lum' ? _ce.lum[0] / 1000 : qYs([_ce.r, _ce.g, _ce.b]);
+    const partnerYs = qYs(hexToRgb(partner));
+    const lc = _ce.role === 'bg' ? apcaLcYs(partnerYs, editedYs) : apcaLcYs(editedYs, partnerYs);
+    const lcAbs = Math.abs(lc);
+    _ceRefs.ratio.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
+    _ceRefs.badges.innerHTML = '';               // clear the WCAG achievement chips
+    _ceRefs.apcaTier.textContent = apcaUsageTier(lcAbs);
+    _ceRefs.apcaTier.title = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+    const v = apcaFontVerdict(lcAbs);
+    _ceRefs.apcaFont.textContent = v.text;
+    _ceRefs.apcaFont.title = v.title;
+    _ceRefs.apcaFont.classList.toggle('pass', v.pass);
+    return;
+  }
+
+  // WCAG mode: ratio + the 3:1 / 4.5:1 / 7:1 thresholds (APCA rows cleared →
+  // :empty hides them).
+  _ceRefs.apcaTier.textContent = '';
+  _ceRefs.apcaFont.textContent = '';
   const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
   _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
-  _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
   _ceRefs.badges.innerHTML = '';
   // Show the WCAG 2.2 ratio thresholds (3:1 large text / UI, 4.5:1 normal AA,
   // 7:1 AAA) so each use case can be checked; each lights up when the pair meets it.
@@ -4696,6 +4946,7 @@ function openChipEditor(idx) {
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) { chipEl.classList.add('editing'); chipEl.after(_ceEl); }
   requestAnimationFrame(() => {
+    updateChipEditorAgSize(); // now the editor is in the DOM, measure the "Ag" px
     centerChipEditorInRail(true);
     setTimeout(() => centerChipEditorInRail(true), 180);
   });

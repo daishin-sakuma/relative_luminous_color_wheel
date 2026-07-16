@@ -596,8 +596,16 @@ input.custom-val:focus {
 
 .preview-wcag { display: flex; gap: 0.4rem; align-items: flex-start; flex-wrap: wrap; align-self: flex-end; max-width: 100%; }
 /* Each row (usage tier, font verdict, Normal/Large badge rows) right-aligns
-   independently, so one row's length never shifts another's right edge. */
-.preview-wcag-rows { display: flex; flex-direction: column; gap: 0.18rem; align-items: flex-end; min-width: 0; max-width: 100%; }
+   independently, so one row's length never shifts another's right edge.
+   The APCA verdict group and the WCAG chip group are STACKED in one grid cell,
+   so the block always reserves the taller (APCA) height; switching contrast
+   mode flips only their visibility (below), never the tile height — otherwise
+   the desktop fit-to-viewport zoom would rescale the whole app on every toggle. */
+.preview-wcag-rows { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: end; min-width: 0; max-width: 100%; }
+.preview-verdict-group { grid-area: 1 / 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end; gap: 0.18rem; min-width: 0; max-width: 100%; }
+.preview-verdict-apca { visibility: hidden; }                              /* shown only in APCA mode */
+.preview-wcag-rows.apca .preview-verdict-apca { visibility: visible; }
+.preview-wcag-rows.apca .preview-verdict-wcag { visibility: hidden; }
 .preview-wcag-row { display: flex; gap: 0.15rem; align-items: center; flex-wrap: wrap; }
 .preview-wcag-cat {
   font-size: 0.6rem;
@@ -663,6 +671,9 @@ input.custom-val:focus {
   font-family: ui-monospace, monospace;
   opacity: 0.4;
 }
+/* On-screen (rendered) px of the sample text, appended to the section label. */
+.preview-size { text-transform: none; }
+.preview-size::before { content: " · "; }
 .preview-ui-row {
   display: flex;
   align-items: center;
@@ -1224,7 +1235,14 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 /* The @font-face override centres cap/x-height text, but "Ag" carries a descender
    that pulls its full ink ~0.09em low; nudge just this glyph up so it sits on the
    same centre axis as the label/caret. Keep the text exactly "Ag". */
+.chip-editor-ag-wrap { display: inline-flex; flex-direction: row; align-items: center; gap: 0.35rem; flex-shrink: 0; }
 .chip-editor-ag { font-size: 1.5rem; line-height: 1; font-weight: 600; transform: translateY(-0.091em); flex-shrink: 0; }
+/* On-screen px of the "Ag" sample, beside it. align-items:center lays both box
+   centres on one line; the Ag glyph's -0.091em nudge already puts its OPTICAL
+   centre on that line, and line-height:1 keeps the small label centred on its own
+   glyph — so the two read as optically centred to each other. */
+.chip-editor-ag-size { font-size: 0.5rem; line-height: 1; letter-spacing: 0.04em; font-family: ui-monospace, monospace; opacity: 0.5; white-space: nowrap; }
+.chip-editor-ag-size:empty { display: none; }
 /* Label + caret form ONE elongated hover/click trigger for the compare-color
    dropdown, filling the row to the right of "Ag" and the full tile height. */
 .chip-editor-cmp-btn {
@@ -1334,6 +1352,13 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   color: var(--muted);
 }
 .chip-editor-badge.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 45%, transparent); }
+/* APCA-mode verdicts (usage level + font-size/weight pass-fail), right-aligned
+   below the compare row; hidden via :empty in WCAG mode. */
+.chip-editor-apca-tier { font-size: 0.55rem; letter-spacing: 0.08em; font-weight: 600; text-align: right; color: var(--text); }
+.chip-editor-apca-tier:empty { display: none; }
+.chip-editor-apca-font { font-size: 0.6rem; text-align: right; color: var(--muted); }
+.chip-editor-apca-font:empty { display: none; }
+.chip-editor-apca-font.pass { color: var(--pass); }
 /* Cancel/Done: two independent buttons, each filling half the row with a gap
    between; Done is filled to read as the primary action, Cancel is outlined. */
 .chip-editor-actions {
@@ -1787,6 +1812,121 @@ body.about-modal-open { overflow: hidden; }
   from { opacity: 0; transform: translateY(-5px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Layout preview popper ─────────────────────────────────────────────────── */
+/* A full mock landing page the palette dresses, so colours can be judged in a
+   real website context. Wider than Preferences; still capped to the viewport by
+   the shared .settings-panel max-width. */
+.layout-panel { width: 440px; }
+.layout-preview { display: flex; flex-direction: column; gap: 0.9rem; }
+.lp-hint { font-size: 0.7rem; line-height: 1.45; color: var(--muted); }
+
+.lp-screen { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Buttons (shared) */
+.lp-btn { display: inline-block; border-radius: 5px; padding: 0.3rem 0.62rem; font-size: 0.68rem; font-weight: 600; white-space: nowrap; }
+.lp-btn-lg { padding: 0.44rem 0.9rem; font-size: 0.75rem; }
+.lp-btn-ghost { background: transparent !important; border: 1px solid currentColor; }
+
+/* Nav */
+.lp-nav { display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.75rem; }
+.lp-brand-wrap { display: flex; align-items: center; gap: 0.38rem; }
+.lp-brand-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; }
+.lp-brand { font-weight: 700; font-size: 0.85rem; letter-spacing: 0.01em; }
+.lp-navlinks { display: flex; gap: 0.6rem; flex: 1; margin-left: 0.35rem; }
+.lp-navlink { font-size: 0.66rem; white-space: nowrap; }
+.lp-navright { display: flex; align-items: center; gap: 0.45rem; }
+.lp-search { font-size: 0.63rem; border: 1px solid currentColor; border-radius: 999px; padding: 0.22rem 0.6rem; opacity: 0.85; }
+
+/* Hero */
+.lp-hero { padding: 1.2rem 0.95rem 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.lp-eyebrow { align-self: flex-start; font-size: 0.6rem; letter-spacing: 0.05em; border: 1px solid currentColor; border-radius: 999px; padding: 0.1rem 0.5rem; }
+.lp-h1 { font-size: 1.15rem; font-weight: 700; line-height: 1.18; letter-spacing: -0.01em; }
+.lp-sub { font-size: 0.72rem; line-height: 1.45; max-width: 36ch; }
+.lp-herobtns { display: flex; gap: 0.5rem; margin-top: 0.35rem; }
+.lp-shot { margin-top: 0.7rem; border-radius: 7px; overflow: hidden; box-shadow: 0 8px 22px rgba(0,0,0,0.18); }
+.lp-shot-bar { display: flex; gap: 0.3rem; padding: 0.45rem 0.6rem; }
+.lp-shot-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; opacity: 0.7; }
+.lp-shot-body { padding: 0.15rem 0.7rem 0.9rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.lp-shot-line { height: 0.45rem; border-radius: 3px; opacity: 0.85; }
+
+/* Trust band */
+.lp-trust { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.85rem; border-top: 1px solid rgba(128,128,128,0.15); }
+.lp-trust-label { font-size: 0.57rem; letter-spacing: 0.03em; white-space: nowrap; opacity: 0.8; }
+.lp-trust-marks { display: flex; gap: 0.6rem; flex: 1; justify-content: space-around; }
+.lp-trust-mark { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; opacity: 0.75; }
+
+/* Pricing panel */
+.lp-pricing { padding: 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.lp-price-head { display: flex; align-items: baseline; justify-content: space-between; }
+.lp-price-plan { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.02em; }
+.lp-price-amt { font-size: 0.8rem; font-weight: 700; }
+.lp-price-feats { display: flex; flex-direction: column; gap: 0.26rem; }
+.lp-price-feat { font-size: 0.68rem; }
+.lp-btn-block { display: block; text-align: center; margin-top: 0.25rem; }
+
+/* Newsletter band */
+.lp-news { padding: 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.lp-news-title { font-size: 0.85rem; font-weight: 700; }
+.lp-news-form { display: flex; gap: 0.4rem; }
+.lp-input { flex: 1; font-size: 0.66rem; border: 1px solid currentColor; border-radius: 5px; padding: 0.34rem 0.55rem; opacity: 0.9; white-space: nowrap; overflow: hidden; }
+
+/* Stats band */
+.lp-stats { display: flex; padding: 0.9rem 0.6rem; }
+.lp-stat { flex: 1; text-align: center; }
+.lp-stat-num { font-size: 1.05rem; font-weight: 700; }
+.lp-stat-lab { font-size: 0.57rem; letter-spacing: 0.03em; margin-top: 0.1rem; opacity: 0.9; }
+
+/* Testimonial */
+.lp-quote { padding: 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.7rem; }
+.lp-quote-text { font-size: 0.8rem; line-height: 1.4; font-weight: 500; }
+.lp-person { display: flex; align-items: center; gap: 0.5rem; }
+.lp-avatar { width: 1.5rem; height: 1.5rem; border-radius: 50%; flex: none; }
+.lp-person-name { font-size: 0.68rem; font-weight: 600; }
+.lp-person-role { font-size: 0.6rem; opacity: 0.85; }
+
+/* CTA band */
+.lp-cta { padding: 1.1rem 0.9rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-start; }
+.lp-cta-title { font-size: 0.92rem; font-weight: 700; line-height: 1.25; }
+.lp-cta-sub { font-size: 0.68rem; }
+.lp-cta .lp-btn { margin-top: 0.3rem; }
+
+/* Footer */
+.lp-footer { padding: 1rem 0.9rem 0.9rem; display: flex; flex-direction: column; gap: 0.85rem; border-top: 1px solid rgba(128,128,128,0.15); }
+.lp-footer-top { display: flex; gap: 0.9rem; }
+.lp-footer-brand { flex: 1.4; display: flex; flex-wrap: wrap; align-items: center; gap: 0.38rem; }
+.lp-footer-tag { flex-basis: 100%; font-size: 0.62rem; line-height: 1.4; opacity: 0.85; margin-top: 0.15rem; }
+.lp-footer-cols { display: flex; gap: 0.9rem; flex: 1; }
+.lp-footer-col { display: flex; flex-direction: column; gap: 0.28rem; }
+.lp-footer-head { font-size: 0.55rem; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.1rem; }
+.lp-footer-link { font-size: 0.64rem; }
+
+/* Brand palette (coverage guarantee), styled as a footer palette bar */
+.lp-palette { display: flex; gap: 0.9rem; padding-top: 0.7rem; border-top: 1px solid rgba(128,128,128,0.15); }
+.lp-pal-group { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.lp-pal-label { font-size: 0.55rem; letter-spacing: 0.09em; text-transform: uppercase; }
+.lp-pal-swatches { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.lp-pal-swatch { width: 1.35rem; height: 1.15rem; border-radius: 4px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.58rem; background: var(--surface2); border: 1px solid var(--border); }
+.lp-pal-swatch-fill { font-size: 0; border: 1px solid rgba(128,128,128,0.25); }
+.lp-copy { font-size: 0.58rem; opacity: 0.8; }
+
+/* Cosmetic interactivity — the mock UI does nothing, but its buttons, links and
+   field respond visually to hover/press so it feels like a live page. Effects
+   use filter/transform/opacity so they layer over the inline palette colours. */
+.lp-btn { cursor: pointer; user-select: none; transition: transform .1s ease, filter .12s ease, box-shadow .12s ease; }
+.lp-btn:hover  { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.16); }
+.lp-btn:active { transform: translateY(0) scale(0.97); filter: brightness(0.95); box-shadow: none; }
+.lp-navlink, .lp-footer-link { cursor: pointer; transition: opacity .12s ease; }
+.lp-navlink:hover, .lp-footer-link:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
+.lp-brand-wrap { cursor: pointer; transition: transform .1s ease; }
+.lp-brand-wrap:active { transform: scale(0.96); }
+.lp-search, .lp-input { cursor: text; transition: filter .12s ease, box-shadow .12s ease; }
+.lp-search:hover, .lp-input:hover { filter: brightness(1.1); }
+.lp-search:active, .lp-input:active { box-shadow: 0 0 0 2px currentColor inset; }
+.lp-trust-mark { cursor: pointer; transition: opacity .12s ease; }
+.lp-trust-mark:hover { opacity: 1; }
+.lp-pal-swatch { cursor: pointer; transition: transform .1s ease; }
+.lp-pal-swatch:hover { transform: scale(1.14); }
 
 .settings-theme-row {
   display: flex;
