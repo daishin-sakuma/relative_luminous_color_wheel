@@ -1868,14 +1868,13 @@ body.about-modal-open { overflow: hidden; }
   transition: background 0.12s, color 0.12s, transform 0.1s;
 }
 .contrast-lock-btn + .contrast-lock-btn { border-left: 1px solid var(--border); }
-/* v2 beta: font size/weight selectors for the APCA verdicts (APCA mode only) */
-.apca-font-ctrl { display: inline-flex; align-items: center; gap: 0.3rem; flex-shrink: 0; }
-.apca-font-ctrl[hidden] { display: none; }
-.apca-font-label {
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
+/* v2 beta: font size/weight selectors for the APCA verdicts — one pair per
+   tile, in the WCAG chips' slot (APCA mode only), all synchronized. */
+.preview-apca-fontctrl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
 }
 .apca-font-select {
   background: var(--surface);

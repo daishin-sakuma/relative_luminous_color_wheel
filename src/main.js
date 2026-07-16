@@ -414,8 +414,11 @@ function apcaMinFontSize(lcAbs, weight) {
   return a + (b - a) * (lcAbs - la) / (lb - la);
 }
 
-// v2 beta: the font the APCA verdicts judge against (persisted).
-let apcaFontSize = 16, apcaFontWeight = 400;
+// v2 beta: the font the APCA verdicts judge against (persisted). The
+// selectors live inside each tile (in the WCAG chips' slot), synchronized.
+const APCA_FONT_SIZES = [10, 12, 14, 15, 16, 18, 21, 24, 28, 32, 36, 42, 48, 60, 72, 96];
+let apcaFontSize = (() => { const v = parseFloat(localStorage.getItem('apca-font-px') ?? '16'); return APCA_FONT_SIZES.includes(v) ? v : 16; })();
+let apcaFontWeight = (() => { const v = parseInt(localStorage.getItem('apca-font-wght') ?? '400', 10); return APCA_FONT_WEIGHTS.includes(v) ? v : 400; })();
 
 /** Official APCA usage-level ladder (verbatim from the reference tool at
     apcacontrast.com, including its 0.3-tolerance thresholds). */
@@ -715,6 +718,35 @@ function buildPreviewWcag(el) {
   apcaFontEl.className = 'preview-apca-font';
   rowsEl.appendChild(apcaFontEl);
 
+  // v2 beta: the font size/weight selectors sit in the WCAG chips' slot
+  // (which is hidden in APCA mode) — one pair per tile, all synchronized.
+  const fontCtrl = document.createElement('div');
+  fontCtrl.className = 'preview-apca-fontctrl';
+  const fontCtrlLabel = document.createElement('span');
+  fontCtrlLabel.className = 'preview-wcag-cat';
+  fontCtrlLabel.textContent = 'Font';
+  fontCtrlLabel.title = 'Font size and weight the APCA verdicts judge against';
+  const sizeSel = document.createElement('select');
+  sizeSel.className = 'apca-font-select';
+  sizeSel.title = 'Font size (px) the APCA verdicts judge against';
+  for (const v of APCA_FONT_SIZES) { const o = document.createElement('option'); o.value = String(v); o.textContent = String(v); sizeSel.appendChild(o); }
+  const wghtSel = document.createElement('select');
+  wghtSel.className = 'apca-font-select';
+  wghtSel.title = 'Font weight the APCA verdicts judge against';
+  for (const v of APCA_FONT_WEIGHTS) { const o = document.createElement('option'); o.value = String(v); o.textContent = String(v); wghtSel.appendChild(o); }
+  sizeSel.addEventListener('change', () => {
+    apcaFontSize = +sizeSel.value;
+    saveToStorage('apca-font-px', String(apcaFontSize));
+    updateUI(); // re-renders every tile: verdicts + the sibling selectors sync
+  });
+  wghtSel.addEventListener('change', () => {
+    apcaFontWeight = +wghtSel.value;
+    saveToStorage('apca-font-wght', String(apcaFontWeight));
+    updateUI();
+  });
+  fontCtrl.append(fontCtrlLabel, sizeSel, wghtSel);
+  rowsEl.appendChild(fontCtrl);
+
   // Note: WCAG 1.4.11 (non-text contrast, 3:1) is Level AA only — UI
   // components have no AAA criterion, so the AAA badge in the Large row
   // applies to large text (1.4.6) exclusively.
@@ -771,7 +803,7 @@ function buildPreviewWcag(el) {
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
   }
-  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, cats, badges, badgeRows };
+  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, fontCtrl, sizeSel, wghtSel, cats, badges, badgeRows };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -896,10 +928,17 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
   const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
 
   // APCA mode: the usage tier + font verdict are the verdict UI — hide the
-  // WCAG Normal/Large chip rows to avoid mixing the two systems.
+  // WCAG Normal/Large chip rows and show the font selectors in their slot.
   if (dom.badgeRows) {
-    const hide = contrastLockMode === 'apca';
-    for (const row of dom.badgeRows) row.style.display = hide ? 'none' : '';
+    const apca = contrastLockMode === 'apca';
+    for (const row of dom.badgeRows) row.style.display = apca ? 'none' : '';
+    if (dom.fontCtrl) {
+      dom.fontCtrl.style.display = apca ? '' : 'none';
+      if (apca) {
+        if (dom.sizeSel.value !== String(apcaFontSize))  dom.sizeSel.value = String(apcaFontSize);
+        if (dom.wghtSel.value !== String(apcaFontWeight)) dom.wghtSel.value = String(apcaFontWeight);
+      }
+    }
   }
   for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
@@ -2207,8 +2246,6 @@ document.addEventListener('click', e => {
     modeBtns.forEach(b => b.classList.toggle('active', b.dataset.lockmode === contrastLockMode));
     wcagWrap.hidden = contrastLockMode !== 'wcag2';
     apcaWrap.hidden = contrastLockMode !== 'apca';
-    const fc = document.getElementById('apca-font-ctrl');
-    if (fc) fc.hidden = contrastLockMode !== 'apca';
   }
 
   function setLockTarget(target, persist) {
@@ -2300,25 +2337,6 @@ document.addEventListener('click', e => {
     setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
   }));
 
-  // v2 beta: font size/weight the APCA verdicts judge against
-  const fontSizeSel = /** @type {HTMLSelectElement} */ (document.getElementById('apca-font-size'));
-  const fontWghtSel = /** @type {HTMLSelectElement} */ (document.getElementById('apca-font-weight'));
-  if (fontSizeSel && fontWghtSel) {
-    const fs = parseFloat(localStorage.getItem('apca-font-px') ?? '16');
-    const fw = parseInt(localStorage.getItem('apca-font-wght') ?? '400', 10);
-    if ([...fontSizeSel.options].some(o => +o.value === fs)) { apcaFontSize = fs; fontSizeSel.value = String(fs); }
-    if (APCA_FONT_WEIGHTS.includes(fw)) { apcaFontWeight = fw; fontWghtSel.value = String(fw); }
-    fontSizeSel.addEventListener('change', () => {
-      apcaFontSize = +fontSizeSel.value;
-      saveToStorage('apca-font-px', String(apcaFontSize));
-      updateUI(); // verdicts only — not a colour touch
-    });
-    fontWghtSel.addEventListener('change', () => {
-      apcaFontWeight = +fontWghtSel.value;
-      saveToStorage('apca-font-wght', String(apcaFontWeight));
-      updateUI();
-    });
-  }
 }
 
 {
