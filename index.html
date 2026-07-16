@@ -6,8 +6,8 @@
   <title>Accessible Color Picker &amp; WCAG Contrast Checker — Luminance Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast, explore luminance-stable hues, edit accessible palettes inline with tap-away save, cancel support, mobile-friendly drag reordering, and a touch drawer you drag right to close (with smooth spring-back); preview full-app color vision simulation (including layouts and preferences modal, optimized for iOS/Safari, Android &amp; Desktop) and export CSS, Tailwind, or W3C design tokens.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast with official APCA usage levels and font-size/weight verdicts, explore luminance-stable hues, edit accessible palettes inline with tap-away save, cancel support, mobile-friendly drag reordering, and a touch drawer you drag right to close (with smooth spring-back); preview full-app color vision simulation (including layouts and preferences modal, optimized for iOS/Safari, Android &amp; Desktop) and export CSS, Tailwind, or W3C design tokens.">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, APCA font size, APCA font size checker, APCA usage levels, APCA minimum font size, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -148,6 +148,14 @@
       },
       {
         "@type": "Question",
+        "name": "What font size does APCA require?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Unlike WCAG 2.x, APCA judges contrast together with font size and weight: each Lc value maps to a minimum font size per weight in the official APCA lookup table. In APCA mode this tool shows the official usage level (body text, fluent text, spot & non-text, and so on) and a pass/fail verdict for your chosen size and weight — including the minimum size required when it fails — for the main pair and for every color saved in the palette."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "What is relative luminance?",
         "acceptedAnswer": {
           "@type": "Answer",
@@ -198,7 +206,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.40.0</span>
+    <span class="app-version">ver. 1.40.1</span>
     <div class="settings-wrap">
       <button class="theme-toggle" id="settings-btn" title="Preferences">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -705,7 +713,7 @@
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; in APCA mode every tile shows the official APCA usage ladder and a font-size/weight verdict (with the required minimum size) judged against the official lookup table, with in-tile font selectors; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked; tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors by dragging each chip's grip handle (reliable on Android, iOS, and desktop, while the chip body still scrolls the list), drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
+        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked (in APCA mode the editor preview switches to the APCA verdicts instead — Lc value, official usage level, and the chosen font-size/weight verdict with the required minimum size); tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors by dragging each chip's grip handle (reliable on Android, iOS, and desktop, while the chip body still scrolls the list), drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app — the theme colors, color wheel, sliders, preferences, and palette sidebar included — with the Machado et&nbsp;al. 2009 matrices applied in linear-light space directly inside the app's own rendering, so the preview is identical on iOS/Safari, Android, and desktop browsers</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
@@ -737,6 +745,12 @@
         that was explored for WCAG 3 but removed from the draft in 2023; WCAG 3's contrast method is
         still undecided. WCAG 2.2 remains the normative, legally-referenced standard, so this tool
         uses it by default and offers APCA Lc as an experimental, forward-looking option.</p>
+      <p><strong>What font size does APCA require?</strong><br>
+        Unlike WCAG 2.x, APCA judges contrast together with font size and weight: each Lc value
+        maps to a minimum font size per weight in the official APCA lookup table. In APCA mode this
+        tool shows the official usage level (body text, fluent text, spot &amp; non-text, and so on)
+        and a pass/fail verdict for your chosen size and weight — including the minimum size
+        required when it fails — for the main pair and for every color saved in the palette.</p>
       <p><strong>What is relative luminance?</strong><br>
         Relative luminance is the perceived brightness of a color, computed as
         L = 0.2126·R + 0.7152·G + 0.0722·B on linearized channels. WCAG contrast ratios depend only
