@@ -404,14 +404,23 @@ function apcaMinFontSize(lcAbs, weight) {
   const wi = APCA_FONT_WEIGHTS.indexOf(weight);
   if (wi < 0) return 999;
   const rows = APCA_FONT_MATRIX;
-  if (lcAbs <= rows[0][0]) return rows[0][1][wi];
-  if (lcAbs >= rows[rows.length - 1][0]) return rows[rows.length - 1][1][wi];
+  // Apply the usage ladder's 0.3-tolerance to the lookup: the matrix rows sit
+  // on the named Lc levels (90/75/60/45/30/15) while the usage tier switches
+  // into each level 0.3 early (89.7/74.7/…, see apcaUsageTier). Reading the
+  // matrix at |Lc|+0.3 makes a level's minimum sizes become valid at exactly
+  // the |Lc| where the tier enters that level, so the usage label and the
+  // font-size verdict flip together instead of ~0.3 Lc apart. The low
+  // 14.7/29.7 gates in apcaFontVerdict were already aligned this way; this
+  // extends the same alignment across the whole table.
+  const lc = lcAbs + 0.3;
+  if (lc <= rows[0][0]) return rows[0][1][wi];
+  if (lc >= rows[rows.length - 1][0]) return rows[rows.length - 1][1][wi];
   let i = 0;
-  while (rows[i + 1][0] <= lcAbs) i++;
+  while (rows[i + 1][0] <= lc) i++;
   const [la, va] = rows[i], [lb, vb] = rows[i + 1];
   const a = va[wi], b = vb[wi];
   if (a >= 777 || b >= 777) return a; // sentinel holds until the numeric row is reached
-  return a + (b - a) * (lcAbs - la) / (lb - la);
+  return a + (b - a) * (lc - la) / (lb - la);
 }
 
 // v2 beta: the font the APCA verdicts judge against (persisted). The
@@ -4655,12 +4664,23 @@ function chipEditorRenderPreview() {
   if (contrastLockMode === 'apca') {
     // APCA mode: the WCAG readouts give way to the APCA verdicts — Lc value,
     // official usage tier, and the chosen-font verdict (same helpers as the
-    // main contrast tiles, so both always agree). Judge the edited side from
-    // its continuous Lum-mode luminance when available (wheelLum ≡ apcaY in
-    // APCA mode) so hue/sat exploration in the editor can't shake the
-    // verdicts across a threshold via hex quantization.
-    const editedYs  = _ce.mode === 'lum' ? _ce.lum[0] / 1000 : apcaY(_ce.r, _ce.g, _ce.b);
-    const partnerYs = apcaY(...hexToRgb(partner));
+    // main contrast tiles, so both always agree).
+    //
+    // Both sides are read on the same milli-Ys grid — round(Ys*1000)/1000 —
+    // and this gives two properties at once:
+    //   • Symmetry: the SAME pair reads identically whether the TEXT chip or
+    //     the BG chip is open. At load _ce.lum[0] = round(wheelLum*1000), so the
+    //     edited side already lives on that grid; quantizing the partner to
+    //     match means neither side carries extra rounding the other lacks.
+    //   • Hue/Sat stability: in Lum mode luminance is LOCKED, so the edited
+    //     side is judged from its held target (_ce.lum[0]/1000), which does not
+    //     move when only Hue or Saturation change — sweeping them can no longer
+    //     shake the verdict across a threshold via 8-bit hex quantization. The
+    //     other modes (RGB/HSL/Gray) don't hold luminance, so there the edited
+    //     side follows its actual quantized colour.
+    const qYs = rgb => Math.round(apcaY(...rgb) * 1000) / 1000;
+    const editedYs  = _ce.mode === 'lum' ? _ce.lum[0] / 1000 : qYs([_ce.r, _ce.g, _ce.b]);
+    const partnerYs = qYs(hexToRgb(partner));
     const lc = _ce.role === 'bg' ? apcaLcYs(partnerYs, editedYs) : apcaLcYs(editedYs, partnerYs);
     const lcAbs = Math.abs(lc);
     _ceRefs.ratio.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
