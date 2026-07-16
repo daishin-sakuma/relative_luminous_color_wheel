@@ -737,10 +737,11 @@ function buildPreviewWcag(el) {
     },
   ];
 
-  const cats = [], badges = [];
+  const cats = [], badges = [], badgeRows = [];
   for (const { label, title, thresholds } of CATEGORIES) {
     const row = document.createElement('div');
     row.className = 'preview-wcag-row';
+    badgeRows.push(row);
 
     const catEl = document.createElement('span');
     catEl.className   = 'preview-wcag-cat';
@@ -770,7 +771,7 @@ function buildPreviewWcag(el) {
     apcaEl.title = 'APCA Lc (experimental — WCAG 2.2 ratio remains normative)';
     ratioEl.insertAdjacentElement('afterend', apcaEl);
   }
-  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, cats, badges };
+  const dom = { ratioEl, apcaEl, apcaTierEl, apcaFontEl, cats, badges, badgeRows };
   _wcagDom.set(el, dom);
   return dom;
 }
@@ -894,6 +895,12 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
   const passBg     = useBrightStyle ? 'rgba(93,222,138,0.10)' : 'rgba(26,122,66,0.10)';
   const passRing   = isLight ? '0 0 0 1px rgba(0,0,0,0.16)' : '0 0 0 1px rgba(255,255,255,0.18)';
 
+  // APCA mode: the usage tier + font verdict are the verdict UI — hide the
+  // WCAG Normal/Large chip rows to avoid mixing the two systems.
+  if (dom.badgeRows) {
+    const hide = contrastLockMode === 'apca';
+    for (const row of dom.badgeRows) row.style.display = hide ? 'none' : '';
+  }
   for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
   // ── Stability debounce: adopt `disc` only once it has persisted ──
@@ -1697,7 +1704,11 @@ function setCustomFromHsl(h, s, l) {
 let _textLumTouched = false; // main TEXT target-luminance operated
 let _bgLumTouched = false;   // BG Lum-mode luminance operated
 function customHueSatHoldsLum() {
-  return activeContrastTarget() > 0 || (_textLumTouched && _bgLumTouched);
+  // Always hold in APCA mode: its readouts (usage tier, required text size)
+  // must be hue/sat-invariant regardless of how the luminances were set.
+  return contrastLockMode === 'apca'
+    || activeContrastTarget() > 0
+    || (_textLumTouched && _bgLumTouched);
 }
 // Anchor luminance for consecutive H/S ops. Re-deriving y from the previous
 // step's quantized colour lets ±1-step rounding errors random-walk across a
@@ -2012,6 +2023,7 @@ customHexInput.addEventListener('input', () => {
   if (val.length > 7) val = val.slice(0, 7);
   customHexInput.value = val.toUpperCase();
   if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    _bgLumTouched = true; // a pasted/typed hex fixes this side's luminance deliberately
     const [r, g, b] = hexToRgb(val);
     cR = r; cG = g; cB = b;
     [cH, cS, cL] = rgbToHsl(r, g, b);
@@ -2052,6 +2064,7 @@ const swatchHexInput = /** @type {HTMLInputElement} */ (document.getElementById(
 const swatchHexCopy  = /** @type {HTMLElement} */ (document.getElementById('swatch-hex-copy'));
 
 function applyMainHex(r, g, b) {
+  _textLumTouched = true; // a pasted/typed hex fixes this side's luminance deliberately
   targetLum = wheelLum(r, g, b); // interpret under the active definition (WCAG / APCA Ys)
   const [h, s] = rgbToHsl(r, g, b);
   selHue = h;
