@@ -423,11 +423,30 @@ function apcaMinFontSize(lcAbs, weight) {
   return a + (b - a) * (lc - la) / (lb - la);
 }
 
+/** Reverse of the font matrix — the smallest |Lc| at which `size` px is allowed
+    for `weight` (apcaMinFontSize(lc) ≤ size). Since the minimum size decreases
+    monotonically with |Lc|, binary-search the boundary. Returns null when no |Lc|
+    up to the table max renders it (e.g. very small sizes at thin weights). Drives
+    the "Type" contrast lock: pick a font, lock to the Lc it needs. */
+function apcaLcForFont(size, weight) {
+  const HI = APCA_FONT_MATRIX[APCA_FONT_MATRIX.length - 1][0]; // 125
+  if (apcaMinFontSize(HI, weight) > size) return null;
+  let lo = 0, hi = HI;
+  for (let i = 0; i < 26; i++) {
+    const mid = (lo + hi) / 2;
+    if (apcaMinFontSize(mid, weight) <= size) hi = mid; else lo = mid;
+  }
+  return hi;
+}
+
 // v2 beta: the font the APCA verdicts judge against (persisted). The
 // selectors live inside each tile (in the WCAG chips' slot), synchronized.
 const APCA_FONT_SIZES = [10, 12, 14, 15, 16, 18, 21, 24, 28, 32, 36, 42, 48, 60, 72, 96];
 let apcaFontSize = (() => { const v = parseFloat(localStorage.getItem('apca-font-px') ?? '16'); return APCA_FONT_SIZES.includes(v) ? v : 16; })();
 let apcaFontWeight = (() => { const v = parseInt(localStorage.getItem('apca-font-wght') ?? '400', 10); return APCA_FONT_WEIGHTS.includes(v) ? v : 400; })();
+// Bridge so the per-tile font selectors can refresh the "Type" APCA lock (its
+// wiring lives in the contrast-lock IIFE below). No-op until that IIFE assigns it.
+let syncApcaTypeControls = () => {};
 
 /** Official APCA usage-level ladder (verbatim from the reference tool at
     apcacontrast.com, including its 0.3-tolerance thresholds). */
@@ -796,12 +815,14 @@ function buildPreviewWcag(el) {
     saveToStorage('apca-font-px', String(apcaFontSize));
     updateUI(); // re-renders every tile: verdicts + the sibling selectors sync
     if (_ce) chipEditorRenderPreview(); // the chip editor judges the same font
+    syncApcaTypeControls(); // re-target the "Type" lock if it's active
   });
   wghtSel.addEventListener('change', () => {
     apcaFontWeight = +wghtSel.value;
     saveToStorage('apca-font-wght', String(apcaFontWeight));
     updateUI();
     if (_ce) chipEditorRenderPreview();
+    syncApcaTypeControls();
   });
   fontCtrl.append(fontCtrlLabel, sizeSel, wghtSel);
   apcaGroup.appendChild(fontCtrl);
@@ -2312,6 +2333,37 @@ document.addEventListener('click', e => {
   const apcaWrap = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-btns-apca'));
   const apcaBtns = /** @type {HTMLButtonElement[]} */ ([...apcaWrap.querySelectorAll('.contrast-lock-btn')]);
 
+  // "Type" lock (reverse lookup): lock to the |Lc| the chosen font needs
+  // (apcaLcForFont). The font size/weight comes from the tiles' existing APCA
+  // font selectors (the global apcaFontSize/apcaFontWeight) — no second pair of
+  // selects — and changing them re-targets the lock via syncApcaTypeControls.
+  const typeControls = /** @type {HTMLElement} */ (document.getElementById('apca-type-controls'));
+  const typeReadout = /** @type {HTMLElement} */ (document.getElementById('apca-type-readout'));
+  let apcaTypeLock = false;
+
+  function applyApcaTypeLock() {
+    apcaBtns.forEach(b => b.classList.toggle('active', b.dataset.apcaTarget === 'type'));
+    const font = apcaFontSize + 'px/' + apcaFontWeight;
+    const lc = apcaLcForFont(apcaFontSize, apcaFontWeight);
+    if (lc == null) { // size unreachable at this weight → nothing to lock to
+      apcaLockTarget = 0;
+      typeReadout.textContent = font + ' — no Lc fits';
+      typeReadout.title = apcaFontSize + 'px is below the smallest size weight ' + apcaFontWeight + ' can render at any contrast — pick a larger size or heavier weight in a tile’s Font selector';
+      setContrastLockError('');
+      return;
+    }
+    apcaLockTarget = Math.ceil(lc);
+    typeReadout.textContent = font + ' → Lc ' + apcaLockTarget;
+    typeReadout.title = font + ' needs |Lc| ' + apcaLockTarget + ' (APCA font lookup) — set the size/weight in a tile’s Font selector';
+    setContrastLockError('');
+    enforceContrastLock(_lastTouchedSide);
+  }
+
+  // Called by the tiles' APCA font selectors: re-target the Type lock when it's on.
+  syncApcaTypeControls = () => {
+    if (apcaTypeLock && contrastLockMode === 'apca') applyApcaTypeLock();
+  };
+
   function storedLockTarget() {
     const t = parseFloat(localStorage.getItem('contrast-lock-target') ?? '0');
     return t === 3 || t === 4.5 || t === 7 ? t : 0;
@@ -2325,6 +2377,7 @@ document.addEventListener('click', e => {
     modeBtns.forEach(b => b.classList.toggle('active', b.dataset.lockmode === contrastLockMode));
     wcagWrap.hidden = contrastLockMode !== 'wcag2';
     apcaWrap.hidden = contrastLockMode !== 'apca';
+    typeControls.hidden = !(contrastLockMode === 'apca' && apcaTypeLock);
   }
 
   function setLockTarget(target, persist) {
@@ -2413,7 +2466,15 @@ document.addEventListener('click', e => {
   }));
 
   apcaBtns.forEach(btn => btn.addEventListener('click', () => {
-    setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
+    if (btn.dataset.apcaTarget === 'type') {
+      apcaTypeLock = true;
+      typeControls.hidden = false;
+      applyApcaTypeLock();
+    } else {
+      apcaTypeLock = false;
+      typeControls.hidden = true;
+      setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
+    }
   }));
 
 }
@@ -3364,6 +3425,234 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   setupHoverPopper(sBtn && sBtn.closest('.settings-wrap'), sBtn, document.getElementById('settings-panel'));
   const lBtn = document.getElementById('layout-btn');
   setupHoverPopper(lBtn && lBtn.closest('.layout-wrap'), lBtn, document.getElementById('layout-panel'), renderLayoutPreview);
+  const scBtn = document.getElementById('scale-btn');
+  setupHoverPopper(scBtn && scBtn.closest('.scale-wrap'), scBtn, document.getElementById('scale-panel'), renderScalePreview);
+}
+
+// ─── Scale & theme generator (v2 beta) ────────────────────────────────────────
+// From the current colour, generate a luminance-keyed tonal scale (50–950) and
+// derive light + dark semantic themes whose text/muted/accent contrasts are
+// guaranteed by construction: each step is solved to a target WCAG relative
+// luminance, so pair contrasts are KNOWN (not audited afterwards). Reuses the
+// wheel's core idea — a colour at a target relative luminance — plus contrastRatio.
+const scalePreviewEl = document.getElementById('scale-preview');
+const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.048, 0.022];
+
+// HSL lightness whose sRGB has WCAG relative luminance ≈ target. (Mode-independent,
+// unlike findLightness, which follows wheelLum into APCA Ys in APCA mode.)
+function lightnessForLum(h, s, targetLum) {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2;
+    const [r, g, b] = hslToRgb(h, s, mid);
+    if (relativeLuminance(r, g, b) < targetLum) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+// Which main colours seed the scale: 'gradient' blends the main TEXT and BG
+// colours across the ramp (default); 'text'/'bg' use just that one.
+let _scaleSource = 'gradient';
+
+// Shortest circular interpolation between two hues (degrees).
+function lerpHue(a, b, t) {
+  const d = (((b - a) % 360) + 540) % 360 - 180;
+  return (((a + d * t) % 360) + 360) % 360;
+}
+
+// Build the 11-step luminance-keyed scale; hueSatAt(p) gives the [hue, sat] at
+// position p (0 = light 50 → 1 = dark 950), so a constant function yields a
+// single-hue ramp and an interpolating one yields a two-colour gradient.
+function buildScaleFrom(hueSatAt) {
+  return SCALE_STEPS.map((step, i) => {
+    const p = i / (SCALE_STEPS.length - 1);
+    const [hue, satRaw] = hueSatAt(p);
+    const sf = 1 - 0.45 * Math.pow(Math.abs(2 * p - 1), 1.4); // taper chroma at the ends
+    const s = Math.max(0, Math.min(1, satRaw * sf));
+    const [r, g, b] = hslToRgb(hue, s, lightnessForLum(hue, s, SCALE_LUM[i]));
+    return { step, hex: toHex(r, g, b).toLowerCase(), lum: relativeLuminance(r, g, b) };
+  });
+}
+
+// The scale for the current source setting and the current main text/bg colours.
+function currentScale() {
+  const textRgb = selectedRgbBiased();
+  const bgRgb = [cR, cG, cB];
+  const [hT, sT] = rgbToHsl(...textRgb);
+  const [hB, sB] = rgbToHsl(...bgRgb);
+  if (_scaleSource === 'text') return buildScaleFrom(() => [hT, sT]);
+  if (_scaleSource === 'bg')   return buildScaleFrom(() => [hB, sB]);
+  // gradient: the lighter seed anchors the light end, the darker the dark end, so
+  // the ramp stays light→dark while blending both hues.
+  const lightFirst = relativeLuminance(...textRgb) >= relativeLuminance(...bgRgb);
+  const lo = lightFirst ? [hT, sT] : [hB, sB];
+  const hi = lightFirst ? [hB, sB] : [hT, sT];
+  return buildScaleFrom(p => [lerpHue(lo[0], hi[0], p), lo[1] + (hi[1] - lo[1]) * p]);
+}
+
+// Segmented Text→BG / Text / BG source selector (shared by the scale popper and
+// the layout theme preview); `onChange` re-renders that surface.
+function scaleSourceToggle(onChange) {
+  const wrap = lpEl('div', 'lp-modes');
+  for (const [m, label, tip] of [
+    ['gradient', 'Text→BG', 'Blend the main text and background colours across the scale'],
+    ['text', 'Text', 'Use only the main text colour'],
+    ['bg', 'BG', 'Use only the main background colour'],
+  ]) {
+    const b = lpEl('button', 'lp-mode-btn' + (_scaleSource === m ? ' active' : ''), label);
+    b.type = 'button'; b.title = tip;
+    b.addEventListener('click', () => { if (_scaleSource !== m) { _scaleSource = m; onChange(); } });
+    wrap.appendChild(b);
+  }
+  return wrap;
+}
+
+// A seed readout reflecting the current source (two swatches for the gradient).
+function scaleSeedLine() {
+  const textHex = toHex(...selectedRgbBiased()).toLowerCase();
+  const bgHex = toHex(cR, cG, cB).toLowerCase();
+  const seed = lpEl('div', 'sg-seed');
+  const dotOf = hex => { const d = lpEl('span', 'sg-seed-dot'); d.style.background = cvdTransformHex(hex); return d; };
+  if (_scaleSource === 'gradient') {
+    seed.append(dotOf(textHex), dotOf(bgHex),
+      lpEl('span', 'sg-seed-txt', 'Text → BG · ' + textHex.toUpperCase() + ' → ' + bgHex.toUpperCase()));
+  } else {
+    const hex = _scaleSource === 'bg' ? bgHex : textHex;
+    seed.append(dotOf(hex), lpEl('span', 'sg-seed-txt', (_scaleSource === 'bg' ? 'BG ' : 'Text ') + hex.toUpperCase()));
+  }
+  return seed;
+}
+
+// First scale entry (searching from the dark or light end) whose contrast vs
+// refLum meets minRatio — so a role is the lightest/darkest step that still passes.
+function pickByContrast(scale, refLum, minRatio, fromDark) {
+  const list = fromDark ? [...scale].reverse() : scale;
+  return list.find(s => contrastRatio(s.lum, refLum) >= minRatio) || list[list.length - 1];
+}
+
+function deriveTheme(scale, dark) {
+  if (!dark) {
+    const bg = { step: null, hex: '#ffffff', lum: 1 };
+    return {
+      dark: false, bg,
+      surface: scale[0], border: scale[2],
+      text:  pickByContrast(scale, bg.lum, 7,   false),  // lightest dark step ≥ AAA on white
+      muted: pickByContrast(scale, bg.lum, 4.5, false),  // …≥ AA
+      accent: pickByContrast(scale, 1, 4.5, false),      // button fill with a white label ≥ AA
+      accentText: { step: null, hex: '#ffffff', lum: 1 },
+    };
+  }
+  const bg = scale[scale.length - 1];                    // 950
+  return {
+    dark: true, bg,
+    surface: scale[scale.length - 2], border: scale[scale.length - 3],
+    text:  scale[1],                                     // 100 — high contrast on the dark bg
+    muted: pickByContrast(scale, bg.lum, 4.5, true),
+    accent: pickByContrast(scale, bg.lum, 4.5, true),    // light fill with a dark label
+    accentText: scale[scale.length - 1],
+  };
+}
+
+function sgCopy(text, el, done) {
+  if (!navigator.clipboard) return;
+  navigator.clipboard.writeText(text).then(() => {
+    if (el.classList.contains('sg-swatch')) {
+      el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 800);
+    } else {
+      const prev = el.textContent; el.textContent = done || 'Copied';
+      setTimeout(() => { el.textContent = prev; }, 1200);
+    }
+  }).catch(() => {});
+}
+
+function sgCheck(label, ratio, thr) {
+  const row = lpEl('div', 'sg-check ' + (ratio >= thr ? 'pass' : 'fail'));
+  row.append(lpEl('span', 'sg-check-label', label), lpEl('span', 'sg-check-val', ratio.toFixed(1) + ':1'));
+  return row;
+}
+
+function renderThemeCard(name, t) {
+  const card = lpEl('div', 'sg-theme');
+  card.appendChild(lpEl('div', 'sg-theme-name', name));
+  const ui = lpEl('div', 'sg-ui');
+  ui.style.background = cvdTransformHex(t.bg.hex);
+  ui.style.borderColor = cvdTransformHex(t.border.hex);
+  const surf = lpEl('div', 'sg-ui-surface');
+  surf.style.background = cvdTransformHex(t.surface.hex);
+  surf.style.borderColor = cvdTransformHex(t.border.hex);
+  const title = lpEl('div', 'sg-ui-title', 'Aa Heading'); title.style.color = cvdTransformHex(t.text.hex);
+  const body  = lpEl('div', 'sg-ui-body', 'The quick brown fox jumps.'); body.style.color = cvdTransformHex(t.text.hex);
+  const muted = lpEl('div', 'sg-ui-muted', 'Muted caption text'); muted.style.color = cvdTransformHex(t.muted.hex);
+  const btn = lpEl('span', 'sg-ui-btn', 'Button');
+  btn.style.background = cvdTransformHex(t.accent.hex); btn.style.color = cvdTransformHex(t.accentText.hex);
+  surf.append(title, body, muted, btn);
+  ui.appendChild(surf);
+  card.appendChild(ui);
+  const checks = lpEl('div', 'sg-checks');
+  checks.append(
+    sgCheck('Text', contrastRatio(t.text.lum, t.bg.lum), 7),
+    sgCheck('Muted', contrastRatio(t.muted.lum, t.bg.lum), 4.5),
+    sgCheck('Button', contrastRatio(t.accent.lum, t.accentText.lum), 4.5),
+  );
+  card.appendChild(checks);
+  return card;
+}
+
+function buildScaleCss(scale, light, dark) {
+  // Palette steps are stored as SPACE-SEPARATED RGB CHANNELS (not #hex), the
+  // Tailwind-style pattern that lets any token take an alpha:
+  //   --border: rgb(var(--color-200) / 0.5);
+  // The readable hex stays in a trailing comment. The semantic layer wraps the
+  // channels in rgb() so those tokens are usable directly.
+  const channels = hex => hexToRgb(hex).join(' ');
+  const ref = e => e.step === null ? e.hex : `rgb(var(--color-${e.step}))`;
+  const roleLine = t => `  --bg: ${ref(t.bg)}; --surface: ${ref(t.surface)}; --border: ${ref(t.border)};\n`
+    + `  --text: ${ref(t.text)}; --muted: ${ref(t.muted)}; --accent: ${ref(t.accent)}; --accent-foreground: ${ref(t.accentText)};`;
+  return '/* RGB-channel palette → alpha-ready: rgb(var(--color-700) / .5).\n'
+    + '   Add a prefix (e.g. --brand-, --ui-) if you integrate with a component\n'
+    + '   library, to avoid variable-name collisions. */\n'
+    + ':root {\n'
+    + scale.map(c => `  --color-${c.step}: ${channels(c.hex)}; /* ${c.hex} */`).join('\n')
+    + '\n}\n:root, [data-theme="light"] {\n' + roleLine(light) + '\n}\n'
+    + '[data-theme="dark"] {\n' + roleLine(dark) + '\n}';
+}
+
+function renderScalePreview() {
+  if (!scalePreviewEl) return;
+  const scale = currentScale();
+  const light = deriveTheme(scale, false);
+  const dark  = deriveTheme(scale, true);
+
+  scalePreviewEl.innerHTML = '';
+  scalePreviewEl.appendChild(scaleSourceToggle(renderScalePreview));
+  scalePreviewEl.appendChild(scaleSeedLine());
+
+  scalePreviewEl.appendChild(lpEl('div', 'sg-label', 'Tonal scale — luminance-keyed, click a swatch to copy'));
+  const row = lpEl('div', 'sg-scale');
+  scale.forEach(c => {
+    const cell = lpEl('button', 'sg-swatch');
+    cell.type = 'button';
+    cell.style.background = cvdTransformHex(c.hex);
+    cell.title = c.step + ' · ' + c.hex.toUpperCase() + ' · L ' + c.lum.toFixed(3);
+    const lbl = lpEl('span', 'sg-swatch-step', String(c.step));
+    lbl.style.color = c.lum > 0.4 ? '#000' : '#fff';
+    cell.appendChild(lbl);
+    cell.addEventListener('click', () => sgCopy(c.hex, cell));
+    row.appendChild(cell);
+  });
+  scalePreviewEl.appendChild(row);
+
+  const themes = lpEl('div', 'sg-themes');
+  themes.append(renderThemeCard('Light', light), renderThemeCard('Dark', dark));
+  scalePreviewEl.appendChild(themes);
+
+  const actions = lpEl('div', 'sg-actions');
+  const copyBtn = lpEl('button', 'sg-copy', 'Copy CSS variables');
+  copyBtn.type = 'button';
+  copyBtn.addEventListener('click', () => sgCopy(buildScaleCss(scale, light, dark), copyBtn, 'Copied CSS'));
+  actions.appendChild(copyBtn);
+  scalePreviewEl.appendChild(actions);
 }
 
 // ─── Layout preview ───────────────────────────────────────────────────────────
@@ -3384,8 +3673,30 @@ function lpEl(tag, cls, text) {
   return n;
 }
 
+let _lpMode = 'palette'; // layout-preview source: saved palette | generated scale/themes
+
+function lpModeToggle() {
+  const wrap = lpEl('div', 'lp-modes');
+  for (const [m, label] of [['palette', 'Palette'], ['theme', 'Scales & themes']]) {
+    const btn = lpEl('button', 'lp-mode-btn' + (_lpMode === m ? ' active' : ''), label);
+    btn.type = 'button';
+    btn.addEventListener('click', () => { if (_lpMode !== m) { _lpMode = m; renderLayoutPreview(); } });
+    wrap.appendChild(btn);
+  }
+  return wrap;
+}
+
 function renderLayoutPreview() {
   if (!layoutPreviewEl) return;
+  layoutPreviewEl.innerHTML = '';
+  layoutPreviewEl.appendChild(lpModeToggle());
+  if (_lpMode === 'theme') renderThemeLayout();
+  else renderPaletteLayout();
+}
+
+// ── Palette mode: a colourful mock site where every saved colour is a section
+// surface / text rank, so all 10×2 palette colours appear in context. ──
+function renderPaletteLayout() {
   const liveText = toHex(...selectedRgbBiased()).toLowerCase();
   const liveBg   = toHex(cR, cG, cB).toLowerCase();
   const roleHexes = (role, live) => {
@@ -3406,7 +3717,6 @@ function renderLayoutPreview() {
   // each a distinct SURFACE painted with bg ranks 0–9 (nav…footer), and the text
   // ranks 0–9 are spread across their headings, body, links, marks and stats —
   // so all 10×2 colours appear organically, without a feature-card grid.
-  layoutPreviewEl.innerHTML = '';
   if (!saved) {
     layoutPreviewEl.appendChild(lpEl('div', 'lp-hint',
       'Showing the current picker pair. Pin text and background colours to the palette to preview a full design system here.'));
@@ -3542,6 +3852,109 @@ function renderLayoutPreview() {
   screen.appendChild(footer);
 
   layoutPreviewEl.appendChild(screen);
+}
+
+// ── Scales & themes mode: preview the GENERATED scale/themes in a real layout —
+// the tonal scale strip, then a mock site dressed in the light theme and the
+// dark theme (semantic roles: bg / surface / border / text / muted / accent). ──
+function renderThemeLayout() {
+  const scale = currentScale();
+  layoutPreviewEl.appendChild(scaleSourceToggle(renderLayoutPreview));
+  const strip = lpEl('div', 'lp-theme-scale');
+  scale.forEach(c => {
+    const sw = lpEl('span', 'lp-theme-swatch');
+    sw.style.background = cvdTransformHex(c.hex);
+    sw.dataset.name = c.step + ' · ' + c.hex.toUpperCase(); // instant hover label (CSS)
+    sw.title = sw.dataset.name;
+    strip.appendChild(sw);
+  });
+  layoutPreviewEl.appendChild(strip);
+  layoutPreviewEl.appendChild(themedScreen('Light', deriveTheme(scale, false)));
+  layoutPreviewEl.appendChild(themedScreen('Dark',  deriveTheme(scale, true)));
+}
+
+function themedScreen(name, th) {
+  const C = hex => cvdTransformHex(hex);
+  const bg = th.bg.hex, surface = th.surface.hex, border = th.border.hex,
+        text = th.text.hex, muted = th.muted.hex, accent = th.accent.hex, accentFg = th.accentText.hex;
+
+  const block = lpEl('div', 'lp-theme-block');
+  const head = lpEl('div', 'lp-theme-head');
+  head.appendChild(lpEl('span', 'lp-theme-name', name));
+  const saveBtn = lpEl('button', 'lp-theme-save', '+ Palette');
+  saveBtn.type = 'button';
+  saveBtn.title = 'Save this theme’s colours to the palette — text / muted / label → Text; bg / surface / border / accent → Background';
+  saveBtn.addEventListener('click', () => {
+    const n = addColorsToPalette([
+      { hex: th.text.hex,       role: 'fg' },
+      { hex: th.muted.hex,      role: 'fg' },
+      { hex: th.accentText.hex, role: 'fg' },
+      { hex: th.bg.hex,         role: 'bg' },
+      { hex: th.surface.hex,    role: 'bg' },
+      { hex: th.border.hex,     role: 'bg' },
+      { hex: th.accent.hex,     role: 'bg' },
+    ]);
+    saveBtn.textContent = n ? 'Saved ' + n : 'Nothing new';
+    setTimeout(() => { saveBtn.textContent = '+ Palette'; }, 1400);
+  });
+  head.appendChild(saveBtn);
+  block.appendChild(head);
+
+  const screen = lpEl('div', 'lp-screen');
+  screen.style.background = C(bg);
+  screen.style.borderColor = C(border);
+
+  // Nav
+  const nav = lpEl('div', 'lp-nav'); nav.style.borderBottom = '1px solid ' + C(border);
+  const brandWrap = lpEl('div', 'lp-brand-wrap');
+  const dot = lpEl('span', 'lp-brand-dot'); dot.style.background = C(accent);
+  const brand = lpEl('span', 'lp-brand', 'Aurora'); brand.style.color = C(text);
+  brandWrap.append(dot, brand);
+  const navLinks = lpEl('div', 'lp-navlinks');
+  ['Product', 'Pricing', 'Docs'].forEach(x => { const a = lpEl('span', 'lp-navlink', x); a.style.color = C(muted); navLinks.appendChild(a); });
+  const navCta = lpEl('span', 'lp-btn', 'Sign up'); navCta.style.background = C(accent); navCta.style.color = C(accentFg);
+  nav.append(brandWrap, navLinks, navCta);
+  screen.appendChild(nav);
+
+  // Hero
+  const hero = lpEl('div', 'lp-hero');
+  const h1 = lpEl('div', 'lp-h1', 'Accessible colour, themed.'); h1.style.color = C(text);
+  const sub = lpEl('div', 'lp-sub', 'One palette, light and dark — contrast guaranteed by construction.'); sub.style.color = C(muted);
+  const hb = lpEl('div', 'lp-herobtns');
+  const b1 = lpEl('span', 'lp-btn lp-btn-lg', 'Get started'); b1.style.background = C(accent); b1.style.color = C(accentFg);
+  const b2 = lpEl('span', 'lp-btn lp-btn-lg lp-btn-ghost', 'Docs'); b2.style.color = C(text); b2.style.borderColor = C(border);
+  hb.append(b1, b2);
+  hero.append(h1, sub, hb);
+  screen.appendChild(hero);
+
+  // Cards (surface)
+  const cards = lpEl('div', 'lp-theme-cards');
+  ['Fast', 'Accessible', 'Themeable'].forEach(title => {
+    const card = lpEl('div', 'lp-theme-card');
+    card.style.background = C(surface); card.style.borderColor = C(border);
+    const ct = lpEl('div', 'lp-theme-card-title', title); ct.style.color = C(text);
+    const cb = lpEl('div', 'lp-theme-card-body', 'The quick brown fox jumps over the lazy dog.'); cb.style.color = C(muted);
+    const cl = lpEl('span', 'lp-theme-card-link', 'Learn more →'); cl.style.color = C(accent);
+    card.append(ct, cb, cl);
+    cards.appendChild(card);
+  });
+  screen.appendChild(cards);
+
+  // CTA band (accent)
+  const cta = lpEl('div', 'lp-cta'); cta.style.background = C(accent);
+  const ctaT = lpEl('div', 'lp-cta-title', 'Start building today.'); ctaT.style.color = C(accentFg);
+  const ctaBtn = lpEl('span', 'lp-btn lp-btn-lg', 'Get started free'); ctaBtn.style.background = C(bg); ctaBtn.style.color = C(text);
+  cta.append(ctaT, ctaBtn);
+  screen.appendChild(cta);
+
+  // Footer (surface)
+  const footer = lpEl('div', 'lp-footer'); footer.style.background = C(surface); footer.style.borderTop = '1px solid ' + C(border);
+  const ftag = lpEl('div', 'lp-footer-tag', '© 2026 Aurora — ' + name.toLowerCase() + ' theme'); ftag.style.color = C(muted);
+  footer.appendChild(ftag);
+  screen.appendChild(footer);
+
+  block.appendChild(screen);
+  return block;
 }
 
 // ─── Palette rail + contrast matrix ───────────────────────────────────────────
@@ -4040,6 +4453,29 @@ function removeFromPalette(index) {
   else commit();
 }
 
+/** Batch-add colours (e.g. a generated theme) to the palette as ONE undoable
+    step: skips invalid hexes, hexes already saved in that role, and anything
+    past the per-role cap. Returns how many were actually added. */
+function addColorsToPalette(entries) {
+  const toAdd = [];
+  for (const { hex, role } of entries) {
+    const h = String(hex).toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(h)) continue;
+    const inRole = palette.filter(e => e.role === role).length + toAdd.filter(e => e.role === role).length;
+    if (inRole >= PALETTE_ROLE_MAX) continue;
+    const dup = palette.some(e => e.role === role && e.hex === h) || toAdd.some(e => e.role === role && e.hex === h);
+    if (dup) continue;
+    toAdd.push({ hex: h, role });
+  }
+  if (!toAdd.length) return 0;
+  recordPaletteHistory();
+  palette.push(...toAdd);
+  savePalette();
+  renderPalette();
+  if (!paletteOpen) setPaletteOpen(true);
+  return toAdd.length;
+}
+
 /** Reorder palette swatches, optionally moving them across roles (fg/bg) while
     leaving other elements untouched. */
 function reorderAcrossRoles(srcRole, from, dstRole, to) {
@@ -4346,6 +4782,80 @@ const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" 
 // Six-dot grip for the chip's drag handle (touch-action:none, so Android can't
 // hijack the press for scroll/long-press before the grab engages).
 const GRIP_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+const IMPORT_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l3 3m0 0 3-3m-3 3V2.25"/></svg>';
+
+// ── Import a colour from the generated Scales & themes into a palette role ─────
+let _scaleImportEl = null;
+function closeScaleImport() {
+  if (_scaleImportEl) { _scaleImportEl.remove(); _scaleImportEl = null; }
+  document.removeEventListener('pointerdown', _scaleImportOutside, true);
+  document.removeEventListener('keydown', _scaleImportKey, true);
+}
+function _scaleImportOutside(e) {
+  const t = /** @type {HTMLElement} */ (e.target);
+  if (_scaleImportEl && !_scaleImportEl.contains(t) && !(t.closest && t.closest('.palette-group-import'))) closeScaleImport();
+}
+function _scaleImportKey(e) { if (e.key === 'Escape') closeScaleImport(); }
+
+function openScaleImport(role, anchor) {
+  const sameRole = _scaleImportEl && _scaleImportEl.dataset.role === role;
+  closeScaleImport();
+  if (sameRole) return; // clicking the same group's import again closes it
+
+  const scale = currentScale();
+
+  const pop = document.createElement('div');
+  pop.className = 'scale-import';
+  pop.dataset.role = role;
+  pop.appendChild(lpEl('div', 'scale-import-title', 'Import → ' + (role === 'fg' ? 'Text' : 'Background')));
+
+  const roomLeft = () => PALETTE_ROLE_MAX - palette.filter(e => e.role === role).length;
+  const status = lpEl('div', 'scale-import-status', '');
+  const refresh = () => {
+    const n = roomLeft();
+    status.textContent = n > 0 ? n + ' slot' + (n === 1 ? '' : 's') + ' left' : 'This role is full';
+    pop.classList.toggle('full', n <= 0);
+  };
+  const makeSwatch = (hex, label) => {
+    const sw = document.createElement('button');
+    sw.type = 'button';
+    sw.className = 'scale-import-sw';
+    sw.style.background = cvdTransformHex(hex);
+    sw.dataset.name = (label ? label + ' · ' : '') + hex.toUpperCase(); // instant hover label (CSS)
+    sw.title = sw.dataset.name;
+    sw.addEventListener('click', () => {
+      if (roomLeft() <= 0) return;
+      const added = addColorsToPalette([{ hex, role }]); // dedup + cap + one undo step
+      sw.classList.add(added ? 'ok' : 'dup');
+      setTimeout(() => sw.classList.remove('ok', 'dup'), 650);
+      refresh();
+    });
+    return sw;
+  };
+  const addRow = (label, items) => {
+    pop.appendChild(lpEl('div', 'scale-import-label', label));
+    const row = lpEl('div', 'scale-import-row');
+    items.forEach(([hex, lab]) => row.appendChild(makeSwatch(hex, lab)));
+    pop.appendChild(row);
+  };
+  addRow('Scale', scale.map(c => [c.hex, String(c.step)]));
+  [['Light', deriveTheme(scale, false)], ['Dark', deriveTheme(scale, true)]].forEach(([name, th]) => {
+    addRow(name + ' theme', [['bg', th.bg], ['surface', th.surface], ['border', th.border],
+      ['text', th.text], ['muted', th.muted], ['accent', th.accent]].map(([rn, e]) => [e.hex, name + ' ' + rn]));
+  });
+  pop.appendChild(status);
+  refresh();
+
+  // Fixed to the viewport so renderPalette() (which clears the rail on every
+  // import) can't destroy it; aligned under the anchor's right edge.
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.top = (r.bottom + 4) + 'px';
+  pop.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  _scaleImportEl = pop;
+  document.addEventListener('pointerdown', _scaleImportOutside, true);
+  document.addEventListener('keydown', _scaleImportKey, true);
+}
 
 // ─── Inline palette-chip editor ───────────────────────────────────────────────
 // Re-editing a saved swatch happens in place, inside the sidebar: the edit
@@ -5106,7 +5616,19 @@ function renderPalette() {
       if (role === 'fg') addToPalette(toHex(...selectedRgbBiased()), 'fg');
       else addToPalette(toHex(cR, cG, cB), 'bg');
     });
-    head.append(title, add);
+
+    const importBtn = document.createElement('button');
+    importBtn.className = 'palette-group-import';
+    importBtn.innerHTML = IMPORT_SVG;
+    importBtn.title = 'Import a colour from Scales & themes';
+    importBtn.setAttribute('aria-label', importBtn.title);
+    importBtn.disabled = entries.length >= PALETTE_ROLE_MAX;
+    importBtn.addEventListener('click', () => openScaleImport(role, importBtn));
+
+    const actions = document.createElement('div');
+    actions.className = 'palette-group-actions';
+    actions.append(importBtn, add);
+    head.append(title, actions);
 
     const list = document.createElement('div');
     list.className = 'palette-group-list';

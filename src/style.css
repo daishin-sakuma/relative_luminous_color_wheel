@@ -922,6 +922,8 @@ input.custom-val:focus {
    right-aligned row above the font verdict (populated in APCA mode only). */
 .preview-apca-tier {
   font-size: 0.6rem;
+  line-height: 1.4; /* fixed so a single line is the same height with or without an
+                       icon (e.g. the 🚫 emoji) — only wrapping adds height */
   letter-spacing: 0.08em;
   font-weight: 600;
   max-width: 100%;
@@ -932,6 +934,7 @@ input.custom-val:focus {
    Normal/Large WCAG badge rows (populated in APCA mode only). */
 .preview-apca-font {
   font-size: 0.6rem;
+  line-height: 1.4; /* fixed single-line height regardless of the ✓/✗ glyph */
   letter-spacing: 0.03em;
   max-width: 100%;
   text-align: right; /* wrapped lines stay right-aligned */
@@ -1356,6 +1359,7 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
    each on its own right-aligned row, mirroring the main contrast tiles. */
 .chip-editor-apca-tier {
   font-size: 0.6rem;
+  line-height: 1.4; /* fixed single-line height regardless of icon/glyph content */
   font-weight: 700;
   letter-spacing: 0.06em;
   text-align: right;
@@ -1363,6 +1367,7 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 }
 .chip-editor-apca-font {
   font-size: 0.6rem;
+  line-height: 1.4;
   text-align: right;
   overflow-wrap: anywhere;
   color: var(--error);
@@ -1504,6 +1509,46 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 @media (hover: hover) { .palette-group-add:hover { color: var(--text); } }
 .palette-group-add:active { transform: scale(0.9); }
 .palette-group-add:disabled { opacity: 0.3; cursor: default; }
+
+/* Import (from Scales & themes) sits just left of the add button in each head. */
+.palette-group-actions { display: flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
+.palette-group-import {
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  padding: 0.1rem; font-size: 0.78rem; flex-shrink: 0;
+  transition: color 0.12s, opacity 0.12s, transform 0.1s;
+}
+@media (hover: hover) { .palette-group-import:hover { color: var(--text); } }
+.palette-group-import:active { transform: scale(0.9); }
+.palette-group-import:disabled { opacity: 0.3; cursor: default; }
+
+/* Scale-import popover (fixed to the viewport, opened from an import button). */
+.scale-import {
+  position: fixed; z-index: 300; width: 236px; max-width: calc(100vw - 1rem);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.6rem; display: flex; flex-direction: column; gap: 0.3rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+.scale-import-title { font-size: 0.62rem; font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
+.scale-import-label { font-size: 0.52rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 0.15rem; }
+.scale-import-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.scale-import-sw { width: 1.1rem; height: 1.1rem; border-radius: 3px; border: 1px solid rgba(128,128,128,0.25); cursor: pointer; padding: 0; transition: transform 0.1s ease; }
+.scale-import-sw:hover { transform: scale(1.18); }
+.scale-import-sw.ok  { outline: 2px solid var(--pass); outline-offset: 1px; }
+.scale-import-sw.dup { outline: 2px solid var(--muted); outline-offset: 1px; }
+.scale-import-status { font-size: 0.55rem; color: var(--muted); margin-top: 0.15rem; }
+.scale-import.full .scale-import-row { opacity: 0.4; pointer-events: none; }
+
+/* Instant hover label (colour name + hex) for scale / import swatches. */
+.lp-theme-swatch, .scale-import-sw { position: relative; }
+.lp-theme-swatch::after, .scale-import-sw::after {
+  content: attr(data-name);
+  position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.12rem 0.4rem; font-size: 0.52rem; font-weight: 600;
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.1s ease; z-index: 10;
+}
+.lp-theme-swatch:hover::after, .scale-import-sw:hover::after { opacity: 1; }
 .palette-group-list {
   display: flex;
   flex-direction: column;
@@ -1829,6 +1874,28 @@ body.about-modal-open { overflow: hidden; }
    the shared .settings-panel max-width. */
 .layout-panel { width: 440px; }
 .layout-preview { display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* Palette ⇄ Scales & themes source toggle */
+.lp-modes { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.lp-mode-btn { flex: 1; font-family: inherit; font-size: 0.66rem; padding: 0.36rem; border: none; background: none; color: var(--muted); cursor: pointer; transition: background .12s ease, color .12s ease; }
+.lp-mode-btn + .lp-mode-btn { border-left: 1px solid var(--border); }
+.lp-mode-btn:hover { color: var(--text); }
+.lp-mode-btn.active { background: var(--border); color: var(--text); }
+
+/* Theme mode: tonal scale strip + a mock site per light/dark theme */
+.lp-theme-scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 2px; }
+.lp-theme-swatch { height: 1.4rem; border-radius: 3px; }
+.lp-theme-block { display: flex; flex-direction: column; gap: 0.3rem; }
+.lp-theme-head { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+.lp-theme-name { font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lp-theme-save { font-family: inherit; font-size: 0.56rem; letter-spacing: 0.03em; padding: 0.18rem 0.45rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface2); color: var(--text); cursor: pointer; white-space: nowrap; transition: background .12s ease; }
+.lp-theme-save:hover { background: var(--border); }
+.lp-theme-save:active { transform: scale(0.96); }
+.lp-theme-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; padding: 0.6rem 0.85rem; }
+.lp-theme-card { border: 1px solid; border-radius: 6px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.lp-theme-card-title { font-size: 0.7rem; font-weight: 600; }
+.lp-theme-card-body { font-size: 0.6rem; line-height: 1.35; }
+.lp-theme-card-link { font-size: 0.6rem; font-weight: 600; margin-top: auto; }
 .lp-hint { font-size: 0.7rem; line-height: 1.45; color: var(--muted); }
 
 .lp-screen { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; display: flex; flex-direction: column; }
@@ -1938,6 +2005,42 @@ body.about-modal-open { overflow: hidden; }
 .lp-pal-swatch { cursor: pointer; transition: transform .1s ease; }
 .lp-pal-swatch:hover { transform: scale(1.14); }
 
+/* ── Scale & theme generator popper ────────────────────────────────────────── */
+.scale-panel { width: 420px; }
+.scale-preview { display: flex; flex-direction: column; gap: 0.7rem; }
+.sg-seed { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--muted); }
+.sg-seed-dot { width: 1rem; height: 1rem; border-radius: 3px; border: 1px solid var(--border); flex: none; }
+.sg-seed-txt { font-variant-numeric: tabular-nums; }
+.sg-label { font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+/* Tonal scale row */
+.sg-scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 2px; }
+.sg-swatch { position: relative; height: 2.6rem; border: none; border-radius: 4px; cursor: pointer; padding: 0; display: flex; align-items: flex-end; justify-content: center; transition: transform .1s ease; }
+.sg-swatch:hover { transform: translateY(-2px); }
+.sg-swatch.copied { outline: 2px solid var(--text); outline-offset: 1px; }
+.sg-swatch-step { font-size: 0.5rem; font-weight: 700; padding-bottom: 0.15rem; opacity: 0.9; }
+
+/* Light + dark theme cards */
+.sg-themes { display: flex; gap: 0.6rem; }
+.sg-theme { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.sg-theme-name { font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sg-ui { border: 1px solid; border-radius: 7px; padding: 0.5rem; }
+.sg-ui-surface { border: 1px solid; border-radius: 5px; padding: 0.55rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.sg-ui-title { font-size: 0.85rem; font-weight: 700; line-height: 1.1; }
+.sg-ui-body { font-size: 0.65rem; line-height: 1.4; }
+.sg-ui-muted { font-size: 0.58rem; }
+.sg-ui-btn { align-self: flex-start; margin-top: 0.15rem; font-size: 0.6rem; font-weight: 600; padding: 0.28rem 0.6rem; border-radius: 5px; }
+.sg-checks { display: flex; flex-direction: column; gap: 0.14rem; }
+.sg-check { display: flex; justify-content: space-between; font-size: 0.57rem; }
+.sg-check-label { color: var(--muted); letter-spacing: 0.02em; }
+.sg-check-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sg-check.pass .sg-check-val { color: var(--pass); }
+.sg-check.fail .sg-check-val { color: var(--error); }
+
+.sg-actions { display: flex; }
+.sg-copy { flex: 1; font-family: inherit; font-size: 0.66rem; padding: 0.42rem; border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; transition: background .12s ease; }
+.sg-copy:hover { background: var(--border); }
+
 .settings-theme-row {
   display: flex;
   align-items: center;
@@ -2038,6 +2141,10 @@ body.about-modal-open { overflow: hidden; }
   outline: none;
 }
 .apca-font-select:focus { border-color: var(--muted); }
+/* "Type" reverse-lookup readout (shown only while the Type lock is selected). */
+.apca-type-controls { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; }
+.apca-type-controls[hidden] { display: none; } /* explicit: display:flex above beats the UA [hidden] rule */
+.apca-type-readout { font-size: 0.62rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .contrast-lock-btn:hover  { background: var(--surface2); color: var(--text); }
 .contrast-lock-btn:active { transform: scale(0.93); }
 .contrast-lock-btn.active { background: var(--border); color: var(--text); }
