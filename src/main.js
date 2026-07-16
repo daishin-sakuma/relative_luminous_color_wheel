@@ -432,6 +432,45 @@ function apcaUsageTier(lcAbs) {
   return 'INVISIBLE';
 }
 
+/** Verdict for the chosen font size/weight at |Lc| — shared by the main
+    contrast tiles and the palette chip editor so both always agree.
+    The reference tool gates the whole font table before the lookup
+    matrix: below the hard minimum nothing is usable, and below the
+    any-text floor every weight renders as non-text — matrix sentinels
+    (999/777) only matter past those gates. The gate values use the
+    usage ladder's 0.3-tolerance thresholds (14.7 / 29.7) rather than
+    the tool's internal 15 / 29.8, so this verdict and the tier row
+    always switch on exactly the same |Lc|.
+    No `min >= 999` branch here: the 999 rows live entirely below the Lc-15
+    hard minimum, but the sentinel-holding lookup can still return 999
+    in the 14.7–15 band — which must read as the NO-TEXT zone (spot &
+    non-text) to stay in lockstep with the tier row. */
+function apcaFontVerdict(lcAbs) {
+  const min = apcaMinFontSize(lcAbs, apcaFontWeight);
+  const label = apcaFontSize + 'px/' + apcaFontWeight;
+  let pass = false, text, title;
+  if (lcAbs <= 14.7) {
+    text = '✗ ' + label + ' — contrast too low: not usable for anything';
+    title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — invisible; too low for any use, text or non-text';
+  } else if (lcAbs <= 29.7) {
+    // The NO-TEXT band: NOT even spot text — only non-text elements
+    // (icons, dividers, large UI shapes) are sanctioned here.
+    text = '✗ ' + label + ' — no text at any size: non-text elements only';
+    title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the any-text floor (Lc ~30) — no text of any size or weight, including spot text; usable for non-text elements only';
+  } else if (min >= 777) {
+    text = '✗ ' + label + ' — this weight: spot text & non-text only';
+    title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' has no fluent-text size — usable for spot text and non-text elements only';
+  } else if (apcaFontSize >= min - 1e-9) {
+    pass = true;
+    text = '✓ ' + label;
+    title = 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + lcAbs.toFixed(0);
+  } else {
+    text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
+    title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
+  }
+  return { text, title, pass };
+}
+
 // ─── WebGL wheel renderer ──────────────────────────────────────────────────────
 
 const VS_SRC = /* glsl */`
@@ -738,11 +777,13 @@ function buildPreviewWcag(el) {
     apcaFontSize = +sizeSel.value;
     saveToStorage('apca-font-px', String(apcaFontSize));
     updateUI(); // re-renders every tile: verdicts + the sibling selectors sync
+    if (_ce) chipEditorRenderPreview(); // the chip editor judges the same font
   });
   wghtSel.addEventListener('change', () => {
     apcaFontWeight = +wghtSel.value;
     saveToStorage('apca-font-wght', String(apcaFontWeight));
     updateUI();
+    if (_ce) chipEditorRenderPreview();
   });
   fontCtrl.append(fontCtrlLabel, sizeSel, wghtSel);
   rowsEl.appendChild(fontCtrl);
@@ -837,7 +878,7 @@ function scheduleVerdictSettle() {
   _verdictSettleTimer = setTimeout(() => updateUI(), VERDICT_STABLE_MS + 40);
 }
 
-function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
+function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedPair) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
   const isLight = bgLum > 0.179;
@@ -856,49 +897,29 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride) {
       dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // v2 beta: APCA is size/weight-dependent — in APCA mode judge the chosen
-      // font against the minimum Lc-derived size from the official lookup.
-      // The tier/font texts are DISCRETE verdict state: computed here, but
-      // routed through the stability debounce below before being displayed.
-      if (true) {
-        if (contrastLockMode === 'apca') {
-          const lcAbs = Math.abs(lc);
-          const min = apcaMinFontSize(lcAbs, apcaFontWeight);
-          const label = apcaFontSize + 'px/' + apcaFontWeight;
-          // The reference tool gates the whole font table before the lookup
-          // matrix: below the hard minimum nothing is usable, and below the
-          // any-text floor every weight renders as non-text — matrix sentinels
-          // (999/777) only matter past those gates. The gate values use the
-          // usage ladder's 0.3-tolerance thresholds (14.7 / 29.7) rather than
-          // the tool's internal 15 / 29.8, so this verdict and the tier row
-          // above it always switch on exactly the same |Lc|.
-          // No `min >= 999` here: the 999 rows live entirely below the Lc-15
-          // hard minimum, but the sentinel-holding lookup can still return 999
-          // in the 14.7–15 band — which must read as the NO-TEXT zone (spot &
-          // non-text) to stay in lockstep with the tier row above.
-          let pass = false, text, title;
-          if (lcAbs <= 14.7) {
-            text = '✗ ' + label + ' — contrast too low: not usable for anything';
-            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the Lc 15 hard minimum — invisible; too low for any use, text or non-text';
-          } else if (lcAbs <= 29.7) {
-            // The NO-TEXT band: NOT even spot text — only non-text elements
-            // (icons, dividers, large UI shapes) are sanctioned here.
-            text = '✗ ' + label + ' — no text at any size: non-text elements only';
-            title = 'APCA: |Lc| ' + lcAbs.toFixed(0) + ' is below the any-text floor (Lc ~30) — no text of any size or weight, including spot text; usable for non-text elements only';
-          } else if (min >= 777) {
-            text = '✗ ' + label + ' — this weight: spot text & non-text only';
-            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' has no fluent-text size — usable for spot text and non-text elements only';
-          } else if (apcaFontSize >= min - 1e-9) {
-            pass = true;
-            text = '✓ ' + label;
-            title = 'APCA: ' + label + ' meets the minimum size (' + (Math.ceil(min * 2) / 2) + 'px) for |Lc| ' + lcAbs.toFixed(0);
-          } else {
-            text = '✗ ' + label + ' (needs ≥' + (Math.ceil(min * 2) / 2) + 'px)';
-            title = 'APCA: at |Lc| ' + lcAbs.toFixed(0) + ', weight ' + apcaFontWeight + ' needs at least ' + (Math.ceil(min * 2) / 2) + 'px';
-          }
-          disc.tier = apcaUsageTier(lcAbs);
-          disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
-          disc.font = { text, title, pass };
+      // font against the minimum Lc-derived size from the official lookup
+      // (apcaFontVerdict, shared with the chip editor). The tier/font texts
+      // are DISCRETE verdict state: computed here, but routed through the
+      // stability debounce below before being displayed.
+      if (contrastLockMode === 'apca') {
+        let lcAbs = Math.abs(lc);
+        // With the APCA lock met, the pinned side sits on the first
+        // representable RGB at-or-beyond the target, so the measured |Lc|
+        // hovers within a quantization-sized, position-dependent band
+        // around the target — enough to wiggle the interpolated minimum
+        // font size while a Lum slider moves even though the lock never
+        // breaks. The locked pair therefore judges its discrete verdicts
+        // at exactly the target while it is met: they cannot change until
+        // the lock actually breaks or the target itself moves. "Met" is
+        // decided on the rendered (quantized) pair — the lock's own
+        // guarantee — because the continuous anchor Lc can sit a fraction
+        // under the target while the rendered pair satisfies it.
+        if (lockedPair && apcaLockTarget && Math.abs(apcaLc(txtRgb, bgRgb)) >= apcaLockTarget - 1e-6) {
+          lcAbs = apcaLockTarget;
         }
+        disc.tier = apcaUsageTier(lcAbs);
+        disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+        disc.font = apcaFontVerdict(lcAbs);
       }
     } else {
       dom.apcaEl.textContent = '';
@@ -1063,7 +1084,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
     selectedLum, customLum, customLum,
     hexToRgb(selectedHex), hexToRgb(customHex),
-    apcaAnchorLc('pa'),
+    apcaAnchorLc('pa'), true,
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
@@ -1087,7 +1108,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
     customLum, selectedLum, selectedLum,
     hexToRgb(customHex), hexToRgb(selectedHex),
-    apcaAnchorLc('pb'),
+    apcaAnchorLc('pb'), true,
   );
 }
 
@@ -4141,6 +4162,8 @@ function buildChipEditor() {
     cmpRole: q('.chip-editor-cmp-role'),
     ratio:  q('.chip-editor-cmp-ratio'),
     badges: q('.chip-editor-badges'),
+    apcaTier: q('.chip-editor-apca-tier'),
+    apcaFont: q('.chip-editor-apca-font'),
     cancel: q('.chip-editor-cancel'),
     done:   q('.chip-editor-done'),
     ranges: {}, vals: {},
@@ -4627,10 +4650,32 @@ function chipEditorRenderPreview() {
   }
   _ceRefs.tileLabel.style.color = cvdTransformHex(textHex);
 
-  const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
-  _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
   _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
   _ceRefs.badges.innerHTML = '';
+  if (contrastLockMode === 'apca') {
+    // APCA mode: the WCAG readouts give way to the APCA verdicts — Lc value,
+    // official usage tier, and the chosen-font verdict (same helpers as the
+    // main contrast tiles, so both always agree). Judge the edited side from
+    // its continuous Lum-mode luminance when available (wheelLum ≡ apcaY in
+    // APCA mode) so hue/sat exploration in the editor can't shake the
+    // verdicts across a threshold via hex quantization.
+    const editedYs  = _ce.mode === 'lum' ? _ce.lum[0] / 1000 : apcaY(_ce.r, _ce.g, _ce.b);
+    const partnerYs = apcaY(...hexToRgb(partner));
+    const lc = _ce.role === 'bg' ? apcaLcYs(partnerYs, editedYs) : apcaLcYs(editedYs, partnerYs);
+    const lcAbs = Math.abs(lc);
+    _ceRefs.ratio.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
+    _ceRefs.apcaTier.textContent = apcaUsageTier(lcAbs);
+    _ceRefs.apcaTier.title = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+    const v = apcaFontVerdict(lcAbs);
+    _ceRefs.apcaFont.textContent = v.text;
+    _ceRefs.apcaFont.title = v.title;
+    _ceRefs.apcaFont.classList.toggle('pass', v.pass);
+    return;
+  }
+  _ceRefs.apcaTier.textContent = '';
+  _ceRefs.apcaFont.textContent = '';
+  const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
+  _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
   // Show the WCAG 2.2 ratio thresholds (3:1 large text / UI, 4.5:1 normal AA,
   // 7:1 AAA) so each use case can be checked; each lights up when the pair meets it.
   for (const [lbl, thr] of [['3:1', 3], ['4.5:1', 4.5], ['7:1', 7]]) {

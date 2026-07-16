@@ -1334,6 +1334,23 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   color: var(--muted);
 }
 .chip-editor-badge.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 45%, transparent); }
+/* APCA mode: usage tier + chosen-font verdict replace the WCAG pass chips —
+   each on its own right-aligned row, mirroring the main contrast tiles. */
+.chip-editor-apca-tier {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: right;
+  color: var(--text);
+}
+.chip-editor-apca-font {
+  font-size: 0.6rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+  color: var(--error);
+}
+.chip-editor-apca-font.pass { color: var(--pass); }
+.chip-editor-apca-tier:empty, .chip-editor-apca-font:empty { display: none; }
 /* Cancel/Done: two independent buttons, each filling half the row with a gap
    between; Done is filled to read as the primary action, Cancel is outlined. */
 .chip-editor-actions {
