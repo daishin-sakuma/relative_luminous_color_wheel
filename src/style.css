@@ -2248,14 +2248,37 @@ body.about-modal-open { overflow: hidden; }
   justify-content: flex-end;
   gap: 0.3rem;
 }
+/* Wrap + custom caret: the native <select> arrow is a fixed system colour that
+   disappears on the dark select fill, so drop it (appearance:none) and draw our
+   own chevron in var(--text), which always contrasts with the var(--surface)
+   background — visible in every theme. */
+.apca-font-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.apca-font-select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 0.42rem;
+  top: 50%;
+  width: 0.34rem;
+  height: 0.34rem;
+  border-right: 1.5px solid var(--text);
+  border-bottom: 1.5px solid var(--text);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none; /* clicks fall through to the select */
+}
 .apca-font-select {
+  -webkit-appearance: none;
+  appearance: none;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
   font-family: inherit;
   font-size: 0.64rem;
-  padding: 0.14rem 0.25rem;
+  padding: 0.14rem 1.1rem 0.14rem 0.35rem; /* right room for the custom caret */
   cursor: pointer;
   outline: none;
 }
