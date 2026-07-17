@@ -6,8 +6,8 @@
   <title>Accessible Color Picker &amp; WCAG Contrast Checker — Luminance Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast with official APCA usage levels and font-size/weight verdicts, explore luminance-stable hues, edit accessible palettes inline with tap-away save, cancel support, mobile-friendly drag reordering, and a touch drawer you drag right to close (with smooth spring-back); preview full-app color vision simulation (including layouts and preferences modal, optimized for iOS/Safari, Android &amp; Desktop) and export CSS, Tailwind, or W3C design tokens.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, APCA font size, APCA font size checker, APCA usage levels, APCA minimum font size, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast with official APCA usage levels and font-size/weight verdicts (or reverse-lock to the Lc a chosen font size and weight needs), explore luminance-stable hues, and edit accessible palettes inline. Generate a luminance-keyed tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction, preview them on a real mock layout, and export CSS, Tailwind, or W3C design tokens. Full-app color vision simulation, optimized for iOS/Safari, Android &amp; Desktop.">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, APCA font size, APCA font size checker, APCA usage levels, APCA minimum font size, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history, color scale generator, tonal color palette, 50-950 color scale, light and dark theme generator, dark mode palette generator, accessible design system generator, semantic color tokens, APCA reverse lookup, lock contrast to font size">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -21,7 +21,7 @@
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
   <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta property="og:description"  content="Lock WCAG or APCA contrast, explore luminance-stable hues, edit palettes with tap-away save, mobile-friendly reordering, a smooth drag-to-close sidebar, full-app color vision simulation, and CSS/Tailwind/token export.">
+  <meta property="og:description"  content="Lock WCAG or APCA contrast, explore luminance-stable hues, and generate a tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction. Preview on a real mock layout, full-app color vision simulation, and CSS/Tailwind/design-token export.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
@@ -31,7 +31,7 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta name="twitter:description" content="Lock WCAG or APCA contrast, explore luminance-stable hues, edit palettes with tap-away save, mobile-friendly reordering, a smooth drag-to-close sidebar, full-app color vision simulation, and CSS/Tailwind/token export.">
+  <meta name="twitter:description" content="Lock WCAG or APCA contrast, explore luminance-stable hues, and generate a tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction. Preview on a real mock layout, full-app color vision simulation, and CSS/Tailwind/design-token export.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
@@ -88,11 +88,11 @@
     "@type": "WebApplication",
     "name": "Relative Luminous Color Wheel",
     "url": "https://relative-luminous-color-wheel.vercel.app/",
-    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks. Edit palettes inline with tap-away save and cancel support, reorder saved colors with mobile-friendly drag and drop, drag the palette sidebar right and release to close it on touch devices, see saved swatches in every contrast tile, and export CSS, Tailwind, or design tokens.",
+    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks. Generate a luminance-keyed tonal scale (50–950) and ready-made light and dark themes whose text/muted/accent contrasts are guaranteed by construction, preview them on a realistic mock layout, and copy them as alpha-ready CSS custom properties. Edit palettes inline, reorder with drag and drop, and export CSS, Tailwind, or W3C design tokens.",
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "1.28.5",
+    "softwareVersion": "1.42.1",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -111,11 +111,16 @@
       "Inline in-sidebar color editor (RGB/HSL/Lum/Gray) with live contrast preview, selectable opposite-role comparison (defaults to Lum mode), one-tap Done, and one-tap Cancel to revert edits",
       "Full-app color vision simulation (protanopia, deuteranopia, tritanopia)",
       "Export as CSS variables, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB, prioritizing saved swatches with live color backups",
+      "One-click accessible color-system generator: a luminance-keyed tonal scale (50-950) plus ready-made light and dark themes with semantic roles (background, surface, border, text, muted, accent) whose text/muted/accent contrasts are guaranteed by construction",
+      "Tonal scale source options: blend the main text and background colors across the scale (gradient), or use the text or background color alone",
+      "Preview the palette or the generated light/dark themes dressed on a realistic mock layout",
+      "Save a generated theme to the palette, import individual scale/theme colors into a role, and copy the scale plus themes as alpha-ready CSS custom properties (rgb-channel tokens)",
+      "APCA reverse lookup: choose a font size and weight and lock the contrast to the exact Lc that font needs",
       "Accessible color scheme and dark-mode palette builder",
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
     ],
-    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color blindness simulator, color vision simulation, design tokens",
+    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color scale generator, tonal palette, light and dark theme generator, design system colors, color blindness simulator, color vision simulation, design tokens",
     "author": {
       "@type": "Person",
       "name": "Daishin Sakuma"
@@ -180,6 +185,14 @@
       },
       {
         "@type": "Question",
+        "name": "How do I generate an accessible color palette, light and dark theme?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Open Scales & themes: from your current colors the tool builds a luminance-keyed tonal scale (50–950) and ready-made light and dark themes with semantic roles (background, surface, border, text, muted, accent). Because each step is solved to a target relative luminance, the text, muted, and accent contrasts are guaranteed by construction rather than audited afterwards. You can blend your text and background colors across the scale or use either alone, preview the palette or the themes on a real mock layout, save a theme to the palette, and copy the scale and both themes as alpha-ready CSS custom properties."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "Is it free and private?",
         "acceptedAnswer": {
           "@type": "Answer",
@@ -206,7 +219,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.42.0</span>
+    <span class="app-version">ver. 1.42.1</span>
     <div class="settings-wrap scale-wrap">
       <button class="theme-toggle" id="scale-btn" title="Scales &amp; themes" aria-label="Generate an accessible tonal scale and light/dark theme from the current colour">
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
@@ -742,9 +755,10 @@
       <h3>What you can do here</h3>
       <ul>
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
-        <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; in APCA mode every tile shows the official APCA usage ladder and a font-size/weight verdict (with the required minimum size) judged against the official lookup table, with in-tile font selectors; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
+        <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; in APCA mode every tile shows the official APCA usage ladder and a font-size/weight verdict (with the required minimum size) judged against the official lookup table, with in-tile font selectors — or work it backwards with the APCA "Type" lock: pick a font size and weight and the pair is held at the exact Lc that font needs; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
         <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked (in APCA mode the editor preview switches to the APCA verdicts instead — Lc value, official usage level, and the chosen font-size/weight verdict with the required minimum size); tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors by dragging each chip's grip handle (reliable on Android, iOS, and desktop, while the chip body still scrolls the list), drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app — the theme colors, color wheel, sliders, preferences, and palette sidebar included — with the Machado et&nbsp;al. 2009 matrices applied in linear-light space directly inside the app's own rendering, so the preview is identical on iOS/Safari, Android, and desktop browsers</li>
+        <li>Generate a whole accessible color system in one step — a luminance-keyed tonal scale (50&ndash;950) plus ready-made light and dark themes with semantic roles (background, surface, border, text, muted, accent), where each theme's text, muted, and accent contrasts are guaranteed by construction rather than checked afterwards. Choose the scale's source — blend your text and background colors across the ramp (gradient), or use the text or background color alone — preview the palette or the generated light/dark themes dressed on a realistic mock layout, save a theme straight to the palette or import individual scale/theme colors into a text or background role, and copy the scale and both themes as alpha-ready CSS custom properties (space-separated rgb-channel tokens, so any token can take an opacity)</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
       </ul>
       <h3>Who it's for</h3>
@@ -796,6 +810,15 @@
         sRGB hex fallback in OKLCH and hex modes. Pinned swatches are prioritized on export, while the active main picker
         colors are safely backed up inside CSS/Tailwind comments and JSON extension properties.
         Your colors and palette also travel in a shareable URL.</p>
+      <p><strong>How do I generate an accessible color palette, light and dark theme?</strong><br>
+        Open <em>Scales &amp; themes</em>: from your current colors the tool builds a luminance-keyed
+        tonal scale (50&ndash;950) and ready-made light and dark themes with semantic roles
+        (background, surface, border, text, muted, accent). Because each step is solved to a target
+        relative luminance, the text, muted, and accent contrasts are guaranteed <strong>by
+        construction</strong> rather than audited afterwards. Blend your text and background colors
+        across the scale or use either alone, preview the palette or the themes on a real mock layout,
+        save a theme to the palette, and copy the scale and both themes as alpha-ready CSS custom
+        properties.</p>
       <p><strong>Is it free and private?</strong><br>
         Yes. It is completely free with no account and no sign-up, and it is private by design —
         everything runs locally in your browser with nothing uploaded.</p>
