@@ -1615,6 +1615,22 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 }
 .palette-chip-edit svg { display: block; }
 @media (hover: hover) { .palette-chip-edit:hover { opacity: 1; } }
+/* Recall — load this saved color into the matching main picker (left of edit). */
+.palette-chip-recall {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+  opacity: 0.55;
+  padding: 0.5rem 0.25rem;
+  transition: opacity 0.15s;
+}
+.palette-chip-recall svg { display: block; }
+@media (hover: hover) { .palette-chip-recall:hover { opacity: 1; } }
 /* Same copy affordance as the hex fields: ⧉ that turns into a green ✓ */
 .palette-chip-copy {
   background: none;
