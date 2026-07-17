@@ -1447,6 +1447,22 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--pal-fade), #000 calc(100% - var(--pal-fade)), transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0, #000 var(--pal-fade), #000 calc(100% - var(--pal-fade)), transparent 100%);
 }
+/* Rail content wrapper: stacks the two role groups, and on touch is sized just
+   past the rail height so there's ALWAYS a 1px scroll range — even with few (or
+   no) colors the list can be dragged elastically instead of feeling locked, and
+   the sidebar's touchmove guard (which only permits the rail's scroll when it
+   overflows) lets it through. Off-touch there's no forced overflow, so desktop
+   shows a scrollbar only when it genuinely needs one. */
+.palette-rail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+@media (hover: none) {
+  /* +2px (not 1) so the integer-rounded scrollHeight is reliably greater than
+     clientHeight — the touchmove guard gates on scrollHeight > clientHeight. */
+  .palette-rail-content { min-height: calc(100% + 2px); }
+}
 .palette-rail--editor-transition { pointer-events: none; }
 .palette-chip {
   display: flex;
@@ -1843,7 +1859,10 @@ body.about-modal-open { overflow: hidden; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
-  display: none;
+  /* Always laid out (it's positioned / out of flow); shown & hidden via
+     opacity + visibility so BOTH opening and closing animate. Toggling
+     display can't transition, which is why the old close was instant. */
+  display: flex;
   flex-direction: column;
   z-index: 200;
   /* The always-on export preview can make the panel taller than short
@@ -1855,6 +1874,13 @@ body.about-modal-open { overflow: hidden; }
      a rounded overflow:auto box flashes unpainted (transparent) corners during
      momentum scroll. */
   overflow: hidden;
+  /* Hidden resting state; the open/dismissed rules below flip it. visibility is
+     delayed on the way out so the sheet stays visible through the fade. */
+  opacity: 0;
+  transform: translateY(-5px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
 }
 .settings-panel-scroll {
   display: flex;
@@ -1882,22 +1908,58 @@ body.about-modal-open { overflow: hidden; }
   height: 8px;
 }
 
-.settings-wrap:hover .settings-panel {
-  display: flex;
-  animation: panel-in 0.14s ease-out;
+.settings-wrap:hover .settings-panel,
+.settings-wrap.settings-open .settings-panel {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.18s ease, transform 0.18s ease; /* visibility flips in immediately */
 }
 /* Click/tap toggle: JS opens with .settings-open; .settings-dismissed force-
    closes even while the button is still hovered/tapped (it beats :hover by
-   coming later at equal specificity), so a second click/tap closes the panel. */
-.settings-wrap.settings-open .settings-panel {
-  display: flex;
-  animation: panel-in 0.14s ease-out;
+   coming later at equal specificity), so a second click/tap closes the panel.
+   It re-states the transition (with the delayed visibility) so the fade-out
+   still runs while a sticky touch :hover would otherwise keep visibility instant. */
+.settings-wrap.settings-dismissed .settings-panel {
+  opacity: 0;
+  transform: translateY(-5px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
 }
-.settings-wrap.settings-dismissed .settings-panel { display: none; }
 
-@keyframes panel-in {
-  from { opacity: 0; transform: translateY(-5px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* Mobile modal dim: sits behind the sheet (below the panel, above the app) and
+   fades in/out with it. A tap on it closes the popup (handler in setupHoverPopper).
+   Absent off the modal breakpoint (desktop dropdowns get no backdrop). Same
+   delayed-visibility trick as the panel so the fade-out survives sticky touch
+   :hover. */
+.settings-backdrop { display: none; }
+@media (max-width: 640px) {
+  .settings-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+  }
+  .settings-wrap:hover .settings-backdrop,
+  .settings-wrap.settings-open .settings-backdrop {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.18s ease;
+  }
+  .settings-wrap.settings-dismissed .settings-backdrop {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+  }
 }
 
 /* ── Layout preview popper ─────────────────────────────────────────────────── */

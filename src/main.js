@@ -3423,6 +3423,15 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   const openIt  = () => { sOpen = true;  wrap.classList.remove('settings-dismissed'); wrap.classList.add('settings-open'); refresh(); };
   const closeIt = () => { sOpen = false; wrap.classList.remove('settings-open'); wrap.classList.add('settings-dismissed'); btn.blur(); };
   const reset   = () => { sOpen = false; wrap.classList.remove('settings-open', 'settings-dismissed'); };
+  // Mobile: a dim backdrop behind the modal sheet. It lives inside the wrap (so
+  // the outside-close below, which treats anything in the wrap as "not outside",
+  // ignores it) but carries its own tap-to-close — the standard modal dismissal.
+  // CSS fades it in/out with the sheet and hides it entirely off the modal size.
+  const backdrop = document.createElement('div');
+  backdrop.className = 'settings-backdrop';
+  backdrop.setAttribute('aria-hidden', 'true');
+  wrap.appendChild(backdrop);
+  backdrop.addEventListener('pointerdown', () => closeIt());
   btn.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') openIt(); });
   wrap.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') reset(); });
   btn.addEventListener('click', () => { sOpen ? closeIt() : openIt(); });
@@ -5613,6 +5622,12 @@ function renderPalette() {
   paletteToggleCount.hidden = palette.length === 0;
   paletteRail.innerHTML = '';
 
+  // All rail content lives in one wrapper so it can be sized just past the rail
+  // on touch (min-height: 100% + 1px) — a 1px scroll range even with few colors,
+  // so the list stays draggable (elastic) instead of feeling locked.
+  const railContent = document.createElement('div');
+  railContent.className = 'palette-rail-content';
+
   // Two role groups (Text = wheel colors, Background = custom colors), always
   // shown so each has an "add the current color" button — even when empty.
   // Within a group the top chip is primary, the second secondary.
@@ -5735,8 +5750,9 @@ function renderPalette() {
     list.appendChild(chip);
     });
 
-    paletteRail.appendChild(group);
+    railContent.appendChild(group);
   });
+  paletteRail.appendChild(railContent);
 
   reinsertChipEditor();
   renderPalettePreviews();
