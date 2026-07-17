@@ -130,6 +130,13 @@ function contrastRatio(l1, l2) {
  * L=0→black(0), L=1→white(1) for any H,S — every target is reachable.
  */
 function findLightness(h, s, target) {
+  // Endpoints are hue/sat-independent and exact: hsl(h,s,1) is white (lum 1) and
+  // hsl(h,s,0) is black (lum 0) for any h,s. Return them directly — otherwise the
+  // bisection's `<` comparison settles a rounding step BELOW the target at the top,
+  // so a max-luminance pick (e.g. the underlay Lum slider fully right) landed on
+  // #FEFEFE instead of #FFFFFF.
+  if (target >= 1) return 1;
+  if (target <= 0) return 0;
   let lo = 0, hi = 1;
   for (let i = 0; i < 18; i++) {
     const mid = (lo + hi) * 0.5;
@@ -172,6 +179,72 @@ function selectedRgbBiased() {
 
 function toHex(r, g, b) {
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+// ─── Alpha / hex8 / compositing ───────────────────────────────────────────────
+// Colours carry an optional alpha (0–1). It's encoded as an 8-digit hex only when
+// translucent (#rrggbbAA); fully opaque stays 6-digit (backward compatible — old
+// saves / links parse as opaque). Contrast composites a translucent colour over
+// its background in sRGB (matching how CSS paints rgba over an opaque layer).
+// Page underlay a translucent BG composites over for contrast (and swatch
+// display). Elements are mutated in place by the Preferences underlay picker.
+const underlayRgb = [255, 255, 255];
+
+/** 8-digit hex when a<1, else 6-digit. r,g,b are 0–255 ints; a is 0–1. */
+function toHexA(r, g, b, a) {
+  if (a == null || a >= 0.9995) return toHex(r, g, b);
+  const aa = Math.round(a * 255).toString(16).padStart(2, '0');
+  return (toHex(r, g, b) + aa).toUpperCase();
+}
+/** Normalize a typed hex to full form. Accepts 3/4/6/8 hex digits with an optional
+    leading #; 3→#rrggbb and 4→#rrggbbaa expand each digit (e.g. fc0 → #ffcc00,
+    #f00a → #ff0000aa). Returns null if not a valid hex length/charset. */
+function normalizeHexInput(str) {
+  let h = String(str).trim().replace(/^#/, '').toLowerCase();
+  if (!/^[0-9a-f]+$/.test(h)) return null;
+  if (h.length === 3 || h.length === 4) h = h.split('').map(c => c + c).join('');
+  return (h.length === 6 || h.length === 8) ? '#' + h : null;
+}
+/** Parse #rgb6 or #rgb8 → [r,g,b,a] (a is 0–1; 1 when no alpha given). */
+function hexToRgba(hex) {
+  const h = hex.replace('#', '');
+  const [r, g, b] = hexToRgb('#' + h.slice(0, 6));
+  const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+  return [r, g, b, a];
+}
+/** Composite a colour (fgRgb at alpha a) over an opaque bgRgb, in sRGB. */
+function compositeRgb(fgRgb, a, bgRgb) {
+  if (a >= 0.9995) return [fgRgb[0], fgRgb[1], fgRgb[2]];
+  return [0, 1, 2].map(i => Math.round(fgRgb[i] * a + bgRgb[i] * (1 - a)));
+}
+/** A background's effective opaque colour: itself if opaque, else over the white page. */
+function effBgRgb(bgRgb, bgA) { return compositeRgb(bgRgb, bgA, underlayRgb); }
+
+// ── Hue-invariant (luminance-space) compositing for the contrast ANCHORS ─────
+// A luminance-locked colour has the same luminance at every hue, but compositing
+// it (translucent) over a background mixes RGB channels, so the composited
+// luminance would still drift with hue. For the anchor-based status we therefore
+// composite the GRAY equivalents of the held luminances — hue-invariant by
+// construction, so a Lum-picker hue/sat sweep can't shift the verdict.
+function grayForRelLum(L) { // sRGB gray channel (0–255) with WCAG relative luminance L
+  L = Math.max(0, Math.min(1, L));
+  const c = L <= 0.0031308 ? L * 12.92 : 1.055 * Math.pow(L, 1 / 2.4) - 0.055;
+  return c * 255;
+}
+function compositeRelLum(fgL, a, bgL) { // composited relative luminance (gray-space)
+  if (a >= 0.9995) return fgL;
+  const g = grayForRelLum(fgL) * a + grayForRelLum(bgL) * (1 - a); // 0–255 gray, non-integer
+  // The gray channel is fractional, so linearize it directly — relativeLuminance()
+  // indexes the integer LINEAR LUT (LINEAR[160.6] → undefined → NaN). For a gray the
+  // three luminance weights sum to 1, so its luminance IS the linearized channel.
+  const n = g / 255;
+  return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+}
+function grayForYs(ys) { return Math.pow(Math.max(0, Math.min(1, ys)), 1 / 2.4) * 255; } // APCA Ys is a plain 2.4 power
+function compositeYs(fgYs, a, bgYs) { // composited APCA screen luminance (gray-space)
+  if (a >= 0.9995) return fgYs;
+  const g = grayForYs(fgYs) * a + grayForYs(bgYs) * (1 - a);
+  return apcaY(g, g, g);
 }
 
 let currentCvd = '';
@@ -284,10 +357,13 @@ function rgbToOklch(r, g, b) {
   return [L, C, C < 1e-4 ? 0 : H]; // achromatic → hue undefined, normalize to 0
 }
 
-/** OKLCH as a CSS oklch() string, e.g. 'oklch(62.79% 0.2577 29.23)'. */
+/** OKLCH as a CSS oklch() string, e.g. 'oklch(62.79% 0.2577 29.23)'. An 8-digit
+    hex adds an alpha: 'oklch(… / 0.5)'. */
 function oklchCss(hex) {
   const [L, C, H] = rgbToOklch(...hexToRgb(hex));
-  return `oklch(${(L * 100).toFixed(2)}% ${C.toFixed(4)} ${H.toFixed(2)})`;
+  const a = hexToRgba(hex)[3];
+  const base = `oklch(${(L * 100).toFixed(2)}% ${C.toFixed(4)} ${H.toFixed(2)}`;
+  return a < 0.9995 ? `${base} / ${+a.toFixed(3)})` : `${base})`;
 }
 
 /** OKLCH as a DTCG color-object `components` array [L, C, H] with tidy precision. */
@@ -296,10 +372,11 @@ function oklchComponents(hex) {
   return [+L.toFixed(4), +C.toFixed(4), +H.toFixed(2)];
 }
 
-/** sRGB as a CSS rgb() string, e.g. 'rgb(76 187 255)'. */
+/** sRGB as a CSS rgb() string, e.g. 'rgb(76 187 255)'. An 8-digit hex adds an
+    alpha: 'rgb(76 187 255 / 0.5)' (CSS Color 4 slash syntax). */
 function rgbCss(hex) {
-  const [r, g, b] = hexToRgb(hex);
-  return `rgb(${r} ${g} ${b})`;
+  const [r, g, b, a] = hexToRgba(hex);
+  return a < 0.9995 ? `rgb(${r} ${g} ${b} / ${+a.toFixed(3)})` : `rgb(${r} ${g} ${b})`;
 }
 
 /**
@@ -359,10 +436,18 @@ function bgLumAnchor() {
     moves only when a luminance actually changes (Lum/RGB edits, lock repins). */
 function apcaAnchorLc(tile) {
   if (contrastLockMode !== 'apca') return undefined;
-  if (tile === 'pvw') return apcaLcYs(targetLum, 1);
-  if (tile === 'pvb') return apcaLcYs(targetLum, 0);
-  if (tile === 'pa')  return apcaLcYs(targetLum, bgLumAnchor());
-  return apcaLcYs(bgLumAnchor(), targetLum); // 'pb'
+  const uY = apcaY(...underlayRgb);
+  // Composite the held Ys anchors (gray-space) so alpha lowers |Lc| without the
+  // hue-dependence of RGB compositing. Opaque → compositeYs is a no-op.
+  if (tile === 'pvw') return apcaLcYs(compositeYs(targetLum, selAlpha, 1), 1);
+  if (tile === 'pvb') return apcaLcYs(compositeYs(targetLum, selAlpha, 0), 0);
+  if (tile === 'pa') { // text = wheel on bg = custom
+    const bY = compositeYs(bgLumAnchor(), cAlpha, uY);
+    return apcaLcYs(compositeYs(targetLum, selAlpha, bY), bY);
+  }
+  // 'pb' — text = custom on bg = wheel
+  const bY = compositeYs(targetLum, selAlpha, uY);
+  return apcaLcYs(compositeYs(bgLumAnchor(), cAlpha, bY), bY);
 }
 
 // WCAG counterpart of apcaAnchorLc: judge the ratio/badges from the CONTINUOUS
@@ -920,42 +1005,41 @@ function buildPreviewWcag(el) {
  * @param {number[]} [txtRgb]  text color RGB (for the experimental APCA readout)
  * @param {number[]} [bgRgb]   bg color RGB (for the experimental APCA readout)
  */
-// ─── Verdict anti-flicker (v2 beta) ──────────────────────────────────────────
-// During a drag the contrast lock re-pins the free side a frame behind the
-// user's input, so the pair can sit on the wrong side of a threshold for a
-// single frame and the pass/fail chips flicker. The DISCRETE verdict state
-// (badge passes, APCA tier, font verdict) therefore only switches after the
-// new state has persisted for VERDICT_STABLE_MS — one-frame artifacts never
-// render, real changes appear ~50–70ms late while dragging, and a trailing
-// settle pass guarantees the exact state once input stops. Ratio/Lc numbers
-// and all colour adaptation stay per-frame. (The frame now enforces the lock
-// BEFORE drawing, so lock transients no longer exist at the render layer —
-// this window only guards residual jitter, e.g. slider tracks rebuilt
-// mid-drag on slow devices.)
-const VERDICT_STABLE_MS = 50;
-let _verdictSettleTimer = 0;
-function scheduleVerdictSettle() {
-  clearTimeout(_verdictSettleTimer);
-  _verdictSettleTimer = setTimeout(() => updateUI(), VERDICT_STABLE_MS + 40);
-}
-
+// ─── Contrast preview verdicts ───────────────────────────────────────────────
+// The pass/fail chips, APCA usage tier and font verdict are computed and shown
+// per-frame from the SAME values as the ratio/Lc labels — never debounced — so
+// the number a user reads and the verdict beside it can never disagree, even
+// mid-drag. The frame enforces the lock BEFORE drawing and the status reads
+// hue-invariant anchors, so there are no transient wrong-side frames to hide.
 function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedPair) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
+  // Locked pair: the WCAG lock pins this ratio to exactly its target, but the numeric
+  // solve (gray-composite anchor) can land a hair under while it still ROUNDS UP to the
+  // target in the label — which then read as "achieved" while the AA/AAA chip judged the
+  // raw value as a miss. Snap a within-rounding locked ratio up to the target so the
+  // label, the chips and the lock's own "met" state never disagree. Unreachable
+  // best-effort pins sit far below the target, so they don't snap (chip fails + message).
+  const ratioJudged = (lockedPair && _contrastLockMet && contrastLockMode === 'wcag2' && contrastLockTarget &&
+                       ratio >= contrastLockTarget - 0.005)
+    ? Math.max(ratio, contrastLockTarget) : ratio;
+  // Judge the AA/AAA chips from the EXACT value shown (2-dp rounded), so the ratio
+  // label and its chips can never disagree at a threshold (e.g. 4.4999 → shows "4.50"
+  // → AA passes, not the raw-value miss the label contradicts).
+  const ratioShown = Number(ratioJudged.toFixed(2));
   const isLight = bgLum > 0.179;
   const dim     = isLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
 
   if (dom.ratioEl) {
-    dom.ratioEl.textContent = ratio.toFixed(2) + ':1';
+    dom.ratioEl.textContent = ratioShown.toFixed(2) + ':1';
     dom.ratioEl.style.color = cvdTransformRgba(dim);
   }
-  // Discrete verdict state for this frame (filled below, then debounced).
-  const disc = { passes: dom.badges.map(({ threshold }) => ratio >= threshold), tier: '', tierTitle: '', font: null };
+  // Discrete verdict state for this frame (applied per-frame, in lockstep with labels).
+  const disc = { passes: dom.badges.map(({ threshold }) => ratioShown >= threshold), tier: '', tierTitle: '', font: null };
 
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
       const lc = (lcOverride !== undefined) ? lcOverride : apcaLc(txtRgb, bgRgb);
-      dom.apcaEl.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // APCA is size/weight-dependent — judge the chosen font against the
       // official lookup (apcaFontVerdict, shared with the chip editor so both
@@ -966,25 +1050,36 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
       // desktop re-fits the app's zoom); it's just hidden via visibility in
       // non-APCA modes (see .preview-verdict-apca).
       {
+        // Judge the discrete APCA verdicts from the SAME |Lc| the label shows (the
+        // anchor lcOverride when provided). When the APCA lock pins this pair, the anchor
+        // sits within display-rounding of the target — snap it up so the tier/font
+        // verdict, the "Lc" label and the lock's "met" state always agree. The old
+        // condition tested the RENDERED composite pair instead, which in translucent mode
+        // can read below the target while the anchor (what the lock actually holds and
+        // the label shows) is exactly on it — so the label read "met" while the chip
+        // showed a miss. Unreachable best-effort pins sit well below, so they don't snap.
         let lcAbs = Math.abs(lc);
-        // With the APCA lock met, the pinned side sits on the first representable
-        // RGB at-or-beyond the target, so the measured |Lc| hovers within a
-        // quantization-sized, position-dependent band around the target — enough
-        // to wiggle the interpolated minimum font size while a Lum slider moves
-        // even though the lock never breaks. The locked pair therefore judges its
-        // discrete verdicts at exactly the target while it is met (decided on the
-        // rendered quantized pair — the lock's own guarantee — since the anchor Lc
-        // can sit a fraction under the target while the rendered pair satisfies it).
-        if (lockedPair && apcaLockTarget && Math.abs(apcaLc(txtRgb, bgRgb)) >= apcaLockTarget - 1e-6) {
+        // Snap to the target only while the lock actually MEETS it (not a best-effort
+        // pin) AND this tile's |Lc| is within display-rounding of it — so an unreachable
+        // pin reads as a miss (matching the "can't reach" message), and a tile sitting
+        // well ABOVE the target (e.g. the reverse-polarity tile) keeps its own verdict
+        // instead of being clamped down to the target.
+        if (lockedPair && _contrastLockMet && apcaLockTarget && Math.abs(lcAbs - apcaLockTarget) <= 0.5) {
           lcAbs = apcaLockTarget;
         }
+        // Label uses floor(|Lc|+0.3): the usage ladder steps 0.3 before each integer
+        // (…44.7, 59.7…), so this shows the SAME integer the tier switches on — the "Lc N"
+        // number and its usage tier can never straddle a boundary (no "Lc 15 / INVISIBLE").
+        // Tier/font judge the EXACT fractional |Lc| so a fractional Type-lock target (e.g.
+        // 43.2) still verdicts precisely — rounding it would drop the font below threshold.
+        const lcLabel = Math.floor(lcAbs + 0.3);
+        dom.apcaEl.textContent = 'Lc ' + (lcLabel === 0 ? '0' : (lc < 0 ? -lcLabel : lcLabel));
         disc.tier = apcaUsageTier(lcAbs);
-        disc.tierTitle = 'APCA usage level for |Lc| ' + lcAbs.toFixed(0) + ' (reference-tool ladder)';
+        disc.tierTitle = 'APCA usage level for |Lc| ' + lcLabel + ' (reference-tool ladder)';
         disc.font = apcaFontVerdict(lcAbs);
       }
     } else {
       dom.apcaEl.textContent = '';
-      dom._shownKey = undefined; // reset the debounce when the readouts vanish
       if (dom.apcaTierEl) dom.apcaTierEl.textContent = '';
       if (dom.apcaFontEl) dom.apcaFontEl.textContent = '';
     }
@@ -1018,24 +1113,11 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
   if (dom.wghtSel && dom.wghtSel.value !== String(apcaFontWeight)) dom.wghtSel.value = String(apcaFontWeight);
   for (const catEl of dom.cats) catEl.style.color = cvdTransformRgba(dim);
 
-  // ── Stability debounce: adopt `disc` only once it has persisted ──
-  const key = JSON.stringify(disc);
-  const now = performance.now();
-  if (dom._shownKey === undefined) {
-    dom._shownKey = key; dom._shownDisc = disc; dom._pendKey = null;
-  } else if (key === dom._shownKey) {
-    dom._pendKey = null; dom._shownDisc = disc; // same state; refresh payload
-  } else if (key === dom._pendKey) {
-    if (now - dom._pendTs >= VERDICT_STABLE_MS) {
-      dom._shownKey = key; dom._shownDisc = disc; dom._pendKey = null;
-    } else {
-      scheduleVerdictSettle(); // still maturing — guarantee a trailing commit
-    }
-  } else {
-    dom._pendKey = key; dom._pendTs = now;
-    scheduleVerdictSettle();
-  }
-  const shown = dom._shownDisc;
+  // Verdicts apply per-frame, in lockstep with the ratio/Lc labels they're derived
+  // from — so the shown number and its pass/fail chips, usage tier and font verdict
+  // never disagree, even mid-drag. (The lock enforces before the draw and the status
+  // reads hue-invariant anchors, so no transient wrong-side frame is left to hide.)
+  const shown = disc;
 
   if (dom.apcaTierEl) {
     dom.apcaTierEl.textContent = shown.tier;
@@ -1075,20 +1157,31 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
  * @param {number} selectedLum
  */
 function updatePreviewFixed(selectedHex, selectedLum) {
+  const selRgb = hexToRgb(selectedHex);
+  const a = selAlpha;
+  const translucent = a < 0.9995;
+  // Translucent text is shown (and judged) composited over the tile's background.
+  const textCss = translucent
+    ? cvdTransformRgba(`rgba(${selRgb[0]},${selRgb[1]},${selRgb[2]},${a})`)
+    : cvdTransformHex(selectedHex);
+
   // vs White (bg lum = 1, isLight = true)
   const tileW = /** @type {HTMLElement} */ (document.getElementById('preview-white'));
   tileW.style.background = cvdTransformHex('#ffffff');
   tileW.style.setProperty('--tile-bg', cvdTransformHex('#ffffff'));
   tileW.style.color = cvdTransformRgba('rgba(0,0,0,0.55)');
-  /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.background = cvdTransformHex(selectedHex);
+  /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.background = textCss;
   /** @type {HTMLElement} */ (document.getElementById('pvw-text-dot')).style.borderColor = cvdTransformRgba('rgba(0,0,0,0.2)');
   for (const id of ['pvw-display', 'pvw-body', 'pvw-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(selectedHex);
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = textCss;
   }
+  const onW = compositeRgb(selRgb, a, [255, 255, 255]);
+  // Text is luminance-locked, so judge from the gray-composited anchor (hue-
+  // invariant) in the anchor regime; live composite otherwise.
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
-    wcagTextLum(selectedLum), 1, 1,
-    hexToRgb(selectedHex), [255, 255, 255],
+    (wcagJudgesAnchor() || a < 0.9995) ? compositeRelLum(targetLum, a, 1) : relativeLuminance(...onW), 1, 1,
+    onW, [255, 255, 255],
     apcaAnchorLc('pvw'),
   );
 
@@ -1097,15 +1190,16 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   tileB.style.background = cvdTransformHex('#000000');
   tileB.style.setProperty('--tile-bg', cvdTransformHex('#000000'));
   tileB.style.color = cvdTransformRgba('rgba(255,255,255,0.55)');
-  /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.background = cvdTransformHex(selectedHex);
+  /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.background = textCss;
   /** @type {HTMLElement} */ (document.getElementById('pvb-text-dot')).style.borderColor = cvdTransformRgba('rgba(255,255,255,0.25)');
   for (const id of ['pvb-display', 'pvb-body', 'pvb-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(selectedHex);
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = textCss;
   }
+  const onB = compositeRgb(selRgb, a, [0, 0, 0]);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
-    wcagTextLum(selectedLum), 0, 0,
-    hexToRgb(selectedHex), [0, 0, 0],
+    (wcagJudgesAnchor() || a < 0.9995) ? compositeRelLum(targetLum, a, 0) : relativeLuminance(...onB), 0, 0,
+    onB, [0, 0, 0],
     apcaAnchorLc('pvb'),
   );
 }
@@ -1118,52 +1212,79 @@ function updatePreviewFixed(selectedHex, selectedLum) {
  * @param {number} customLum    Relative luminance of custom color
  */
 function updatePreview(selectedHex, customHex, selectedLum, customLum) {
+  const selRgb = hexToRgb(selectedHex), cusRgb = [cR, cG, cB];
+  // Each side's effective opaque colour when it acts as a BACKGROUND (over the
+  // white page), and the translucent CSS colour for when it's shown as TEXT.
+  const effBgCustom = effBgRgb(cusRgb, cAlpha);            // custom as bg
+  const effBgSel    = effBgRgb(selRgb, selAlpha);          // selected as bg
+  const selTextCss = selAlpha < 0.9995 ? cvdTransformRgba(`rgba(${selRgb[0]},${selRgb[1]},${selRgb[2]},${selAlpha})`) : cvdTransformHex(selectedHex);
+  const cusTextCss = cAlpha  < 0.9995 ? cvdTransformRgba(`rgba(${cusRgb[0]},${cusRgb[1]},${cusRgb[2]},${cAlpha})`)     : cvdTransformHex(customHex);
+  const selBgCss = cvdTransformHex(toHex(...effBgSel));
+  const cusBgCss = cvdTransformHex(toHex(...effBgCustom));
+
   // ── Tile A: selected color as TEXT on custom BACKGROUND ──
   const tileA  = /** @type {HTMLElement} */ (document.getElementById('preview-a'));
-  const fgA    = getForeground(customLum);
-  const dotBorderA = customLum > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
-  tileA.style.background = cvdTransformHex(customHex);
-  tileA.style.setProperty('--tile-bg', cvdTransformHex(customHex));
+  const fgA    = getForeground(relativeLuminance(...effBgCustom));
+  const dotBorderA = relativeLuminance(...effBgCustom) > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
+  tileA.style.background = cusBgCss;
+  tileA.style.setProperty('--tile-bg', cusBgCss);
   tileA.style.color      = cvdTransformHex(fgA);  // inherited by role labels
 
   for (const id of ['pa-display', 'pa-body', 'pa-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(selectedHex);
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = selTextCss;
   }
   const paTxt = /** @type {HTMLElement} */ (document.getElementById('pa-text-dot'));
   const paBg  = /** @type {HTMLElement} */ (document.getElementById('pa-bg-dot'));
-  paTxt.style.background   = cvdTransformHex(selectedHex);
+  paTxt.style.background   = selTextCss;
   paTxt.style.borderColor  = cvdTransformRgba(dotBorderA);
-  paBg.style.background    = cvdTransformHex(customHex);
+  paBg.style.background    = cusBgCss;
   paBg.style.borderColor   = cvdTransformRgba(dotBorderA);
+  // Anchor regime: text is always luminance-locked (hue-invariant); the custom BG
+  // is luminance-held only in Lum mode. Held sides use the gray-composited anchor
+  // so a Lum-picker hue/sat sweep can't shift the verdict; Color/Gray & lock/APCA
+  // use the live composite.
+  // Translucent → always judge from the gray-composite anchor so the status
+  // matches what the contrast lock pins (no flicker / residual gap). Opaque keeps
+  // the v1.47 gate (anchor only when unlocked & non-APCA). bgLumAnchor() carries
+  // the held value (cuLum in Lum mode, the lock's solved value when locked) or the
+  // live luminance in Color/HSL mode (where the status may change — as intended).
+  const useAnchor = wcagJudgesAnchor() || selAlpha < 0.9995 || cAlpha < 0.9995;
+  const uRel = relativeLuminance(...underlayRgb);
+  const effTextA = compositeRgb(selRgb, selAlpha, effBgCustom);
+  const effBgRelA = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, uRel) : relativeLuminance(...effBgCustom);
+  const effTextRelA = useAnchor ? compositeRelLum(targetLum, selAlpha, effBgRelA) : relativeLuminance(...effTextA);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
-    wcagTextLum(selectedLum), wcagBgLum(customLum), customLum,
-    hexToRgb(selectedHex), hexToRgb(customHex),
-    apcaAnchorLc('pa'), true,
+    effTextRelA, effBgRelA, relativeLuminance(...effBgCustom),
+    effTextA, effBgCustom, apcaAnchorLc('pa'), true,
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
   const tileB  = /** @type {HTMLElement} */ (document.getElementById('preview-b'));
-  const fgB    = getForeground(selectedLum);
-  const dotBorderB = selectedLum > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
-  tileB.style.background = cvdTransformHex(selectedHex);
-  tileB.style.setProperty('--tile-bg', cvdTransformHex(selectedHex));
+  const fgB    = getForeground(relativeLuminance(...effBgSel));
+  const dotBorderB = relativeLuminance(...effBgSel) > 0.179 ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.25)';
+  tileB.style.background = selBgCss;
+  tileB.style.setProperty('--tile-bg', selBgCss);
   tileB.style.color      = cvdTransformHex(fgB);
 
   for (const id of ['pb-display', 'pb-body', 'pb-ui']) {
-    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cvdTransformHex(customHex);
+    /** @type {HTMLElement} */ (document.getElementById(id)).style.color = cusTextCss;
   }
   const pbTxt = /** @type {HTMLElement} */ (document.getElementById('pb-text-dot'));
   const pbBg  = /** @type {HTMLElement} */ (document.getElementById('pb-bg-dot'));
-  pbTxt.style.background   = cvdTransformHex(customHex);
+  pbTxt.style.background   = cusTextCss;
   pbTxt.style.borderColor  = cvdTransformRgba(dotBorderB);
-  pbBg.style.background    = cvdTransformHex(selectedHex);
+  pbBg.style.background    = selBgCss;
   pbBg.style.borderColor   = cvdTransformRgba(dotBorderB);
+  const effTextB = compositeRgb(cusRgb, cAlpha, effBgSel);
+  // Tile B: sel (wheel) is the BG here — always luminance-locked → held; custom is
+  // the TEXT — held only in Lum mode.
+  const effBgRelB  = useAnchor ? compositeRelLum(targetLum, selAlpha, uRel) : relativeLuminance(...effBgSel);
+  const effTextRelB = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, effBgRelB) : relativeLuminance(...effTextB);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
-    wcagBgLum(customLum), wcagTextLum(selectedLum), selectedLum,
-    hexToRgb(customHex), hexToRgb(selectedHex),
-    apcaAnchorLc('pb'), true,
+    effTextRelB, effBgRelB, relativeLuminance(...effBgSel),
+    effTextB, effBgSel, apcaAnchorLc('pb'), true,
   );
 }
 
@@ -1217,25 +1338,28 @@ requestAnimationFrame(updatePreviewFontSizes);             // once styles are ap
 function updateUI() {
   const [r, g, b] = selectedRgbBiased();
   const selLum    = relativeLuminance(r, g, b);
-  const selHex    = toHex(r, g, b);
+  const selHex    = toHex(r, g, b);            // opaque, for cvd/wheel/marker use
+  const selHexA   = toHexA(r, g, b, selAlpha); // 8-digit when translucent — field/export/storage
   const hsl       = rgbToHsl(r, g, b);
 
-  // Swatch + accent
-  const cvdSelHex = cvdTransformHex(selHex);
+  // Swatch + accent: show the colour AS IT APPEARS on the white page (composited
+  // over white when translucent), so the swatch reflects the opacity.
+  const swatchRgb = compositeRgb([r, g, b], selAlpha, underlayRgb);
+  const cvdSelHex = cvdTransformHex(toHex(...swatchRgb));
   const [cvdSelR, cvdSelG, cvdSelB] = hexToRgb(cvdSelHex);
   const cvdSelLum = relativeLuminance(cvdSelR, cvdSelG, cvdSelB);
 
   document.getElementById('swatch').style.background = cvdSelHex;
   const swatchHexEl = /** @type {HTMLInputElement} */ (document.getElementById('swatch-hex'));
   // Don't clobber the field while the user is typing/editing it.
-  if (document.activeElement !== swatchHexEl) swatchHexEl.value = formatHex(selHex);
+  if (document.activeElement !== swatchHexEl) swatchHexEl.value = formatHex(selHexA);
   // The pin overlays the coloured swatch, so tint it to stay legible on top.
   /** @type {HTMLElement} */ (document.getElementById('pin-selected')).style.color =
     cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
   document.documentElement.style.setProperty('--accent', cvdSelHex);
 
   // Data grid
-  document.getElementById('v-hex').textContent = formatHex(selHex);
+  document.getElementById('v-hex').textContent = formatHex(selHexA);
   document.getElementById('v-lum').textContent = selLum.toFixed(4);
   const hH = Math.round(hsl[0]), hS = Math.round(hsl[1] * 100), hL = Math.round(hsl[2] * 100);
   setUnitVal(document.getElementById('vh-h'), hH, '°');
@@ -1257,11 +1381,17 @@ function updateUI() {
   updateLumSliderTrack();
   updateHueSliderTrack();
   updateSatSliderTrack();
+  // Alpha slider + readout (don't clobber the field while typing)
+  const alphaSl = /** @type {HTMLInputElement} */ (document.getElementById('alpha-slider'));
+  const alphaVal = /** @type {HTMLInputElement} */ (document.getElementById('alpha-val'));
+  if (alphaSl) alphaSl.value = String(Math.round(selAlpha * 100));
+  if (alphaVal && document.activeElement !== alphaVal) alphaVal.value = Math.round(selAlpha * 100) + '%';
 }
 
 // ─── State & helpers ──────────────────────────────────────────────────────────
 
 let selHue = 312, selSat = 1, targetLum = 0.546;
+let selAlpha = 1; // main (TEXT) opacity, 0–1
 let selX = CSS_SZ / 2, selY = CSS_SZ / 2;
 let isDown = false;
 
@@ -1269,6 +1399,7 @@ let isDown = false;
 let customColor = '#66001B';
 let cR = 102, cG = 0, cB = 27;
 let cH = 344, cS = 1, cL = 0.2;
+let cAlpha = 1; // custom (BG) opacity, 0–1
 
 // Custom panel mode: 'color' | 'gray' | 'lum'
 let customMode = 'color';
@@ -1305,6 +1436,13 @@ function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
     opt-out and upper-cases (so tooltips, swatch names, the chip editor field
     and swatch-copied values all drop the # when the option is off). */
 function hexDisplay(hex) { return formatHex(hex).toUpperCase(); }
+/** CVD-transformed swatch colour for a (possibly 8-digit / translucent) hex:
+    composite over the white page first so it renders correctly and reflects the
+    opacity. Use wherever a swatch background shows a stored palette colour. */
+function cvdDisplayHex(hex) {
+  const [r, g, b, a] = hexToRgba(hex);
+  return cvdTransformHex(toHex(...compositeRgb([r, g, b], a, underlayRgb)));
+}
 
 // ─── RAF render scheduler ─────────────────────────────────────────────────────
 // iOS fires slider input events well above 60 Hz. Without throttling, each
@@ -1377,6 +1515,11 @@ let _userDirty = false; // fresh user input coalesced into an enforcement-schedu
 let _pendingUserSide = null; // side ('fg'|'bg') the user touched for the pending frame
 let _inEnforcement = false;  // renders scheduled while true originate from the lock, not the user
 let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
+// Whether the active lock currently MEETS its target (vs. a best-effort pin when the
+// target is unreachable). The preview snaps a locked pair's verdict to the exact target
+// only while this is true — otherwise the unreachable best-effort |Lc|/ratio would snap
+// up and read as "achieved" while the lock itself shows "can't reach …".
+let _contrastLockMet = false;
 
 /**
  * Most moderate luminance for the free side that reaches `ratio` against
@@ -1465,16 +1608,124 @@ function lockFreeAtRgb(changed, rgb) {
   return rgb[0] === cur[0] && rgb[1] === cur[1] && rgb[2] === cur[2];
 }
 
+// ── Alpha-aware contrast lock ────────────────────────────────────────────────
+// When either side is translucent, the lock must hold the COMPOSITED (visible)
+// contrast, not the opaque one. The closed-form WCAG solve and the APCA branch
+// search both assume opaque colours, so for the translucent case we numerically
+// search the free side's underlying luminance for the point where the effective
+// contrast meets the target — mirroring how the contrast tiles composite.
+function lockHasAlpha() { return selAlpha < 0.9995 || cAlpha < 0.9995; }
+
+/** Composited contrast at a candidate free-side luminance, computed in the SAME
+    gray-composite luminance space as the status readouts (compositeRelLum /
+    compositeYs) — so the lock pins exactly what the badges judge (no flicker, no
+    residual gap after a Lum/Alpha drag). `lum`, targetLum and bgLumAnchor() are
+    all in wheelLum units (relative luminance in WCAG mode, Ys in APCA mode). */
+function effLockMetricAt(changed, lum, metric) {
+  const apca = metric === 'apca';
+  const uL = apca ? apcaY(...underlayRgb) : relativeLuminance(...underlayRgb);
+  const comp = apca ? compositeYs : compositeRelLum;
+  const fgL = changed === 'fg' ? targetLum : lum;      // wheel = text; free when changed==='bg'
+  const bgL = changed === 'fg' ? lum : bgLumAnchor();  // custom = bg;  free when changed==='fg'
+  const eb = comp(bgL, cAlpha, uL);
+  const et = comp(fgL, selAlpha, eb);
+  return apca ? Math.abs(apcaLcYs(et, eb)) : contrastRatio(et, eb);
+}
+
+/** Free-side underlying luminance for the translucent lock, as {lum, reached}:
+    - reached: a luminance whose composited contrast meets `target`, chosen nearest
+      the current one (least disruptive).
+    - !reached (target unreachable at this opacity): the luminance that MAXIMISES the
+      composited contrast — a best-effort pin so the pair gets as close as physically
+      possible while the caller shows a "can't reach" message, instead of leaving the
+      free side stranded (which read as the lock silently not following). */
+function solveLockAlpha(changed, metric, target) {
+  const cur = changed === 'fg' ? wheelLum(cR, cG, cB) : wheelLum(...selectedRgbBiased());
+  const m = lum => effLockMetricAt(changed, lum, metric);
+  const f = lum => m(lum) - target;
+  const N = 256;
+  const bounds = [];
+  let prevL = 0, prevF = f(0), bestL = 0, bestM = m(0);
+  for (let i = 1; i <= N; i++) {
+    const l = i / N, fl = f(l), ml = fl + target;
+    if (ml > bestM) { bestM = ml; bestL = l; }
+    if ((prevF < 0) !== (fl < 0)) { // sign change ⇒ a target-boundary between prevL and l
+      let lo = prevL, hi = l;
+      for (let k = 0; k < 28; k++) { const mid = (lo + hi) / 2; if ((f(mid) < 0) === (prevF < 0)) lo = mid; else hi = mid; }
+      bounds.push((lo + hi) / 2);
+    }
+    prevL = l; prevF = fl;
+  }
+  if (bounds.length) {
+    bounds.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
+    return { lum: bounds[0], reached: true };
+  }
+  if (f(0) >= 0 || f(1) >= 0) return { lum: cur, reached: true }; // meets everywhere → keep
+  // Unreachable: refine the coarse argmax (the max sits at/near an endpoint since a
+  // boundary would exist if the peak cleared the target) and pin there, best-effort.
+  let lo = Math.max(0, bestL - 1 / N), hi = Math.min(1, bestL + 1 / N);
+  for (let k = 0; k < 24; k++) {
+    const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
+    if (m(a) < m(b)) lo = a; else hi = b;
+  }
+  return { lum: (lo + hi) / 2, reached: false };
+}
+
+/** Pin the free side to continuous luminance `desired` for the translucent lock.
+    The status/anchors judge the CONTINUOUS held luminance, so it must track `desired`
+    exactly every tick — otherwise the badge drifts off-target between 8-bit steps (the
+    flicker) and can end a drag below target. The quantized RGB is only re-set when it
+    would actually change, so a steady-state re-enforce (the settle pass) refreshes the
+    anchor WITHOUT scheduling a render — which would otherwise loop the settle forever. */
+function applyLockAlpha(changed, desired) {
+  if (!lockFreeAtRgb(changed, lockFreeRgbAt(changed, desired))) {
+    applyLockAdjustment(changed, desired); // RGB moves → full setter + render + anchor
+    return;
+  }
+  if (changed === 'fg') {                  // free = custom bg
+    // In LUM mode the status/anchor reads cuLum (not _bgHeldLum), so refresh THAT too —
+    // otherwise a quantization-unchanged pin leaves cuLum stale and tile A shows the old
+    // (sub-target) ratio while the lock reports "met" (e.g. 6.98 under a 7:1 lock).
+    if (customMode === 'lum') {
+      cuLum = desired;
+      const s = /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider'));
+      const v = /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-val'));
+      if (s) s.value = String(Math.round(cuLum * 1000));
+      if (v && document.activeElement !== v) v.value = cuLum.toFixed(3);
+    }
+    _bgHeldLum = desired;
+    _bgHeldRgb = cR + ',' + cG + ',' + cB;
+  } else {                                 // free = wheel text; anchor is targetLum itself
+    targetLum = desired;
+    lumSlider.value = String(Math.round(targetLum * 1000));
+    if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
+    saveToStorage('sel-lum', String(targetLum));
+  }
+}
+
 function enforceContrastLock(changed) {
-  if (contrastLockMode === 'off') return;
+  if (contrastLockMode === 'off') { _contrastLockMet = false; return; }
   _inEnforcement = true;
   try { _enforceContrastLockInner(changed); } finally { _inEnforcement = false; }
 }
 
 function _enforceContrastLockInner(changed) {
   if (apcaLockActive()) { enforceApcaLock(changed); return; }
-  if (!contrastLockTarget) return;
+  if (!contrastLockTarget) { _contrastLockMet = false; return; }
   const R = contrastLockTarget;
+
+  // Translucent: pin so the COMPOSITED (visible) ratio meets R (numeric search;
+  // best-effort maximise when R is unreachable at this opacity).
+  if (lockHasAlpha()) {
+    const sol = solveLockAlpha(changed, 'wcag', R);
+    _contrastLockMet = sol.reached;
+    applyLockAlpha(changed, sol.lum);
+    setContrastLockError(
+      sol.reached ? '' : changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
+      sol.reached ? undefined : changed === 'fg' ? `No background reaches ${R}:1 at this opacity.` : `No wheel color reaches ${R}:1 at this opacity.`);
+    return;
+  }
+
   // Use the luminances of the actual rendered colors (RGB-quantized)
   const fgLum = relativeLuminance(...selectedRgbBiased());
   const bgLum = relativeLuminance(cR, cG, cB);
@@ -1482,6 +1733,7 @@ function _enforceContrastLockInner(changed) {
 
   const solved = solveContrastLum(fixedLum, R);
   if (solved === null) {
+    _contrastLockMet = false;
     setContrastLockError(
       changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
       changed === 'fg'
@@ -1489,6 +1741,7 @@ function _enforceContrastLockInner(changed) {
         : `No wheel color can reach ${R}:1 from this luminance.`);
     return;
   }
+  _contrastLockMet = true;
 
   // The free side is pinned to the exact boundary; directional quantization
   // in applyLockAdjustment guarantees the rendered color lands at-or-beyond
@@ -1518,7 +1771,21 @@ function _enforceContrastLockInner(changed) {
 
 function enforceApcaLock(changed) {
   const T = apcaLockTarget;
-  if (!T) return;
+  if (!T) { _contrastLockMet = false; return; }
+  const Td = Math.round(T); // integer for human-readable messages (T may be a fractional Type target)
+
+  // Translucent: pin so the COMPOSITED (visible) |Lc| meets T (numeric search;
+  // best-effort maximise when T is unreachable at this opacity).
+  if (lockHasAlpha()) {
+    const sol = solveLockAlpha(changed, 'apca', T);
+    _contrastLockMet = sol.reached;
+    applyLockAlpha(changed, sol.lum);
+    setContrastLockError(
+      sol.reached ? '' : changed === 'fg' ? `BG can't reach Lc ${Td}` : `Text can't reach Lc ${Td}`,
+      sol.reached ? undefined : changed === 'fg' ? `No background reaches |Lc| ${Td} at this opacity.` : `No wheel color reaches |Lc| ${Td} at this opacity.`);
+    return;
+  }
+
   const fgRgb = selectedRgbBiased();
   const bgRgb = [cR, cG, cB];
 
@@ -1555,13 +1822,15 @@ function enforceApcaLock(changed) {
   if (lcAt(1) >= T) candidates.push(solveBranch(1));
 
   if (!candidates.length) {
+    _contrastLockMet = false;
     setContrastLockError(
-      changed === 'fg' ? `BG can't reach Lc ${T}` : `Text can't reach Lc ${T}`,
+      changed === 'fg' ? `BG can't reach Lc ${Td}` : `Text can't reach Lc ${Td}`,
       changed === 'fg'
-        ? `No background can reach |Lc| ${T} against this text color.`
-        : `No wheel color can reach |Lc| ${T} on this background.`);
+        ? `No background can reach |Lc| ${Td} against this text color.`
+        : `No wheel color can reach |Lc| ${Td} on this background.`);
     return;
   }
+  _contrastLockMet = true;
 
   // Exact boundary — the directional quantization in applyLockAdjustment
   // only ever moves the color further from the split, so |Lc| stays ≥ T
@@ -1793,11 +2062,18 @@ function syncCustomControls() {
     }
   }
   const customSwatchEl = /** @type {HTMLElement} */ (document.getElementById('custom-swatch-display'));
-  const cvdCustomColor = cvdTransformHex(customColor);
+  // Show the swatch as it appears on the white page (composite when translucent).
+  const cvdCustomColor = cvdTransformHex(toHex(...compositeRgb([cR, cG, cB], cAlpha, underlayRgb)));
   const [cvdCustomR, cvdCustomG, cvdCustomB] = hexToRgb(cvdCustomColor);
   customSwatchEl.style.background = cvdCustomColor;
   customSwatchEl.style.color = relativeLuminance(cvdCustomR, cvdCustomG, cvdCustomB) > 0.179
     ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
+  // Alpha slider + readout — one per mode (Lum shows it 2nd, others last); all synced.
+  document.querySelectorAll('.custom-sliders-wrap .custom-alpha-slider').forEach(
+    sl => { /** @type {HTMLInputElement} */ (sl).value = String(Math.round(cAlpha * 100)); });
+  document.querySelectorAll('.custom-sliders-wrap .custom-alpha-val').forEach(
+    v => { if (document.activeElement !== v) /** @type {HTMLInputElement} */ (v).value = Math.round(cAlpha * 100) + '%'; });
+  saveToStorage('custom-alpha', String(cAlpha));
 
   const grayVal = Math.round(cL * 255);
   /** @type {HTMLInputElement} */ (document.getElementById('c-gray-slider')).value = String(grayVal);
@@ -1836,7 +2112,7 @@ function syncCustomControls() {
 
 /** Full sync including hex text input (use when change did NOT come from that input). */
 function syncCustomUI() {
-  /** @type {HTMLInputElement} */ (document.getElementById('custom-hex-input')).value = formatHex(toHex(cR, cG, cB));
+  /** @type {HTMLInputElement} */ (document.getElementById('custom-hex-input')).value = formatHex(toHexA(cR, cG, cB, cAlpha));
   syncCustomControls();
 }
 
@@ -1944,6 +2220,15 @@ const satSlider = /** @type {HTMLInputElement} */ (document.getElementById('sat-
 const lumValEl  = /** @type {HTMLInputElement} */ (document.getElementById('lum-val'));
 const hueValEl  = /** @type {HTMLInputElement} */ (document.getElementById('hue-val'));
 const satValEl  = /** @type {HTMLInputElement} */ (document.getElementById('sat-val'));
+const alphaSlider = /** @type {HTMLInputElement} */ (document.getElementById('alpha-slider'));
+const alphaValEl  = /** @type {HTMLInputElement} */ (document.getElementById('alpha-val'));
+
+alphaSlider.addEventListener('input', () => {
+  selAlpha = Math.max(0, Math.min(1, alphaSlider.value / 100));
+  if (document.activeElement !== alphaValEl) alphaValEl.value = Math.round(selAlpha * 100) + '%';
+  scheduleRender();
+  saveToStorage('sel-alpha', String(selAlpha));
+});
 
 lumSlider.addEventListener('input', () => {
   targetLum = lumSlider.value / 1000;
@@ -2003,6 +2288,14 @@ document.getElementById('c-gray-slider').addEventListener('input', e => {
   setCustomFromRgb(v, v, v);
 });
 
+// Opacity sliders (custom BG) — one per mode; all drive the same cAlpha.
+document.querySelectorAll('.custom-sliders-wrap .custom-alpha-slider').forEach(sl => {
+  sl.addEventListener('input', e => {
+    cAlpha = Math.max(0, Math.min(1, +/** @type {HTMLInputElement} */ (e.target).value / 100));
+    scheduleRender(false, true); // syncCustomControls syncs every alpha slider/readout
+  });
+});
+
 // ─── Lum mode sliders ─────────────────────────────────────────────────────────
 
 function setCustomFromLumHueSat(lum, hue, sat) {
@@ -2050,6 +2343,13 @@ wireValInput(satValEl, 0, 100, 1, str => Math.round(parseFloat(str)), v => v + '
   saveToStorage('sel-sat', String(selSat));
 });
 
+wireValInput(alphaValEl, 0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%', v => {
+  selAlpha = v / 100;
+  alphaSlider.value = String(v);
+  scheduleRender();
+  saveToStorage('sel-alpha', String(selAlpha));
+});
+
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('c-r-val')),
   0, 255, 1, str => Math.round(parseFloat(str)), String,
@@ -2086,6 +2386,11 @@ wireValInput(
   0, 255, 1, str => Math.round(parseFloat(str)), String,
   v => { /** @type {HTMLInputElement} */ (document.getElementById('c-gray-slider')).value = String(v); setCustomFromRgb(v, v, v); }
 );
+document.querySelectorAll('.custom-sliders-wrap .custom-alpha-val').forEach(el => wireValInput(
+  /** @type {HTMLInputElement} */ (el),
+  0, 100, 1, str => Math.round(parseFloat(str)), v => v + '%',
+  v => { cAlpha = v / 100; scheduleRender(false, true); }
+));
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-val')),
   0, 1, 0.001, parseFloat, v => v.toFixed(3),
@@ -2166,9 +2471,10 @@ document.getElementById('custom-tab-lum').addEventListener('click',   () => setC
 customHexInput.addEventListener('input', () => {
   let val = customHexInput.value.replace(/[^0-9a-fA-F#]/g, '');
   if (val && !val.startsWith('#')) val = '#' + val;
-  if (val.length > 7) val = val.slice(0, 7);
+  if (val.length > 9) val = val.slice(0, 9);
   customHexInput.value = val.toUpperCase();
-  if (/^#[0-9a-fA-F]{6}$/.test(val)) applyCustomHex(...hexToRgb(val));
+  const full = normalizeHexInput(val); // accepts 3/4/6/8-digit shorthand
+  if (full) applyCustomHex(...hexToRgba(full));
 });
 const customHexCopyIcon = /** @type {HTMLElement} */ (document.getElementById('custom-hex-copy-icon'));
 
@@ -2186,11 +2492,8 @@ function doCopyCustomHex() {
 customHexInput.addEventListener('click', () => customHexInput.select());
 customHexCopyIcon.addEventListener('click', doCopyCustomHex);
 customHexInput.addEventListener('blur', () => {
-  const v = customHexInput.value;
-  const full = /^#/i.test(v) ? v : '#' + v;
-  customHexInput.value = /^#[0-9a-fA-F]{6}$/i.test(full)
-    ? formatHex(full.toUpperCase())
-    : formatHex(customColor);
+  const full = normalizeHexInput(customHexInput.value); // expand shorthand / revert invalid
+  customHexInput.value = full ? formatHex(full.toUpperCase()) : formatHex(toHexA(cR, cG, cB, cAlpha));
 });
 customHexInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') customHexInput.blur();
@@ -2203,11 +2506,13 @@ customHexInput.addEventListener('keydown', e => {
 const swatchHexInput = /** @type {HTMLInputElement} */ (document.getElementById('swatch-hex'));
 const swatchHexCopy  = /** @type {HTMLElement} */ (document.getElementById('swatch-hex-copy'));
 
-function applyMainHex(r, g, b) {
+function applyMainHex(r, g, b, a = 1) {
   targetLum = wheelLum(r, g, b); // interpret under the active definition (WCAG / APCA Ys)
   const [h, s] = rgbToHsl(r, g, b);
   selHue = h;
   selSat = s;
+  selAlpha = Math.max(0, Math.min(1, a));
+  saveToStorage('sel-alpha', String(selAlpha));
   lumSlider.value = String(Math.round(targetLum * 1000));
   hueSlider.value = String(Math.round(selHue));
   satSlider.value = String(Math.round(selSat * 100));
@@ -2223,8 +2528,9 @@ function applyMainHex(r, g, b) {
 
 // Set the custom (background) picker from an RGB — the same path as typing a hex
 // into the custom field. Used by the custom hex input and the palette "recall".
-function applyCustomHex(r, g, b) {
+function applyCustomHex(r, g, b, a = 1) {
   cR = r; cG = g; cB = b;
+  cAlpha = Math.max(0, Math.min(1, a));
   [cH, cS, cL] = rgbToHsl(r, g, b);
   // Reseed the Lum-mode substate from the new colour too — otherwise a paste /
   // palette-recall while the BG picker is in Lum mode leaves the Lum wheel (drawn
@@ -2239,21 +2545,22 @@ function applyCustomHex(r, g, b) {
 swatchHexInput.addEventListener('input', () => {
   let val = swatchHexInput.value.replace(/[^0-9a-fA-F#]/g, '');
   if (val && !val.startsWith('#')) val = '#' + val;
-  if (val.length > 7) val = val.slice(0, 7);
+  if (val.length > 9) val = val.slice(0, 9);
   swatchHexInput.value = val.toUpperCase();
-  if (/^#[0-9a-fA-F]{6}$/.test(val)) applyMainHex(...hexToRgb(val));
+  const full = normalizeHexInput(val); // accepts 3/4/6/8-digit shorthand
+  if (full) { const [r, g, b, a] = hexToRgba(full); applyMainHex(r, g, b, a); }
 });
 swatchHexInput.addEventListener('click', () => swatchHexInput.select());
 swatchHexInput.addEventListener('blur', () => {
   const [r, g, b] = selectedRgbBiased();
-  swatchHexInput.value = formatHex(toHex(r, g, b)); // normalize / revert invalid
+  swatchHexInput.value = formatHex(toHexA(r, g, b, selAlpha)); // normalize / revert invalid
 });
 swatchHexInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') swatchHexInput.blur();
 });
 swatchHexCopy.addEventListener('click', () => {
   const [r, g, b] = selectedRgbBiased();
-  copyToClipboard(formatHex(toHex(r, g, b)));
+  copyToClipboard(formatHex(toHexA(r, g, b, selAlpha)));
   swatchHexCopy.classList.add('hex-copied');
   setTimeout(() => swatchHexCopy.classList.remove('hex-copied'), 1500);
 });
@@ -2309,7 +2616,114 @@ document.addEventListener('click', e => {
     updateUI();
     syncCustomUI();
     renderPalette();
+    if (_syncUnderlayHex) _syncUnderlayHex();
   });
+}
+
+// ─── Preferences: transparent-BG underlay picker (RGB / HSL / Lum / Gray) ──────
+// The page colour a translucent background composites over for contrast + swatch
+// display (default white). Mirrors the chip editor's 4-mode picker; Lum default.
+let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this field
+{
+  const pick = document.getElementById('underlay-picker');
+  if (pick) {
+    let mode = 'lum';
+    let hsl = [0, 0, 100];      // [h, s%, l%]
+    let lum = [1000, 0, 0];     // [L(0–1000), s%, h]
+    const ranges = {}, vals = {}, groups = {};
+    const tabs = [...pick.querySelectorAll('[data-umode]')];
+    pick.querySelectorAll('[data-uch]').forEach(i => { ranges[i.dataset.uch] = i; });
+    pick.querySelectorAll('[data-uchv]').forEach(i => { vals[i.dataset.uchv] = i; });
+    pick.querySelectorAll('[data-ugroup]').forEach(g => { groups[g.dataset.ugroup] = g; });
+    const hexEl = /** @type {HTMLInputElement} */ (document.getElementById('underlay-hex'));
+    const swatchEl = /** @type {HTMLElement} */ (document.getElementById('underlay-swatch'));
+    const clampB = v => Math.max(0, Math.min(255, Math.round(v)));
+
+    const reseed = () => {
+      const [h, s, l] = rgbToHsl(underlayRgb[0], underlayRgb[1], underlayRgb[2]);
+      hsl = [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
+      lum = [Math.round(wheelLum(...underlayRgb) * 1000), Math.round(s * 100), Math.round(h)];
+    };
+    const readInputs = () => {
+      if (mode === 'rgb') { underlayRgb[0] = +ranges.r.value; underlayRgb[1] = +ranges.g.value; underlayRgb[2] = +ranges.b.value; }
+      else if (mode === 'hsl') { const h = +ranges.h.value, s = +ranges.s.value, l = +ranges.l.value; hsl = [h, s, l]; const [r, g, b] = hslToRgb(h, s / 100, l / 100); underlayRgb[0] = r; underlayRgb[1] = g; underlayRgb[2] = b; }
+      else if (mode === 'lum') { const L = +ranges.ulum.value, s = +ranges.usat.value, h = +ranges.uhue.value; lum = [L, s, h]; const li = findLightness(h, s / 100, L / 1000); const [r, g, b] = hslToRgb(h, s / 100, li); underlayRgb[0] = r; underlayRgb[1] = g; underlayRgb[2] = b; }
+      else { const v = +ranges.gray.value; underlayRgb[0] = underlayRgb[1] = underlayRgb[2] = v; }
+    };
+    const syncRanges = () => {
+      if (mode === 'rgb') { ranges.r.value = underlayRgb[0]; ranges.g.value = underlayRgb[1]; ranges.b.value = underlayRgb[2]; }
+      else if (mode === 'hsl') { ranges.h.value = hsl[0]; ranges.s.value = hsl[1]; ranges.l.value = hsl[2]; }
+      else if (mode === 'lum') { ranges.ulum.value = lum[0]; ranges.usat.value = lum[1]; ranges.uhue.value = lum[2]; }
+      else ranges.gray.value = underlayRgb[0];
+    };
+    const setV = (el, v) => { if (el && document.activeElement !== el) el.value = v; };
+    const syncVals = () => {
+      if (mode === 'rgb') { setV(vals.r, underlayRgb[0]); setV(vals.g, underlayRgb[1]); setV(vals.b, underlayRgb[2]); }
+      else if (mode === 'hsl') { setV(vals.h, hsl[0] + '°'); setV(vals.s, hsl[1] + '%'); setV(vals.l, hsl[2] + '%'); }
+      else if (mode === 'lum') { setV(vals.ulum, (lum[0] / 1000).toFixed(3)); setV(vals.usat, lum[1] + '%'); setV(vals.uhue, lum[2] + '°'); }
+      else setV(vals.gray, underlayRgb[0]);
+    };
+    const syncHex = () => { if (document.activeElement !== hexEl) hexEl.value = formatHex(toHex(...underlayRgb)); };
+    const syncSwatch = () => { swatchEl.style.background = cvdTransformHex(toHex(...underlayRgb)); };
+    const syncAll = () => { syncRanges(); syncVals(); syncHex(); syncSwatch(); };
+    const refresh = () => {
+      saveToStorage('underlay-rgb', JSON.stringify([underlayRgb[0], underlayRgb[1], underlayRgb[2]]));
+      if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide); // re-pin against the new underlay
+      updateUI();      // recompute previews + swatches with the new underlay
+      syncCustomUI();  // the custom-BG swatch composites over the underlay too
+    };
+    const applyMode = m => {
+      mode = m;
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.umode === m));
+      Object.entries(groups).forEach(([k, g]) => g.classList.toggle('active', k === m));
+    };
+
+    tabs.forEach(t => t.addEventListener('click', () => { applyMode(t.dataset.umode); reseed(); syncAll(); }));
+    Object.values(ranges).forEach(r => r.addEventListener('input', () => { readInputs(); syncVals(); syncHex(); syncSwatch(); refresh(); }));
+    Object.values(vals).forEach(v => {
+      v.addEventListener('change', () => {
+        const n = parseFloat(String(v.value).replace(/[^0-9.\-]/g, '')) || 0;
+        const key = v.dataset.uchv;
+        const r = ranges[key];
+        if (r) { r.value = String(clampByteFor(key, n)); readInputs(); syncAll(); refresh(); }
+      });
+      v.addEventListener('focus', () => v.select());
+    });
+    function clampByteFor(key, n) {
+      if (key === 'ulum') return Math.max(0, Math.min(1000, Math.round(n * 1000)));
+      if (key === 'r' || key === 'g' || key === 'b' || key === 'gray') return clampB(n);
+      if (key === 'h' || key === 'uhue') return Math.max(0, Math.min(359, Math.round(n)));
+      return Math.max(0, Math.min(100, Math.round(n))); // s, l, usat
+    }
+    hexEl.addEventListener('input', () => {
+      let val = hexEl.value.replace(/[^0-9a-fA-F#]/g, '');
+      if (val && !val.startsWith('#')) val = '#' + val;
+      if (val.length > 7) val = val.slice(0, 7);
+      hexEl.value = val.toUpperCase();
+      const full = normalizeHexInput(val); // 3/6-digit shorthand (alpha ignored — underlay is opaque)
+      if (full) { const [r, g, b] = hexToRgb(full); underlayRgb[0] = r; underlayRgb[1] = g; underlayRgb[2] = b; reseed(); syncRanges(); syncVals(); syncSwatch(); refresh(); }
+    });
+    hexEl.addEventListener('blur', () => { hexEl.value = formatHex(toHex(...underlayRgb)); });
+    hexEl.addEventListener('click', () => hexEl.select());
+    // Copy affordance, like the other hex fields (honours the # opt-out).
+    const copyIcon = /** @type {HTMLElement} */ (document.getElementById('underlay-hex-copy'));
+    if (copyIcon) copyIcon.addEventListener('click', () => {
+      copyToClipboard(formatHex(toHex(...underlayRgb)));
+      hexEl.classList.add('hex-copied'); copyIcon.classList.add('hex-copied');
+      setTimeout(() => { hexEl.classList.remove('hex-copied'); copyIcon.classList.remove('hex-copied'); }, 1500);
+    });
+    // Let the "Include # in hex" toggle re-render this field live.
+    _syncUnderlayHex = () => { syncHex(); syncSwatch(); };
+
+    // Restore saved underlay (default stays white).
+    try {
+      const st = localStorage.getItem('underlay-rgb');
+      if (st) { const p = JSON.parse(st); if (Array.isArray(p) && p.length === 3) { underlayRgb[0] = clampB(p[0]); underlayRgb[1] = clampB(p[1]); underlayRgb[2] = clampB(p[2]); } }
+    } catch (e) {}
+    applyMode('lum');
+    reseed();
+    syncAll();
+  }
 }
 
 {
@@ -2367,9 +2781,14 @@ document.addEventListener('click', e => {
       setContrastLockError('');
       return;
     }
-    apcaLockTarget = Math.ceil(lc);
-    typeReadout.textContent = font + ' → Lc ' + apcaLockTarget;
-    typeReadout.title = font + ' needs |Lc| ' + apcaLockTarget + ' (APCA font lookup) — set the size/weight in a tile’s Font selector';
+    // Lock to the EXACT Lc the font needs (not ceil'd): apcaFontVerdict flips pass/fail
+    // at this same threshold, so the lock's reached / "can't reach" state and the font
+    // verdict now switch on the identical |Lc|. Ceiling it left a sub-1-Lc band where the
+    // font read ✓ while the lock still said "can't reach Lc N". Displays round for reading.
+    apcaLockTarget = lc;
+    const shownLc = Math.round(lc);
+    typeReadout.textContent = font + ' → Lc ' + shownLc;
+    typeReadout.title = font + ' needs |Lc| ' + shownLc + ' (APCA font lookup) — set the size/weight in a tile’s Font selector';
     setContrastLockError('');
     enforceContrastLock(_lastTouchedSide);
   }
@@ -2671,6 +3090,10 @@ try {
     lumSlider.value = String(Math.round(targetLum * 1000));
     lumValEl.value = targetLum.toFixed(3);
   }
+  const sa = localStorage.getItem('sel-alpha');
+  if (sa !== null) { const v = parseFloat(sa); if (v >= 0 && v <= 1) selAlpha = v; }
+  const sca = localStorage.getItem('custom-alpha');
+  if (sca !== null) { const v = parseFloat(sca); if (v >= 0 && v <= 1) cAlpha = v; }
   // legacy: keep reading sel-custom-color as fallback
   if (sc !== null && /^#[0-9a-fA-F]{6}$/i.test(sc)) {
     const [r, g, b] = hexToRgb(sc);
@@ -2729,6 +3152,9 @@ try {
     }
     if (ph !== null) selHue = Math.max(0, Math.min(359, parseFloat(ph)));
     if (ps !== null) selSat = Math.max(0, Math.min(1,   parseFloat(ps) / 100));
+    const pa = sp.get('a'), pca = sp.get('ca');
+    if (pa  !== null) selAlpha = Math.max(0, Math.min(1, parseFloat(pa) / 100));
+    if (pca !== null) cAlpha   = Math.max(0, Math.min(1, parseFloat(pca) / 100));
     if (pm === 'color' || pm === 'lum' || pm === 'gray') customMode = pm;
     if (pc !== null && /^[0-9a-fA-F]{6}$/.test(pc)) {
       [cR, cG, cB] = hexToRgb('#' + pc);
@@ -2833,6 +3259,8 @@ function buildShareUrl() {
     p.set('l', String(Math.round(targetLum * 1000)));
     p.set('c', toHex(cR, cG, cB).slice(1).toLowerCase());
     p.set('m', customMode);
+    if (selAlpha < 0.9995) p.set('a',  String(Math.round(selAlpha * 100)));
+    if (cAlpha   < 0.9995) p.set('ca', String(Math.round(cAlpha * 100)));
     if (customMode === 'lum') {
       p.set('cl', String(Math.round(cuLum * 1000)));
       p.set('ch', String(Math.round(cuHue)));
@@ -2952,8 +3380,8 @@ function buildExport(format) {
   // primary, the second its secondary, then plain ordinals.
   // If the palette already has colors saved for a role, only those saved colors
   // are exported. Otherwise, the live picker color is exported as a fallback.
-  const wheelHex  = toHex(...selectedRgbBiased()).toLowerCase();
-  const customHex = toHex(cR, cG, cB).toLowerCase();
+  const wheelHex  = toHexA(...selectedRgbBiased(), selAlpha).toLowerCase();
+  const customHex = toHexA(cR, cG, cB, cAlpha).toLowerCase();
   const roleColors = (role, liveHex) => {
     const hexes = palette.filter(e => e.role === role).map(e => e.hex);
     if (hexes.length === 0) {
@@ -3008,14 +3436,15 @@ ${lines.join('\n')}
   // uses OKLCH components with an sRGB hex fallback for non-OKLCH consumers.
   const colorToken = c => {
     const hex = c.hex.toLowerCase();
+    const alpha = +hexToRgba(c.hex)[3].toFixed(4); // DTCG alpha (0–1)
     if (exportColorFmt === 'oklch') {
-      return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha: 1, hex } };
+      return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha, hex } };
     }
     const [r, g, b] = hexToRgb(c.hex);
     const components = [r, g, b].map(v => +(v / 255).toFixed(4));
     return exportColorFmt === 'hex'
-      ? { $value: { colorSpace: 'srgb', components, alpha: 1, hex } }
-      : { $value: { colorSpace: 'srgb', components, alpha: 1 } };
+      ? { $value: { colorSpace: 'srgb', components, alpha, hex } }
+      : { $value: { colorSpace: 'srgb', components, alpha } };
   };
   const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
   const fmtNote = exportColorFmt === 'oklch'
@@ -4782,7 +5211,7 @@ function updatePaletteHistoryButtons() {
 function addToPalette(hex, role) {
   const commit = () => {
     hex = hex.toLowerCase();
-    if (!/^#[0-9a-f]{6}$/.test(hex)) return;
+    if (!/^#([0-9a-f]{6}|[0-9a-f]{8})$/.test(hex)) return;
     // Duplicates are allowed: some users add the colors they need first, then
     // tune them individually via the inline chip editor — so an identical color
     // can be saved again. Only the per-role cap still applies.
@@ -4832,7 +5261,7 @@ function addColorsToPalette(entries) {
   const toAdd = [];
   for (const { hex, role } of entries) {
     const h = String(hex).toLowerCase();
-    if (!/^#[0-9a-f]{6}$/.test(h)) continue;
+    if (!/^#([0-9a-f]{6}|[0-9a-f]{8})$/.test(h)) continue;
     const inRole = palette.filter(e => e.role === role).length + toAdd.filter(e => e.role === role).length;
     if (inRole >= PALETTE_ROLE_MAX) continue;
     const dup = palette.some(e => e.role === role && e.hex === h) || toAdd.some(e => e.role === role && e.hex === h);
@@ -5286,6 +5715,19 @@ function buildChipEditor() {
   };
   _ceEl.querySelectorAll('[data-ch]').forEach(inp => { _ceRefs.ranges[inp.dataset.ch] = inp; });
   _ceEl.querySelectorAll('[data-chv]').forEach(inp => { _ceRefs.vals[inp.dataset.chv] = inp; });
+  // Alpha is a per-mode row (Lum shows it 2nd, other modes last); all share _ce.alpha.
+  _ceRefs.alphaRanges = [..._ceEl.querySelectorAll('.ce-alpha-range')];
+  _ceRefs.alphaVals   = [..._ceEl.querySelectorAll('.ce-alpha-val')];
+  const onAlpha = a => {
+    _ce.alpha = Math.max(0, Math.min(1, a));
+    chipEditorWriteThrough(); syncChipEditorAlpha(); syncChipEditorHex(); scheduleChipEditorPaint();
+  };
+  _ceRefs.alphaRanges.forEach(r => { r.addEventListener('input', () => onAlpha(+r.value / 100)); addSliderTouchFix(r); });
+  _ceRefs.alphaVals.forEach(v => {
+    v.addEventListener('change', () => { const n = parseFloat(String(v.value).replace(/[^0-9.\-]/g, '')); onAlpha((Number.isFinite(n) ? n : 100) / 100); });
+    v.addEventListener('focus', () => v.select());
+    v.addEventListener('keydown', e => { if (e.key === 'Enter') v.blur(); });
+  });
   // Render above the display size for a smooth downsample, but cap the buffer:
   // Lum mode rebuilds the whole wheel (per-pixel lightness search) whenever the
   // target luminance changes, so an unbounded high-DPI buffer would make the Lum
@@ -5323,9 +5765,9 @@ function buildChipEditor() {
   _ceRefs.cancel.addEventListener('click', () => cancelChipEditor());
   _ceRefs.done.addEventListener('click', () => closeChipEditor());
   _ceRefs.hex.addEventListener('change', () => {
-    const m = /^#?([0-9a-fA-F]{6})$/.exec(_ceRefs.hex.value.trim());
-    if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
-    else _ceRefs.hex.value = formatHex(toHex(_ce.r, _ce.g, _ce.b));
+    const full = normalizeHexInput(_ceRefs.hex.value); // accepts 3/4/6/8-digit shorthand
+    if (full) { const [r, g, b, a] = hexToRgba(full); _ce.alpha = a; chipEditorSetRgb(r, g, b); syncChipEditorAlpha(); }
+    else _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1));
   });
   // Match the main custom hex field: focusing/tapping selects all; the icon copies.
   // Also keep the field visible in the rail — the mobile keyboard shrinks the
@@ -5336,7 +5778,7 @@ function buildChipEditor() {
   // glides back to centre (handled by the visualViewport resize above).
   _ceRefs.hex.addEventListener('blur', () => { _ceHexReturnPending = true; });
   _ceRefs.hexCopy.addEventListener('click', () => {
-    copyToClipboard(formatHex(toHex(_ce.r, _ce.g, _ce.b)));
+    copyToClipboard(formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)));
     _ceRefs.hex.classList.add('hex-copied');
     _ceRefs.hexCopy.classList.add('hex-copied');
     setTimeout(() => {
@@ -5495,11 +5937,19 @@ function syncChipEditorVals() {
   else                         { V.gray.value = _ce.gray; }
 }
 
-function syncChipEditorHex() { _ceRefs.hex.value = formatHex(toHex(_ce.r, _ce.g, _ce.b)); }
+// Every mode's Alpha slider/readout reflects the shared _ce.alpha.
+function syncChipEditorAlpha() {
+  const pct = Math.round((_ce.alpha ?? 1) * 100);
+  (_ceRefs.alphaRanges || []).forEach(r => { r.value = String(pct); });
+  (_ceRefs.alphaVals || []).forEach(v => { if (document.activeElement !== v) v.value = pct + '%'; });
+}
+
+function syncChipEditorHex() { _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)); }
 
 function syncChipEditorControls() {
   syncChipEditorRanges();
   syncChipEditorVals();
+  syncChipEditorAlpha();
   syncChipEditorHex();
   scheduleChipEditorPaint();
 }
@@ -5551,7 +6001,7 @@ function renderChipEditorSliderTracks() {
 }
 
 function chipEditorWriteThrough() {
-  const hex = toHex(_ce.r, _ce.g, _ce.b).toLowerCase();
+  const hex = toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1).toLowerCase();
   if (_ceIdx != null && palette[_ceIdx]) {
     palette[_ceIdx].hex = hex;
     updateChipVisual(_ceIdx, hex);
@@ -5562,7 +6012,7 @@ function chipEditorWriteThrough() {
 function updateChipVisual(idx, hex) {
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (!chipEl) return;
-  const cvdHex = cvdTransformHex(hex);
+  const cvdHex = cvdDisplayHex(hex);
   const [cvdChipR, cvdChipG, cvdChipB] = hexToRgb(cvdHex);
   const cvdLum = relativeLuminance(cvdChipR, cvdChipG, cvdChipB);
   chipEl.style.background = cvdHex;
@@ -5717,17 +6167,23 @@ function partnerHex() {
 
 function chipEditorRenderPreview() {
   if (!_ceEl || !_ce) return;
-  const editedHex = toHex(_ce.r, _ce.g, _ce.b);
+  const editedRgb = [_ce.r, _ce.g, _ce.b], editedA = _ce.alpha ?? 1;
   const list = partnerList();
   if (_cePartner >= Math.max(1, list.length)) _cePartner = 0;
   const partner = partnerHex();
-  let bgHex, textHex, cmpRole;
-  if (_ce.role === 'bg') { bgHex = editedHex; textHex = partner; cmpRole = 'Text'; }
-  else                   { textHex = editedHex; bgHex = partner; cmpRole = 'BG'; }
+  const [pr, pg, pb, pa] = hexToRgba(partner);
+  // Role assignment + alpha compositing: the text composites over the (effective)
+  // background so a translucent colour's contrast reflects what's actually seen.
+  let textRgb, textA, bgRgb, bgA, cmpRole;
+  if (_ce.role === 'bg') { bgRgb = editedRgb; bgA = editedA; textRgb = [pr, pg, pb]; textA = pa; cmpRole = 'Text'; }
+  else                   { textRgb = editedRgb; textA = editedA; bgRgb = [pr, pg, pb]; bgA = pa; cmpRole = 'BG'; }
+  const effBg = effBgRgb(bgRgb, bgA);
+  const effText = compositeRgb(textRgb, textA, effBg);
+  const textCss = textA < 0.9995 ? cvdTransformRgba(`rgba(${textRgb[0]},${textRgb[1]},${textRgb[2]},${textA})`) : cvdTransformHex(toHex(...textRgb));
 
-  _ceRefs.tile.style.background = cvdTransformHex(bgHex);
-  _ceRefs.ag.style.color = cvdTransformHex(textHex);
-  _ceRefs.cmpBtn.style.color = cvdTransformHex(textHex); // icon stroke = currentColor
+  _ceRefs.tile.style.background = cvdTransformHex(toHex(...effBg));
+  _ceRefs.ag.style.color = textCss;
+  _ceRefs.cmpBtn.style.color = textCss; // icon stroke = currentColor
 
   // Label the preview in the text colour so it reads as a contrast sample next
   // to "Ag". When editing a Text colour (the "Ag" is that edited colour) show
@@ -5741,10 +6197,27 @@ function chipEditorRenderPreview() {
   } else {
     _ceRefs.tileLabel.textContent = partnerLabel;
   }
-  _ceRefs.tileLabel.style.color = cvdTransformHex(textHex);
+  _ceRefs.tileLabel.style.color = textCss;
 
   _ceRefs.cmpRole.textContent = cmpRole + (list.length ? '' : ' (picker)');
 
+  // Effective (composited) luminances for the verdict. When the EDITED side is in
+  // Lum mode its luminance is held (_ce.lum[0]), and we gray-composite it over the
+  // fixed partner + underlay — hue-invariant, so an edited hue/sat sweep in Lum
+  // mode can't shift the verdict. Other edit modes (RGB/HSL/Gray) follow the
+  // edited colour's actual luminance (contrast may change — as intended). Display
+  // above still uses the real composited colours.
+  const editedHeldLum = _ce.mode === 'lum';
+  const effLums = space => {
+    const uL = space === 'ys' ? apcaY(...underlayRgb) : relativeLuminance(...underlayRgb);
+    const lumOf = rgb => space === 'ys' ? apcaY(...rgb) : relativeLuminance(...rgb);
+    const comp = space === 'ys' ? compositeYs : compositeRelLum;
+    const editedL = editedHeldLum ? _ce.lum[0] / 1000 : lumOf(editedRgb);
+    const partnerL = lumOf([pr, pg, pb]);
+    const [tL, tAl, bL, bAl] = _ce.role === 'bg' ? [partnerL, pa, editedL, editedA] : [editedL, editedA, partnerL, pa];
+    const eBg = comp(bL, bAl, uL);
+    return [comp(tL, tAl, eBg), eBg];
+  };
   _ceRefs.badges.innerHTML = '';
   if (contrastLockMode === 'apca') {
     // APCA mode: the WCAG readouts give way to the APCA verdicts — Lc value,
@@ -5763,10 +6236,8 @@ function chipEditorRenderPreview() {
     //     shake the verdict across a threshold via 8-bit hex quantization. The
     //     other modes (RGB/HSL/Gray) don't hold luminance, so there the edited
     //     side follows its actual quantized colour.
-    const qYs = rgb => Math.round(apcaY(...rgb) * 1000) / 1000;
-    const editedYs  = _ce.mode === 'lum' ? _ce.lum[0] / 1000 : qYs([_ce.r, _ce.g, _ce.b]);
-    const partnerYs = qYs(hexToRgb(partner));
-    const lc = _ce.role === 'bg' ? apcaLcYs(partnerYs, editedYs) : apcaLcYs(editedYs, partnerYs);
+    const [tYs, bYs] = effLums('ys');
+    const lc = apcaLcYs(tYs, bYs);
     const lcAbs = Math.abs(lc);
     _ceRefs.ratio.textContent = 'Lc ' + (lc === 0 ? '0' : lc.toFixed(0));
     _ceRefs.apcaTier.textContent = apcaUsageTier(lcAbs);
@@ -5779,7 +6250,8 @@ function chipEditorRenderPreview() {
   }
   _ceRefs.apcaTier.textContent = '';
   _ceRefs.apcaFont.textContent = '';
-  const ratio = contrastRatio(relativeLuminance(...hexToRgb(textHex)), relativeLuminance(...hexToRgb(bgHex)));
+  const [tRel, bRel] = effLums('rel');
+  const ratio = contrastRatio(tRel, bRel);
   _ceRefs.ratio.textContent = ratio.toFixed(2) + ':1';
   // Show the WCAG 2.2 ratio thresholds (3:1 large text / UI, 4.5:1 normal AA,
   // 7:1 AAA) so each use case can be checked; each lights up when the pair meets it.
@@ -5833,11 +6305,11 @@ function openChipEditor(idx) {
   _cePartner = 0;
   _ceWheelCache = null;
   const entry = palette[idx];
-  const [r, g, b] = hexToRgb(entry.hex);
+  const [r, g, b, a] = hexToRgba(entry.hex);
   // savedColor holds the shared RGB/HSL/LUM colour; savedGray holds the
   // independent Gray value — so switching between Gray and the colour modes
   // keeps each side's setting (mirroring the main BG picker).
-  _ce = { role: entry.role, r, g, b, mode: 'lum', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0,
+  _ce = { role: entry.role, r, g, b, alpha: a, mode: 'lum', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0,
           savedColor: { r, g, b }, savedGray: Math.round((r + g + b) / 3) };
   reseedSubstates();
   applyChipEditorMode('lum');
@@ -5996,8 +6468,8 @@ function renderPalette() {
     add.setAttribute('aria-label', add.title);
     add.disabled = entries.length >= PALETTE_ROLE_MAX;
     add.addEventListener('click', () => {
-      if (role === 'fg') addToPalette(toHex(...selectedRgbBiased()), 'fg');
-      else addToPalette(toHex(cR, cG, cB), 'bg');
+      if (role === 'fg') addToPalette(toHexA(...selectedRgbBiased(), selAlpha), 'fg');
+      else addToPalette(toHexA(cR, cG, cB, cAlpha), 'bg');
     });
 
     const importBtn = document.createElement('button');
@@ -6020,13 +6492,13 @@ function renderPalette() {
     entries.forEach(({ hex, flatIdx }, pos) => {
     const [r, g, b] = hexToRgb(hex);
     const lum = relativeLuminance(r, g, b);
-    const display = formatHex(toHex(r, g, b));
+    const display = formatHex(hex); // 8-digit shows the alpha; 6-digit as before
 
     const chip = document.createElement('div');
     chip.className = 'palette-chip';
     chip.dataset.idx = String(flatIdx);
-    chip.style.background = cvdTransformHex(hex);
-    const cvdHexColor = cvdTransformHex(hex);
+    chip.style.background = cvdDisplayHex(hex);
+    const cvdHexColor = cvdDisplayHex(hex);
     const [cvdChipR, cvdChipG, cvdChipB] = hexToRgb(cvdHexColor);
     const cvdLum = relativeLuminance(cvdChipR, cvdChipG, cvdChipB);
     chip.style.color = cvdLum > 0.179 ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.85)';
@@ -6053,9 +6525,9 @@ function renderPalette() {
     recall.setAttribute('aria-label', recall.title);
     recall.addEventListener('click', e => {
       e.stopPropagation();
-      const [rr, gg, bb] = hexToRgb(hex);
-      if (role === 'fg') applyMainHex(rr, gg, bb);
-      else applyCustomHex(rr, gg, bb);
+      const [rr, gg, bb, aa] = hexToRgba(hex);
+      if (role === 'fg') applyMainHex(rr, gg, bb, aa);
+      else applyCustomHex(rr, gg, bb, aa);
     });
 
     const edit = document.createElement('button');
@@ -6153,10 +6625,10 @@ function renderPalettePreviews() {
 });
 
 document.getElementById('pin-selected').addEventListener('click', () => {
-  addToPalette(toHex(...selectedRgbBiased()), 'fg');
+  addToPalette(toHexA(...selectedRgbBiased(), selAlpha), 'fg');
 });
 document.getElementById('pin-custom').addEventListener('click', () => {
-  addToPalette(toHex(cR, cG, cB), 'bg');
+  addToPalette(toHexA(cR, cG, cB, cAlpha), 'bg');
 });
 document.getElementById('palette-clear').addEventListener('click', () => {
   if (!palette.length) return;
@@ -6199,8 +6671,8 @@ try {
   if (pp !== null) {
     const fromUrl = capPaletteRoles(pp.split(',').map(tok => {
       const t = tok.toLowerCase();
-      if (/^[fb][0-9a-f]{6}$/.test(t)) return { hex: '#' + t.slice(1), role: t[0] === 'f' ? 'fg' : 'bg' };
-      if (/^[0-9a-f]{6}$/.test(t)) return { hex: '#' + t, role: 'bg' };
+      if (/^[fb]([0-9a-f]{6}|[0-9a-f]{8})$/.test(t)) return { hex: '#' + t.slice(1), role: t[0] === 'f' ? 'fg' : 'bg' };
+      if (/^([0-9a-f]{6}|[0-9a-f]{8})$/.test(t)) return { hex: '#' + t, role: 'bg' };
       return null;
     }).filter(Boolean));
     if (fromUrl.length) { palette = fromUrl; savePalette(); }
