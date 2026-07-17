@@ -3563,26 +3563,38 @@ function pickByContrast(scale, refLum, minRatio, fromDark) {
   return list.find(s => contrastRatio(s.lum, refLum) >= minRatio) || list[list.length - 1];
 }
 
+// Brand-accent fill: a saturated mid step, DISTINCT from the text tones (so it
+// never collides with `muted`/`text` when saved to the palette), paired with
+// black or white — whichever contrasts more. These steps' luminances are fixed,
+// so the chosen label always clears AA (≥4.5) by construction.
+function accentPair(scale, idx) {
+  const accent = scale[idx];
+  const white = { step: null, hex: '#ffffff', lum: 1 };
+  const black = { step: null, hex: '#000000', lum: 0 };
+  const accentText = contrastRatio(accent.lum, white.lum) >= contrastRatio(accent.lum, black.lum) ? white : black;
+  return { accent, accentText };
+}
+
 function deriveTheme(scale, dark) {
   if (!dark) {
     const bg = { step: null, hex: '#ffffff', lum: 1 };
+    const acc = accentPair(scale, 6);                    // step 600 — distinct from muted (700)/text (800)
     return {
       dark: false, bg,
       surface: scale[0], border: scale[2],
       text:  pickByContrast(scale, bg.lum, 7,   false),  // lightest dark step ≥ AAA on white
       muted: pickByContrast(scale, bg.lum, 4.5, false),  // …≥ AA
-      accent: pickByContrast(scale, 1, 4.5, false),      // button fill with a white label ≥ AA
-      accentText: { step: null, hex: '#ffffff', lum: 1 },
+      accent: acc.accent, accentText: acc.accentText,
     };
   }
   const bg = scale[scale.length - 1];                    // 950
+  const acc = accentPair(scale, 3);                      // step 300 — a bright fill distinct from muted/text
   return {
     dark: true, bg,
     surface: scale[scale.length - 2], border: scale[scale.length - 3],
     text:  scale[1],                                     // 100 — high contrast on the dark bg
     muted: pickByContrast(scale, bg.lum, 4.5, true),
-    accent: pickByContrast(scale, bg.lum, 4.5, true),    // light fill with a dark label
-    accentText: scale[scale.length - 1],
+    accent: acc.accent, accentText: acc.accentText,
   };
 }
 
