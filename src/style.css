@@ -1218,6 +1218,10 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 }
 .chip-editor-wheel[hidden] { display: none; }
 .chip-editor .custom-slider-group { gap: 0.4rem; }
+/* The Alpha row sits OUTSIDE the mode group (it's mode-independent), so space it
+   from the active group by the same 0.4rem the group uses between its own rows —
+   otherwise it butts up with no gap and looks tighter than the other sliders. */
+.chip-editor-sliders { display: flex; flex-direction: column; gap: 0.4rem; }
 .chip-editor-hexwrap { position: relative; } /* anchors the absolute copy icon */
 .chip-editor-hex {
   width: 100%;
@@ -2441,6 +2445,20 @@ body.about-modal-open { overflow: hidden; }
   border-top: 1px solid var(--border);
   margin: 0.35rem 0;
 }
+
+/* Transparent-BG underlay picker (Preferences) — RGB/HSL/Lum/Gray, reusing the
+   custom-picker slider/tab classes. */
+.underlay-heading { font-weight: 600; color: var(--text); }
+.settings-underlay-note { font-size: 0.62rem; line-height: 1.4; color: var(--muted); margin: 0.1rem 0 0.35rem; }
+.underlay-picker { display: flex; flex-direction: column; gap: 0.45rem; }
+.underlay-top { display: flex; align-items: center; gap: 0.5rem; }
+.underlay-swatch {
+  width: 1.6rem; height: 1.6rem; flex: none; border-radius: 4px;
+  border: 1px solid var(--border); background: #fff;
+}
+.underlay-tabs { flex: 1; }
+.underlay-sliders { display: flex; flex-direction: column; }
+.underlay-hexwrap { align-self: flex-start; }
 
 .settings-toggle-row {
   display: flex;

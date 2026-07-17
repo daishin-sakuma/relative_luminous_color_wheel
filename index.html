@@ -6,8 +6,8 @@
   <title>Accessible Color Picker &amp; WCAG Contrast Checker — Luminance Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast with official APCA usage levels and font-size/weight verdicts (or reverse-lock to the Lc a chosen font size and weight needs), explore luminance-stable hues, and edit accessible palettes inline. Generate a luminance-keyed tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction, preview them on a real mock layout, and export CSS, Tailwind, or W3C design tokens. Full-app color vision simulation, optimized for iOS/Safari, Android &amp; Desktop.">
-  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, APCA font size, APCA font size checker, APCA usage levels, APCA minimum font size, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history, color scale generator, tonal color palette, 50-950 color scale, light and dark theme generator, dark mode palette generator, accessible design system generator, semantic color tokens, APCA reverse lookup, lock contrast to font size">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast with official APCA usage levels and font-size/weight verdicts (or reverse-lock to the Lc a chosen font size and weight needs), explore luminance-stable hues, and edit accessible palettes inline. Set per-color opacity and check contrast on the composited (alpha-blended) result — translucent colors are blended over their background, or a configurable page underlay, before the ratio and Lc are measured, and the WCAG and APCA locks hold the visible contrast. Generate a luminance-keyed tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction, preview them on a real mock layout, and export CSS, Tailwind, or W3C design tokens with alpha. Full-app color vision simulation, optimized for iOS/Safari, Android &amp; Desktop.">
+  <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, APCA font size, APCA font size checker, APCA usage levels, APCA minimum font size, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, rgb color export, hex color export, palette undo redo, color palette history, color scale generator, tonal color palette, 50-950 color scale, light and dark theme generator, dark mode palette generator, accessible design system generator, semantic color tokens, APCA reverse lookup, lock contrast to font size, color opacity, alpha channel, transparent color contrast, semi-transparent color, translucent color contrast checker, opacity contrast checker, alpha compositing, rgba contrast, 8-digit hex, hex8 color, rgba color picker, opacity color picker, contrast over background">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
@@ -21,7 +21,7 @@
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
   <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta property="og:description"  content="Lock WCAG or APCA contrast, explore luminance-stable hues, and generate a tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction. Preview on a real mock layout, full-app color vision simulation, and CSS/Tailwind/design-token export.">
+  <meta property="og:description"  content="Lock WCAG or APCA contrast, explore luminance-stable hues, set per-color opacity and check contrast on the composited (alpha-blended) result, and generate a tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction. Preview on a real mock layout, full-app color vision simulation, and CSS/Tailwind/design-token export.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
@@ -31,7 +31,7 @@
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta name="twitter:description" content="Lock WCAG or APCA contrast, explore luminance-stable hues, and generate a tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction. Preview on a real mock layout, full-app color vision simulation, and CSS/Tailwind/design-token export.">
+  <meta name="twitter:description" content="Lock WCAG or APCA contrast, explore luminance-stable hues, set per-color opacity and check contrast on the composited (alpha-blended) result, and generate a tonal scale (50–950) plus ready-made light and dark themes with contrast guaranteed by construction. Preview on a real mock layout, full-app color vision simulation, and CSS/Tailwind/design-token export.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
@@ -88,11 +88,11 @@
     "@type": "WebApplication",
     "name": "Relative Luminous Color Wheel",
     "url": "https://relative-luminous-color-wheel.vercel.app/",
-    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks. Generate a luminance-keyed tonal scale (50–950) and ready-made light and dark themes whose text/muted/accent contrasts are guaranteed by construction, preview them on a realistic mock layout, and copy them as alpha-ready CSS custom properties. Edit palettes inline, reorder with drag and drop, and export CSS, Tailwind, or W3C design tokens.",
+    "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks. Set opacity on any color and the contrast is measured on the composited result: a translucent color is alpha-blended over its background (a see-through background blends over a configurable page underlay) before its WCAG ratio and APCA Lc are computed, and both locks hold this visible contrast. Generate a luminance-keyed tonal scale (50–950) and ready-made light and dark themes whose text/muted/accent contrasts are guaranteed by construction, preview them on a realistic mock layout, and copy them as alpha-ready CSS custom properties. Edit palettes inline, reorder with drag and drop, and export CSS, Tailwind, or W3C design tokens with an alpha channel.",
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "1.42.1",
+    "softwareVersion": "2.0.0-beta.2",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -116,11 +116,15 @@
       "Preview the palette or the generated light/dark themes dressed on a realistic mock layout",
       "Save a generated theme to the palette, import individual scale/theme colors into a role, and copy the scale plus themes as alpha-ready CSS custom properties (rgb-channel tokens)",
       "APCA reverse lookup: choose a font size and weight and lock the contrast to the exact Lc that font needs",
+      "Per-color opacity on the main text, custom background, and every saved palette color, with the alpha control placed alongside luminance because opacity — unlike hue and saturation — changes contrast",
+      "Composited (alpha-blended) contrast checking: translucent colors are blended over their background before the WCAG ratio and APCA Lc are measured, and a see-through background composites over a configurable page underlay color set in Preferences",
+      "WCAG and APCA contrast locks that hold the visible, composited contrast at any opacity — landing on the closest achievable pair and flagging when a target is physically unreachable at the chosen opacity",
+      "Opacity preserved through export: 8-digit #RRGGBBAA hex, rgba() and oklch() with an alpha channel, and alpha-ready design tokens; hex inputs accept 3/4/6/8-digit shorthand",
       "Accessible color scheme and dark-mode palette builder",
       "HSL, RGB and HEX color values",
       "Shareable color state via URL"
     ],
-    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color scale generator, tonal palette, light and dark theme generator, design system colors, color blindness simulator, color vision simulation, design tokens",
+    "keywords": "accessible color picker, WCAG contrast checker, contrast lock, WCAG 2.2 AA, APCA, accessible color palette, color scale generator, tonal palette, light and dark theme generator, design system colors, color blindness simulator, color vision simulation, design tokens, color opacity, alpha channel, transparent color contrast, translucent contrast checker, rgba contrast, 8-digit hex",
     "author": {
       "@type": "Person",
       "name": "Daishin Sakuma"
@@ -157,6 +161,14 @@
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "Unlike WCAG 2.x, APCA judges contrast together with font size and weight: each Lc value maps to a minimum font size per weight in the official APCA lookup table. In APCA mode this tool shows the official usage level (body text, fluent text, spot & non-text, and so on) and a pass/fail verdict for your chosen size and weight — including the minimum size required when it fails — for the main pair and for every color saved in the palette."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I check contrast for semi-transparent (opacity) colors?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The main text color, the custom background, and every saved palette color each have an opacity control, and contrast is computed on the composited result: a translucent color is alpha-blended over whatever is behind it before its WCAG ratio and APCA Lc are measured. A see-through background composites over a page underlay color you can set in Preferences. The WCAG and APCA contrast locks both hold this visible, composited contrast and tell you when a target can't be reached at the chosen opacity. Opacity is preserved on export as 8-digit #RRGGBBAA hex, rgba() and oklch() with an alpha channel, and alpha-ready design tokens."
         }
       },
       {
@@ -292,6 +304,44 @@
           </label>
         </div>
         <div class="settings-divider"></div>
+        <div class="settings-row-label underlay-heading">Transparent BG underlay</div>
+        <div class="settings-underlay-note">The page colour a translucent background composites over when checking contrast.</div>
+        <div class="underlay-picker" id="underlay-picker">
+          <div class="underlay-top">
+            <div class="underlay-swatch" id="underlay-swatch"></div>
+            <div class="custom-mode-tabs underlay-tabs">
+              <button type="button" class="custom-mode-tab" data-umode="rgb">RGB</button>
+              <button type="button" class="custom-mode-tab" data-umode="hsl">HSL</button>
+              <button type="button" class="custom-mode-tab" data-umode="lum">Lum</button>
+              <button type="button" class="custom-mode-tab" data-umode="gray">Gray</button>
+            </div>
+          </div>
+          <div class="underlay-sliders">
+            <div class="custom-slider-group" data-ugroup="rgb">
+              <div class="custom-slider-row"><span class="custom-ch" style="color:#d07070">R</span><input type="range" data-uch="r" min="0" max="255"><input type="text" class="custom-val" data-uchv="r" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+              <div class="custom-slider-row"><span class="custom-ch" style="color:#70b070">G</span><input type="range" data-uch="g" min="0" max="255"><input type="text" class="custom-val" data-uchv="g" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+              <div class="custom-slider-row"><span class="custom-ch" style="color:#7090d0">B</span><input type="range" data-uch="b" min="0" max="255"><input type="text" class="custom-val" data-uchv="b" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+            </div>
+            <div class="custom-slider-group" data-ugroup="hsl">
+              <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-uch="h" min="0" max="359"><input type="text" class="custom-val" data-uchv="h" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+              <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-uch="s" min="0" max="100"><input type="text" class="custom-val" data-uchv="s" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+              <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-uch="l" min="0" max="100"><input type="text" class="custom-val" data-uchv="l" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+            </div>
+            <div class="custom-slider-group" data-ugroup="lum">
+              <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-uch="ulum" min="0" max="1000" step="1"><input type="text" class="custom-val" data-uchv="ulum" inputmode="decimal" autocomplete="off" spellcheck="false"></div>
+              <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-uch="uhue" min="0" max="359"><input type="text" class="custom-val" data-uchv="uhue" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+              <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-uch="usat" min="0" max="100"><input type="text" class="custom-val" data-uchv="usat" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+            </div>
+            <div class="custom-slider-group" data-ugroup="gray">
+              <div class="custom-slider-row"><span class="custom-ch"></span><input type="range" data-uch="gray" min="0" max="255" class="custom-gray-slider"><input type="text" class="custom-val" data-uchv="gray" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+            </div>
+          </div>
+          <div class="custom-hex-wrap underlay-hexwrap">
+            <input type="text" class="custom-hex-input" id="underlay-hex" maxlength="7" spellcheck="false" placeholder="#FFFFFF">
+            <span class="custom-hex-copy-icon" id="underlay-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
+          </div>
+        </div>
+        <div class="settings-divider"></div>
         <div class="settings-theme-row">
           <span class="settings-row-label">Vision</span>
           <div class="settings-theme-btns">
@@ -341,6 +391,13 @@
         <input type="text" class="field-value" id="lum-val" value="0.546" inputmode="decimal" autocomplete="off" spellcheck="false">
       </div>
       <input type="range" id="lum-slider" min="0" max="1000" value="546" step="1">
+      <!-- Opacity sits with luminance: unlike hue/sat it changes contrast (a
+           translucent colour composites over its background). -->
+      <div class="lum-row alpha-row">
+        <span class="field-label">Opacity</span>
+        <input type="text" class="field-value" id="alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+      </div>
+      <input type="range" id="alpha-slider" min="0" max="100" value="100" step="1">
     </div>
 
     <div class="wheel-wrap">
@@ -373,7 +430,7 @@
           </button>
         </div>
         <div class="custom-hex-wrap swatch-hex-wrap">
-          <input type="text" class="custom-hex-input swatch-hex" id="swatch-hex" value="#808080" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Text color hex">
+          <input type="text" class="custom-hex-input swatch-hex" id="swatch-hex" value="#808080" maxlength="9" spellcheck="false" autocomplete="off" aria-label="Text color hex">
           <span class="custom-hex-copy-icon swatch-hex-copy" id="swatch-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
         </div>
       </div>
@@ -630,7 +687,7 @@
           </button>
         </div>
         <div class="custom-hex-wrap">
-          <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="7" spellcheck="false" placeholder="#000000">
+          <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="9" spellcheck="false" placeholder="#000000">
           <span class="custom-hex-copy-icon" id="custom-hex-copy-icon" title="Copy hex"></span>
         </div>
       </div>
@@ -680,12 +737,22 @@
               </div>
             </div>
           </div>
+          <div class="custom-slider-row custom-alpha-row">
+            <span class="custom-ch">A</span>
+            <input type="range" class="custom-alpha-slider" min="0" max="100" value="100">
+            <input type="text" class="custom-val custom-alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+          </div>
         </div>
         <div class="custom-slider-group" id="custom-group-lum">
           <div class="custom-slider-row">
             <span class="custom-ch">L</span>
             <input type="range" id="cu-lum-slider" min="0" max="1000" value="200" step="1">
             <input type="text" class="custom-val" id="cu-lum-val" value="0.200" inputmode="decimal" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="custom-slider-row custom-alpha-row">
+            <span class="custom-ch">A</span>
+            <input type="range" class="custom-alpha-slider" min="0" max="100" value="100">
+            <input type="text" class="custom-val custom-alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
           </div>
           <div class="custom-slider-row">
             <span class="custom-ch">H</span>
@@ -700,9 +767,14 @@
         </div>
         <div class="custom-slider-group" id="custom-group-gray">
           <div class="custom-slider-row">
-            <span class="custom-ch"></span>
+            <span class="custom-ch">G</span>
             <input type="range" id="c-gray-slider" min="0" max="255" value="26" class="custom-gray-slider">
             <input type="text" class="custom-val" id="c-gray-val" value="26" inputmode="numeric" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="custom-slider-row custom-alpha-row">
+            <span class="custom-ch">A</span>
+            <input type="range" class="custom-alpha-slider" min="0" max="100" value="100">
+            <input type="text" class="custom-val custom-alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
           </div>
         </div>
       </div>
@@ -744,6 +816,7 @@
         <li>Pick accessible text and background colors for websites, apps, and design systems</li>
         <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; in APCA mode every tile shows the official APCA usage ladder and a font-size/weight verdict (with the required minimum size) judged against the official lookup table, with in-tile font selectors — or work it backwards with the APCA "Type" lock: pick a font size and weight and the pair is held at the exact Lc that font needs; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
         <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked (in APCA mode the editor preview switches to the APCA verdicts instead — Lc value, official usage level, and the chosen font-size/weight verdict with the required minimum size); tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors by dragging each chip's grip handle (reliable on Android, iOS, and desktop, while the chip body still scrolls the list), drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
+        <li>Give any color an opacity — the main text, the custom background, and any saved palette color — and read contrast on the <strong>composited</strong> result: a translucent color is alpha-blended over whatever sits behind it before its WCAG ratio and APCA Lc are measured, and a see-through background composites over a page underlay color you set in Preferences (RGB / HSL / Lum / Gray, defaulting to white). The opacity slider sits with luminance in the Lum picker, since opacity — unlike hue and saturation — changes contrast; the WCAG and APCA contrast locks hold this visible contrast at any opacity, re-pinning the untouched side to the closest achievable pair and flagging when a target can't physically be reached. Opacity rides along everywhere it goes — 8-digit <code>#RRGGBBAA</code> hex, <code>rgba()</code> and <code>oklch()</code> with an alpha channel, and alpha-ready design tokens — and every hex field accepts 3/4/6/8-digit shorthand</li>
         <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app — the theme colors, color wheel, sliders, preferences, and palette sidebar included — with the Machado et&nbsp;al. 2009 matrices applied in linear-light space directly inside the app's own rendering, so the preview is identical on iOS/Safari, Android, and desktop browsers</li>
         <li>Generate a whole accessible color system in one step — a luminance-keyed tonal scale (50&ndash;950) plus ready-made light and dark themes with semantic roles (background, surface, border, text, muted, accent), where each theme's text, muted, and accent contrasts are guaranteed by construction rather than checked afterwards. Choose the scale's source — blend your text and background colors across the ramp (gradient), or use the text or background color alone — preview the palette or the generated light/dark themes dressed on a realistic mock layout, save a theme straight to the palette or import individual scale/theme colors into a text or background role, and copy the scale and both themes as alpha-ready CSS custom properties (space-separated rgb-channel tokens, so any token can take an opacity)</li>
         <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, or W3C Design Tokens (DTCG 2025.10) JSON, in your choice of OKLCH, hex, or RGB (with an sRGB hex fallback in OKLCH and hex modes). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
@@ -782,6 +855,15 @@
         tool shows the official usage level (body text, fluent text, spot &amp; non-text, and so on)
         and a pass/fail verdict for your chosen size and weight — including the minimum size
         required when it fails — for the main pair and for every color saved in the palette.</p>
+      <p><strong>Can I check contrast for semi-transparent (opacity) colors?</strong><br>
+        Yes. The main text color, the custom background, and every saved palette color each have an
+        opacity control, and contrast is computed on the composited result: a translucent color is
+        alpha-blended over whatever is behind it before its WCAG ratio and APCA Lc are measured. A
+        see-through background composites over a page underlay color you can set in Preferences. The
+        WCAG and APCA contrast locks both hold this visible, composited contrast and tell you when a
+        target can't be reached at the chosen opacity. Opacity is preserved on export as 8-digit
+        <code>#RRGGBBAA</code> hex, <code>rgba()</code> and <code>oklch()</code> with an alpha
+        channel, and alpha-ready design tokens.</p>
       <p><strong>What is relative luminance?</strong><br>
         Relative luminance is the perceived brightness of a color, computed as
         L = 0.2126·R + 0.7152·G + 0.0722·B on linearized channels. WCAG contrast ratios depend only
@@ -868,23 +950,27 @@
         <div class="custom-slider-row"><span class="custom-ch" style="color:#d07070">R</span><input type="range" data-ch="r" min="0" max="255"><input type="text" class="custom-val" data-chv="r" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch" style="color:#70b070">G</span><input type="range" data-ch="g" min="0" max="255"><input type="text" class="custom-val" data-chv="g" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch" style="color:#7090d0">B</span><input type="range" data-ch="b" min="0" max="255"><input type="text" class="custom-val" data-chv="b" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row custom-alpha-row"><span class="custom-ch">A</span><input type="range" class="ce-alpha-range" min="0" max="100"><input type="text" class="custom-val ce-alpha-val" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
       </div>
       <div class="custom-slider-group" data-egroup="hsl">
         <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-ch="h" min="0" max="359"><input type="text" class="custom-val" data-chv="h" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-ch="s" min="0" max="100"><input type="text" class="custom-val" data-chv="s" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-ch="l" min="0" max="100"><input type="text" class="custom-val" data-chv="l" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row custom-alpha-row"><span class="custom-ch">A</span><input type="range" class="ce-alpha-range" min="0" max="100"><input type="text" class="custom-val ce-alpha-val" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
       </div>
       <div class="custom-slider-group" data-egroup="lum">
         <div class="custom-slider-row"><span class="custom-ch">L</span><input type="range" data-ch="clum" min="0" max="1000" step="1"><input type="text" class="custom-val" data-chv="clum" inputmode="decimal" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row custom-alpha-row"><span class="custom-ch">A</span><input type="range" class="ce-alpha-range" min="0" max="100"><input type="text" class="custom-val ce-alpha-val" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch">H</span><input type="range" data-ch="chue" min="0" max="359"><input type="text" class="custom-val" data-chv="chue" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
         <div class="custom-slider-row"><span class="custom-ch">S</span><input type="range" data-ch="csat" min="0" max="100"><input type="text" class="custom-val" data-chv="csat" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
       </div>
       <div class="custom-slider-group" data-egroup="gray">
-        <div class="custom-slider-row"><span class="custom-ch"></span><input type="range" data-ch="gray" min="0" max="255" class="custom-gray-slider"><input type="text" class="custom-val" data-chv="gray" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row"><span class="custom-ch">G</span><input type="range" data-ch="gray" min="0" max="255" class="custom-gray-slider"><input type="text" class="custom-val" data-chv="gray" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
+        <div class="custom-slider-row custom-alpha-row"><span class="custom-ch">A</span><input type="range" class="ce-alpha-range" min="0" max="100"><input type="text" class="custom-val ce-alpha-val" inputmode="numeric" autocomplete="off" spellcheck="false"></div>
       </div>
     </div>
     <div class="custom-hex-wrap chip-editor-hexwrap">
-      <input type="text" class="custom-hex-input chip-editor-hex" maxlength="7" spellcheck="false" placeholder="#000000">
+      <input type="text" class="custom-hex-input chip-editor-hex" maxlength="9" spellcheck="false" placeholder="#000000">
       <span class="custom-hex-copy-icon chip-editor-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
     </div>
     <div class="chip-editor-preview">
