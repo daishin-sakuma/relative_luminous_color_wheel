@@ -802,14 +802,24 @@ function buildPreviewWcag(el) {
   fontCtrlLabel.className = 'preview-wcag-cat';
   fontCtrlLabel.textContent = 'Font';
   fontCtrlLabel.title = 'Font size and weight the APCA verdicts judge against';
+  // Each select is wrapped so a custom, theme-coloured caret (the wrapper's
+  // ::after) can replace the native one — the native arrow is a fixed system
+  // colour that vanishes on the dark select fill; ours uses var(--text), which
+  // always contrasts with the select's var(--surface) background.
   const sizeSel = document.createElement('select');
   sizeSel.className = 'apca-font-select';
   sizeSel.title = 'Font size (px) the APCA verdicts judge against';
   for (const v of APCA_FONT_SIZES) { const o = document.createElement('option'); o.value = String(v); o.textContent = String(v); sizeSel.appendChild(o); }
+  const sizeWrap = document.createElement('span');
+  sizeWrap.className = 'apca-font-select-wrap';
+  sizeWrap.appendChild(sizeSel);
   const wghtSel = document.createElement('select');
   wghtSel.className = 'apca-font-select';
   wghtSel.title = 'Font weight the APCA verdicts judge against';
   for (const v of APCA_FONT_WEIGHTS) { const o = document.createElement('option'); o.value = String(v); o.textContent = String(v); wghtSel.appendChild(o); }
+  const wghtWrap = document.createElement('span');
+  wghtWrap.className = 'apca-font-select-wrap';
+  wghtWrap.appendChild(wghtSel);
   sizeSel.addEventListener('change', () => {
     apcaFontSize = +sizeSel.value;
     saveToStorage('apca-font-px', String(apcaFontSize));
@@ -824,7 +834,7 @@ function buildPreviewWcag(el) {
     if (_ce) chipEditorRenderPreview();
     syncApcaTypeControls();
   });
-  fontCtrl.append(fontCtrlLabel, sizeSel, wghtSel);
+  fontCtrl.append(fontCtrlLabel, sizeWrap, wghtWrap);
   apcaGroup.appendChild(fontCtrl);
 
   // Note: WCAG 1.4.11 (non-text contrast, 3:1) is Level AA only — UI
