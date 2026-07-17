@@ -4023,6 +4023,7 @@ function applyPaletteOpen() {
     paletteSection.classList.add('palette-section--opening');
     paletteSection.hidden = false;
     syncSidebarHeight(); // measure the toolbar gap now that it's showing
+    updateRailFade();    // rail now has a real height — set the correct top/bottom fade
     _paletteOpenTimer = setTimeout(() => {
       paletteSection.classList.remove('palette-section--opening');
     }, 220);
@@ -4239,6 +4240,79 @@ paletteSection.addEventListener('touchmove', e => {
     && paletteRail.contains(/** @type {Node} */ (e.target));
   if (!railScrolls) e.preventDefault();
 }, { passive: false });
+
+// Rubber-band for a short list. When the rail has nothing to scroll (few colors),
+// a vertical drag is otherwise dead — the guard above just pins the page. Here we
+// translate the content with sub-linear damping and spring it back on release, so
+// the list always feels draggable with inertia. Real overflow (many colors) is
+// left to native momentum scroll, which bounces on its own; drags from the grip
+// (reorder) and horizontal drags (swipe-to-close) are handed off untouched.
+let _railElastic = null;
+function springRailBack() {
+  if (!_railElastic) return;
+  if (_railElastic.engaged) {
+    const c = _railElastic.content;
+    c.style.transition = 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)'; // ease-out spring
+    c.style.transform = 'translateY(0)';
+  }
+  _railElastic = null;
+}
+paletteRail.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1) return;
+  if (paletteRail.scrollHeight > paletteRail.clientHeight + 1) return; // native scroll owns it
+  if (/** @type {HTMLElement} */ (e.target).closest('.palette-chip-grip')) return; // grip = reorder
+  const content = paletteRail.querySelector('.palette-rail-content');
+  if (!content) return;
+  const t = e.touches[0];
+  _railElastic = { x: t.clientX, y: t.clientY, content, engaged: false };
+}, { passive: true });
+paletteRail.addEventListener('touchmove', e => {
+  if (!_railElastic) return;
+  if (_chipDragActive || (_paletteSwipe && _paletteSwipe.dragging)) { springRailBack(); return; }
+  const t = e.touches[0];
+  const dx = t.clientX - _railElastic.x;
+  const dy = t.clientY - _railElastic.y;
+  if (!_railElastic.engaged) {
+    if (Math.abs(dy) < 4) return;                                   // deadzone: taps pass through
+    if (Math.abs(dx) > Math.abs(dy)) { _railElastic = null; return; } // horizontal → swipe-close owns it
+    _railElastic.engaged = true;
+  }
+  const damped = Math.sign(dy) * Math.pow(Math.abs(dy), 0.82) * 0.6; // resists more the further it pulls
+  _railElastic.content.style.transition = 'none';
+  _railElastic.content.style.transform = 'translateY(' + damped.toFixed(1) + 'px)';
+}, { passive: true });
+paletteRail.addEventListener('touchend', springRailBack);
+paletteRail.addEventListener('touchcancel', springRailBack);
+
+// Scroll-position-aware fade (scroll-shadow): the top band shows only once scrolled
+// down, the bottom band only while there's more below. So at the very bottom the
+// bottom fade turns OFF — the last chip is fully opaque and, since native scroll
+// rests stably at the bottom, you can scroll to it and stay there. Fixes: a small
+// ("中途半端") overflow used to leave the last chip permanently under the bottom
+// fade because max-scroll couldn't pull it clear. When the list fits, no fade.
+function updateRailFade() {
+  const fade = parseFloat(getComputedStyle(paletteRail).getPropertyValue('--pal-fade')) || 15;
+  const top = paletteRail.scrollTop;
+  const max = paletteRail.scrollHeight - paletteRail.clientHeight;
+  let topFade, botFade;
+  if (max <= 1) {
+    // Fits (few colors → rubber-band): keep the symmetric band so an elastic drag
+    // still dissolves the chips at both edges instead of hard-clipping.
+    topFade = fade; botFade = fade;
+  } else {
+    // Overflowing: fade a band only where content is actually hidden — so at the
+    // very bottom the bottom fade is 0 and the last chip is fully clear.
+    topFade = top > 1 ? fade : 0;
+    botFade = top < max - 1 ? fade : 0;
+  }
+  const mask = 'linear-gradient(to bottom, transparent 0, #000 ' + topFade +
+    'px, #000 calc(100% - ' + botFade + 'px), transparent 100%)';
+  paletteRail.style.webkitMaskImage = mask;
+  paletteRail.style.maskImage = mask;
+}
+paletteRail.addEventListener('scroll', updateRailFade, { passive: true });
+window.addEventListener('resize', updateRailFade);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', updateRailFade);
 
 // A rightward swipe drags the drawer with the finger. On release it closes only
 // when the gesture has enough distance or velocity; otherwise it springs back.
@@ -5756,6 +5830,7 @@ function renderPalette() {
 
   reinsertChipEditor();
   renderPalettePreviews();
+  updateRailFade(); // re-evaluate top/bottom fade for the new list length
 }
 
 /** Mirror the saved palette into the two vs-Custom preview tiles as a compact
