@@ -4604,6 +4604,22 @@ function removeFromPalette(index) {
   else commit();
 }
 
+/** Duplicate the color at `index`, inserting the copy right after it (so it lands
+    as the next swatch in the same role). Respects the per-role cap; one undo step. */
+function duplicateInPalette(index) {
+  const commit = () => {
+    const src = palette[index];
+    if (!src) return;
+    if (palette.filter(e => e.role === src.role).length >= PALETTE_ROLE_MAX) return;
+    recordPaletteHistory();
+    palette.splice(index + 1, 0, { hex: src.hex, role: src.role });
+    savePalette();
+    renderPalette();
+  };
+  if (_ceIdx !== null) closeChipEditor(true, commit);
+  else commit();
+}
+
 /** Batch-add colours (e.g. a generated theme) to the palette as ONE undoable
     step: skips invalid hexes, hexes already saved in that role, and anything
     past the per-role cap. Returns how many were actually added. */
@@ -4932,6 +4948,8 @@ const PENCIL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none
 // Eyedropper — "load this saved colour into the matching main picker".
 const RECALL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 11.25 1.5 21H0v-1.5L9.75 6M15 11.25l3.75-3.75a2.121 2.121 0 0 0-3-3L12 8.25M15 11.25 12 8.25"/></svg>';
 const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
+// Two stacked squares (a copy peeking behind) + a plus: "duplicate this color".
+const DUPLICATE_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2"/><path d="M14.5 12.5v4M12.5 14.5h4"/></svg>';
 // Six-dot grip for the chip's drag handle (touch-action:none, so Android can't
 // hijack the press for scroll/long-press before the grab engages).
 const GRIP_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
@@ -5856,6 +5874,17 @@ function renderPalette() {
       } catch (_) { /* clipboard denied */ }
     });
 
+    const duplicate = document.createElement('button');
+    duplicate.className = 'palette-chip-duplicate';
+    duplicate.innerHTML = DUPLICATE_SVG;
+    duplicate.title = 'Duplicate this color';
+    duplicate.setAttribute('aria-label', 'Duplicate this color');
+    duplicate.disabled = entries.length >= PALETTE_ROLE_MAX;
+    duplicate.addEventListener('click', e => {
+      e.stopPropagation();
+      duplicateInPalette(flatIdx);
+    });
+
     const remove = document.createElement('button');
     remove.className = 'palette-chip-remove';
     remove.textContent = '\u00d7';
@@ -5864,7 +5893,7 @@ function renderPalette() {
 
     attachChipDrag(chip, pos, role, list);
 
-    chip.append(grip, rank, hexLabel, edit, copy, recall, remove);
+    chip.append(grip, rank, hexLabel, edit, copy, duplicate, recall, remove);
     list.appendChild(chip);
     });
 
