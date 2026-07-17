@@ -4254,6 +4254,8 @@ function springRailBack() {
     const c = _railElastic.content;
     c.style.transition = 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)'; // ease-out spring
     c.style.transform = 'translateY(0)';
+    // Clear the drag-time edge fade once the content has sprung back to rest.
+    setTimeout(updateRailFade, 400);
   }
   _railElastic = null;
 }
@@ -4280,35 +4282,39 @@ paletteRail.addEventListener('touchmove', e => {
   const damped = Math.sign(dy) * Math.pow(Math.abs(dy), 0.82) * 0.6; // resists more the further it pulls
   _railElastic.content.style.transition = 'none';
   _railElastic.content.style.transform = 'translateY(' + damped.toFixed(1) + 'px)';
+  // Dissolve the edge the content is being pulled past (down-drag clips the
+  // bottom, up-drag the top), so the rubber-band doesn't hard-clip at the rail.
+  const fade = railFadePx();
+  setRailMask(damped < 0 ? fade : 0, damped > 0 ? fade : 0);
 }, { passive: true });
 paletteRail.addEventListener('touchend', springRailBack);
 paletteRail.addEventListener('touchcancel', springRailBack);
 
-// Scroll-position-aware fade (scroll-shadow): the top band shows only once scrolled
-// down, the bottom band only while there's more below. So at the very bottom the
-// bottom fade turns OFF — the last chip is fully opaque and, since native scroll
-// rests stably at the bottom, you can scroll to it and stay there. Fixes: a small
-// ("中途半端") overflow used to leave the last chip permanently under the bottom
-// fade because max-scroll couldn't pull it clear. When the list fits, no fade.
-function updateRailFade() {
-  const fade = parseFloat(getComputedStyle(paletteRail).getPropertyValue('--pal-fade')) || 15;
-  const top = paletteRail.scrollTop;
-  const max = paletteRail.scrollHeight - paletteRail.clientHeight;
-  let topFade, botFade;
-  if (max <= 1) {
-    // Fits (few colors → rubber-band): keep the symmetric band so an elastic drag
-    // still dissolves the chips at both edges instead of hard-clipping.
-    topFade = fade; botFade = fade;
-  } else {
-    // Overflowing: fade a band only where content is actually hidden — so at the
-    // very bottom the bottom fade is 0 and the last chip is fully clear.
-    topFade = top > 1 ? fade : 0;
-    botFade = top < max - 1 ? fade : 0;
-  }
+// Fade a band ONLY where content is actually clipped by the rail viewport, so a
+// visible chip is never dimmed. A fade means "there's more, hidden this way."
+function railFadePx() {
+  return parseFloat(getComputedStyle(paletteRail).getPropertyValue('--pal-fade')) || 15;
+}
+function setRailMask(topFade, botFade) {
   const mask = 'linear-gradient(to bottom, transparent 0, #000 ' + topFade +
     'px, #000 calc(100% - ' + botFade + 'px), transparent 100%)';
   paletteRail.style.webkitMaskImage = mask;
   paletteRail.style.maskImage = mask;
+}
+// Scroll-position-aware fade (scroll-shadow): the top band shows only once scrolled
+// down, the bottom band only while there's more below. So at the very bottom the
+// bottom fade turns OFF — the last chip is fully opaque and, since native scroll
+// rests stably at the bottom, you can scroll to it and stay there. When the list
+// FITS (nothing hidden), there is NO fade at all — otherwise a list that nearly
+// fills the rail had its last chip dimmed by the bottom band even though fully
+// visible (the reported bug). Elastic drag re-adds a band via setRailMask while
+// dragging so the rubber-band still dissolves at the moving edge.
+function updateRailFade() {
+  const fade = railFadePx();
+  const top = paletteRail.scrollTop;
+  const max = paletteRail.scrollHeight - paletteRail.clientHeight;
+  if (max <= 1) { setRailMask(0, 0); return; } // fits: nothing hidden → no fade
+  setRailMask(top > 1 ? fade : 0, top < max - 1 ? fade : 0);
 }
 paletteRail.addEventListener('scroll', updateRailFade, { passive: true });
 window.addEventListener('resize', updateRailFade);
