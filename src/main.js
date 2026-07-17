@@ -1301,6 +1301,10 @@ function activeContrastTarget() {
 }
 /** Format a #rrggbb hex string according to the current stripHash preference. */
 function formatHex(hex) { return stripHash ? hex.slice(1) : hex; }
+/** Hex for DISPLAY / labels / swatch copy: honours the "Include # in hex"
+    opt-out and upper-cases (so tooltips, swatch names, the chip editor field
+    and swatch-copied values all drop the # when the option is off). */
+function hexDisplay(hex) { return formatHex(hex).toUpperCase(); }
 
 // ─── RAF render scheduler ─────────────────────────────────────────────────────
 // iOS fires slider input events well above 60 Hz. Without throttling, each
@@ -3467,7 +3471,11 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
 // wheel's core idea — a colour at a target relative luminance — plus contrastRatio.
 // (Surfaced inside the Layout preview's "Scales" mode; no separate popper.)
 const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
-const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.048, 0.022];
+// The dark end goes near-black (900/950 darker than a plain tonal ramp) so the
+// dark theme's bg (950) and surface (900) read as a realistic dark UI — a 0.022
+// "950" looked like ~#292929, too bright to pass as dark mode. The light theme
+// uses only the light half (50/200/600/700/800), so it's unaffected.
+const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.028, 0.008];
 
 // HSL lightness whose sRGB has WCAG relative luminance ≈ target. (Mode-independent,
 // unlike findLightness, which follows wheelLum into APCA Ys in APCA mode.)
@@ -3526,7 +3534,7 @@ function currentScale() {
 function scaleSourceToggle(onChange) {
   const wrap = lpEl('div', 'lp-modes');
   for (const [m, label, tip] of [
-    ['gradient', 'Text→BG', 'Blend the main text and background colours across the scale'],
+    ['gradient', 'Text / BG', 'Blend the main text and background colours across the scale'],
     ['text', 'Text', 'Use only the main text colour'],
     ['bg', 'BG', 'Use only the main background colour'],
   ]) {
@@ -3546,10 +3554,10 @@ function scaleSeedLine() {
   const dotOf = hex => { const d = lpEl('span', 'sg-seed-dot'); d.style.background = cvdTransformHex(hex); return d; };
   if (_scaleSource === 'gradient') {
     seed.append(dotOf(textHex), dotOf(bgHex),
-      lpEl('span', 'sg-seed-txt', 'Text → BG · ' + textHex.toUpperCase() + ' → ' + bgHex.toUpperCase()));
+      lpEl('span', 'sg-seed-txt', 'Text → BG · ' + hexDisplay(textHex) + ' → ' + hexDisplay(bgHex)));
   } else {
     const hex = _scaleSource === 'bg' ? bgHex : textHex;
-    seed.append(dotOf(hex), lpEl('span', 'sg-seed-txt', (_scaleSource === 'bg' ? 'BG ' : 'Text ') + hex.toUpperCase()));
+    seed.append(dotOf(hex), lpEl('span', 'sg-seed-txt', (_scaleSource === 'bg' ? 'BG ' : 'Text ') + hexDisplay(hex)));
   }
   return seed;
 }
@@ -3571,6 +3579,14 @@ function accentPair(scale, idx) {
   const black = { step: null, hex: '#000000', lum: 0 };
   const accentText = contrastRatio(accent.lum, white.lum) >= contrastRatio(accent.lum, black.lum) ? white : black;
   return { accent, accentText };
+}
+
+// Colour for inline links (rendered on `surface`). The accent is picked to be a
+// good fill, which isn't always ≥ AA as text — so use it as a link only when it
+// clears 4.5:1 on the surface, otherwise fall back to the body text colour (an
+// underline carries the link affordance). Keeps every rendered link accessible.
+function themeLink(th) {
+  return contrastRatio(th.accent.lum, th.surface.lum) >= 4.5 ? th.accent : th.text;
 }
 
 function deriveTheme(scale, dark) {
@@ -3600,44 +3616,135 @@ function deriveTheme(scale, dark) {
   };
 }
 
-function sgCopy(text, el, done) {
-  if (!navigator.clipboard) return;
-  navigator.clipboard.writeText(text).then(() => {
-    const prev = el.textContent; el.textContent = done || 'Copied';
-    setTimeout(() => { el.textContent = prev; }, 1200);
-  }).catch(() => {});
-}
 
 // Copy a swatch's hex and confirm it: flash a green outline and flip the hover
 // tooltip (the [data-name] ::after) to "✓ Copied #HEX" so it's obvious a click
 // copied the value.
 function copyHexSwatch(hex, el) {
   if (!navigator.clipboard) return;
-  navigator.clipboard.writeText(hex.toUpperCase()).then(() => {
+  navigator.clipboard.writeText(hexDisplay(hex)).then(() => {
     const orig = el.dataset.name;
     el.classList.add('copied');
-    el.dataset.name = '✓ Copied ' + hex.toUpperCase();
+    el.dataset.name = '✓ Copied ' + hexDisplay(hex);
     setTimeout(() => { el.classList.remove('copied'); el.dataset.name = orig; }, 1000);
   }).catch(() => {});
 }
 
-function buildScaleCss(scale, light, dark) {
-  // Palette steps are stored as SPACE-SEPARATED RGB CHANNELS (not #hex), the
-  // Tailwind-style pattern that lets any token take an alpha:
-  //   --border: rgb(var(--color-200) / 0.5);
-  // The readable hex stays in a trailing comment. The semantic layer wraps the
-  // channels in rgb() so those tokens are usable directly.
-  const channels = hex => hexToRgb(hex).join(' ');
-  const ref = e => e.step === null ? e.hex : `rgb(var(--color-${e.step}))`;
-  const roleLine = t => `  --bg: ${ref(t.bg)}; --surface: ${ref(t.surface)}; --border: ${ref(t.border)};\n`
-    + `  --text: ${ref(t.text)}; --muted: ${ref(t.muted)}; --accent: ${ref(t.accent)}; --accent-foreground: ${ref(t.accentText)};`;
-  return '/* RGB-channel palette → alpha-ready: rgb(var(--color-700) / .5).\n'
-    + '   Add a prefix (e.g. --brand-, --ui-) if you integrate with a component\n'
-    + '   library, to avoid variable-name collisions. */\n'
-    + ':root {\n'
-    + scale.map(c => `  --color-${c.step}: ${channels(c.hex)}; /* ${c.hex} */`).join('\n')
-    + '\n}\n:root, [data-theme="light"] {\n' + roleLine(light) + '\n}\n'
-    + '[data-theme="dark"] {\n' + roleLine(dark) + '\n}';
+// Scale export controls (independent of the sidebar palette export).
+let _scaleExportFmt = 'css';        // 'css' | 'tailwind' | 'json'
+let _scaleExportColorFmt = 'oklch'; // 'oklch' | 'hex' | 'rgb'
+
+// Semantic role → theme key. The order the themes are emitted in.
+const SCALE_SEM_ROLES = [
+  ['bg', 'bg'], ['surface', 'surface'], ['border', 'border'], ['text', 'text'],
+  ['muted', 'muted'], ['accent', 'accent'], ['accent-foreground', 'accentText'],
+];
+
+/** Full Scale export as GLOBAL (primitive) tokens — the luminance-keyed tonal
+ *  scale 50–950 — plus the light/dark semantic themes as tokens that REFERENCE
+ *  those globals (var() in CSS/Tailwind, DTCG aliases in JSON). This is distinct
+ *  from the palette export, which is purely semantic role tokens.
+ *  @param {'css'|'tailwind'|'json'} format
+ *  @param {'oklch'|'hex'|'rgb'} colorFmt */
+function buildScaleExport(format, colorFmt, scale, light, dark) {
+  const cval = hex => colorFmt === 'hex' ? hex.toLowerCase()
+                    : colorFmt === 'rgb' ? rgbCss(hex)
+                    :                       oklchCss(hex);
+  const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
+
+  if (format === 'css') {
+    // RGB is emitted as alpha-ready channels (rgb(var(--color-500) / .5)); hex
+    // and oklch are stored whole and referenced directly.
+    const rgbCh = colorFmt === 'rgb';
+    const gval = hex => rgbCh ? hexToRgb(hex).join(' ') : cval(hex);
+    const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
+    const ref = e => e.step === null ? (rgbCh ? rgbCss(e.hex) : cval(e.hex))
+                                     : (rgbCh ? `rgb(var(--color-${e.step}))` : `var(--color-${e.step})`);
+    const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --${n}: ${ref(t[k])};`).join('\n');
+    return `/* Global tokens — luminance-keyed tonal scale (50–950), primitives.
+   The semantic themes below reference them, so re-theming means swapping aliases.
+   From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
+:root {
+${globals}
+}
+/* Semantic tokens — light theme (default), referencing the globals above. */
+:root, [data-theme="light"] {
+${roleLines(light)}
+}
+/* Semantic tokens — dark theme. */
+[data-theme="dark"] {
+${roleLines(dark)}
+}
+`;
+  }
+
+  if (format === 'tailwind') {
+    // Tailwind v4 @theme: the scale becomes global colour tokens, so you get
+    // utilities like bg-brand-500 / text-brand-700; the semantic layer follows.
+    const globals = scale.map(c => `  --color-brand-${c.step}: ${cval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
+    const ref = e => e.step === null ? cval(e.hex) : `var(--color-brand-${e.step})`;
+    const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --color-${n}: ${ref(t[k])};`).join('\n');
+    return `@theme {
+  /* Global tokens — tonal scale → utilities like bg-brand-500, text-brand-700. */
+${globals}
+}
+/* Semantic tokens (reference the scale). Toggle dark with [data-theme="dark"]. */
+:root, [data-theme="light"] {
+${roleLines(light)}
+}
+[data-theme="dark"] {
+${roleLines(dark)}
+}
+`;
+  }
+
+  // JSON — W3C Design Tokens (DTCG 2025.10): global scale tokens under color.scale,
+  // and light/dark themes under theme.* whose values are ALIASES ({color.scale.N}).
+  const tokenValue = hex => {
+    const h = hex.toLowerCase();
+    if (colorFmt === 'oklch') return { colorSpace: 'oklch', components: oklchComponents(hex), alpha: 1, hex: h };
+    const [r, g, b] = hexToRgb(hex);
+    const components = [r, g, b].map(v => +(v / 255).toFixed(4));
+    return colorFmt === 'hex' ? { colorSpace: 'srgb', components, alpha: 1, hex: h }
+                              : { colorSpace: 'srgb', components, alpha: 1 };
+  };
+  const scaleGroup = Object.fromEntries(scale.map(c => [String(c.step), { $value: tokenValue(c.hex) }]));
+  const themeGroup = t => Object.fromEntries(SCALE_SEM_ROLES.map(([n, k]) => {
+    const e = t[k];
+    // Reference the global scale token where possible; synthesized values
+    // (dark bg/surface/border, black/white accent labels) are literal.
+    return [n, e.step === null ? { $value: tokenValue(e.hex) } : { $value: `{color.scale.${e.step}}` }];
+  }));
+  const fmtNote = colorFmt === 'oklch' ? 'Colors use OKLCH with an sRGB hex fallback.'
+                : colorFmt === 'hex'   ? 'Colors use sRGB (components 0–1) with an sRGB hex fallback string.'
+                :                        'Colors use sRGB numeric channels (components 0–1).';
+  const json = {
+    $description: `Global tonal-scale tokens (primitives, color.scale.*) plus light and dark semantic themes (theme.*) that alias them, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Per the W3C Design Tokens format (2025.10).`,
+    color: { $type: 'color', scale: scaleGroup },
+    theme: { $type: 'color', light: themeGroup(light), dark: themeGroup(dark) },
+    $extensions: {
+      'app.vercel.relative-luminous-color-wheel': {
+        scaleSteps: scale.map(c => c.step),
+        scaleLuminances: scale.map(c => +c.lum.toFixed(4)),
+      },
+    },
+  };
+  return JSON.stringify(json, null, 2) + '\n';
+}
+
+const SCALE_EXPORT_FILE = {
+  css:      { name: 'scale.tokens.css',   mime: 'text/css' },
+  tailwind: { name: 'scale.tailwind.css', mime: 'text/css' },
+  json:     { name: 'scale.tokens.json',  mime: 'application/design-tokens+json' },
+};
+function downloadScaleExport(format, colorFmt, scale, light, dark) {
+  const f = SCALE_EXPORT_FILE[format] || SCALE_EXPORT_FILE.css;
+  const blob = new Blob([buildScaleExport(format, colorFmt, scale, light, dark)], { type: f.mime + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = f.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Layout preview ───────────────────────────────────────────────────────────
@@ -3729,14 +3836,14 @@ function buildContrastMatrix(texts, bgs) {
   table.appendChild(corner);
   bgs.forEach((hex, j) => {
     const c = lpEl('div', 'lp-matrix-colh', String(j + 1));
-    c.title = 'Background ' + paletteRankLabel(j) + ' · ' + hex.toUpperCase();
+    c.title = 'Background ' + paletteRankLabel(j) + ' · ' + hexDisplay(hex);
     const sw = lpEl('span', 'lp-matrix-dot'); sw.style.background = cvdTransformHex(hex);
     c.prepend(sw);
     table.appendChild(c);
   });
   texts.forEach((thex, i) => {
     const rh = lpEl('div', 'lp-matrix-rowh', String(i + 1));
-    rh.title = 'Text ' + paletteRankLabel(i) + ' · ' + thex.toUpperCase();
+    rh.title = 'Text ' + paletteRankLabel(i) + ' · ' + hexDisplay(thex);
     const sw = lpEl('span', 'lp-matrix-dot'); sw.style.background = cvdTransformHex(thex);
     rh.prepend(sw);
     table.appendChild(rh);
@@ -3745,11 +3852,11 @@ function buildContrastMatrix(texts, bgs) {
       if (apca) {
         const v = lpApcaVerdict(thex, bhex);
         label = String(Math.round(v.lc)); cls = v.cls;
-        title = 'Text ' + thex.toUpperCase() + ' on ' + bhex.toUpperCase() + '\n' + v.fontText + ' · ' + v.tier;
+        title = 'Text ' + hexDisplay(thex) + ' on ' + hexDisplay(bhex) + '\n' + v.fontText + ' · ' + v.tier;
       } else {
         const v = lpWcagVerdict(thex, bhex);
         label = v.cell; cls = v.cls;
-        title = 'Text ' + thex.toUpperCase() + ' on ' + bhex.toUpperCase() + ' — ' + v.full + '\n' + v.levels;
+        title = 'Text ' + hexDisplay(thex) + ' on ' + hexDisplay(bhex) + ' — ' + v.full + '\n' + v.levels;
       }
       const cell = lpEl('div', 'lp-matrix-cell lp-v-' + cls, label);
       cell.title = title;
@@ -3769,6 +3876,7 @@ function buildThemeChecklist(th) {
   // on the accent fill. These are the theme's binding text-contrast constraints.
   [['Body text', th.text.hex, th.surface.hex],
    ['Muted text', th.muted.hex, th.surface.hex],
+   ['Link', themeLink(th).hex, th.surface.hex],
    ['Button label', th.accentText.hex, th.accent.hex]].forEach(([label, tHex, bHex]) => {
     const row = lpEl('div', 'lp-check');
     row.appendChild(lpEl('span', 'lp-check-label', label));
@@ -3926,7 +4034,7 @@ function renderPaletteLayout() {
     const sws = lpEl('div', 'lp-pal-swatches');
     hexes.forEach((hex, i) => {
       const sw = lpEl('span', 'lp-pal-swatch');
-      sw.title = paletteRankLabel(i) + ' · ' + hex.toUpperCase();
+      sw.title = paletteRankLabel(i) + ' · ' + hexDisplay(hex);
       if (role === 'fg') { sw.textContent = 'Ag'; sw.style.color = cvdTransformHex(hex); }
       else { sw.classList.add('lp-pal-swatch-fill'); sw.style.background = cvdTransformHex(hex); }
       sws.appendChild(sw);
@@ -3960,8 +4068,8 @@ function renderThemeLayout() {
   scale.forEach(c => {
     const sw = lpEl('span', 'lp-theme-swatch');
     sw.style.background = cvdTransformHex(c.hex);
-    sw.dataset.name = c.step + ' · ' + c.hex.toUpperCase() + ' ⧉'; // hover label: step + hex + copy cue
-    sw.title = 'Click to copy ' + c.hex.toUpperCase() + ' (step ' + c.step + ')';
+    sw.dataset.name = c.step + ' · ' + hexDisplay(c.hex) + ' ⧉'; // hover label: step + hex + copy cue
+    sw.title = 'Click to copy ' + hexDisplay(c.hex) + ' (step ' + c.step + ')';
     sw.addEventListener('click', () => copyHexSwatch(c.hex, sw));
     strip.appendChild(sw);
   });
@@ -3970,13 +4078,47 @@ function renderThemeLayout() {
   // old compact theme cards).
   layoutPreviewEl.appendChild(themedScreen('Light', light));
   layoutPreviewEl.appendChild(themedScreen('Dark',  dark));
-  // Export, folded in from the old popper.
-  const actions = lpEl('div', 'sg-actions');
-  const copyBtn = lpEl('button', 'sg-copy', 'Copy CSS variables');
-  copyBtn.type = 'button';
-  copyBtn.addEventListener('click', () => sgCopy(buildScaleCss(scale, light, dark), copyBtn, 'Copied CSS'));
-  actions.appendChild(copyBtn);
-  layoutPreviewEl.appendChild(actions);
+  // Full export as GLOBAL tokens, laid out like the sidebar palette export: a
+  // colour group + a file-format group on one row (equal-width segmented tabs),
+  // then Copy / Download on their own row. The scale is emitted as global
+  // primitives and the themes reference them (independent of the palette export).
+  const exp = lpEl('div', 'sg-export');
+  exp.appendChild(lpEl('div', 'sg-label', 'Export global tokens'));
+  const seg = (opts, current, onPick) => {
+    const g = lpEl('div', 'settings-theme-btns');
+    opts.forEach(([val, txt]) => {
+      const b = lpEl('button', 'settings-theme-btn' + (val === current ? ' active' : ''), txt);
+      b.type = 'button';
+      b.title = txt;
+      b.addEventListener('click', () => { if (val !== current) onPick(val); });
+      g.appendChild(b);
+    });
+    return g;
+  };
+  const tabs = lpEl('div', 'palette-export-tabs'); // colour group, then file-format group
+  tabs.append(
+    seg([['oklch', 'OKLCH'], ['hex', 'HEX'], ['rgb', 'RGB']], _scaleExportColorFmt,
+      v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
+    seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']], _scaleExportFmt,
+      v => { _scaleExportFmt = v; renderLayoutPreview(); }),
+  );
+  exp.appendChild(tabs);
+  const flash = (btn, text, cls) => {
+    const orig = btn.textContent; btn.textContent = text; btn.classList.add(cls);
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove(cls); }, 1500);
+  };
+  const actions = lpEl('div', 'palette-export-actions');
+  const copyBtn = lpEl('button', 'palette-export-btn', 'Copy');
+  copyBtn.type = 'button'; copyBtn.title = 'Copy the selected export';
+  copyBtn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(buildScaleExport(_scaleExportFmt, _scaleExportColorFmt, scale, light, dark)); flash(copyBtn, 'Copied', 'copied'); } catch (_) { /* clipboard denied */ }
+  });
+  const dlBtn = lpEl('button', 'palette-export-btn', 'Download');
+  dlBtn.type = 'button'; dlBtn.title = 'Download the selected export';
+  dlBtn.addEventListener('click', () => { downloadScaleExport(_scaleExportFmt, _scaleExportColorFmt, scale, light, dark); flash(dlBtn, 'Saved', 'done'); });
+  actions.append(copyBtn, dlBtn);
+  exp.appendChild(actions);
+  layoutPreviewEl.appendChild(exp);
 }
 
 function themedScreen(name, th) {
@@ -4040,7 +4182,7 @@ function themedScreen(name, th) {
     card.style.background = C(surface); card.style.borderColor = C(border);
     const ct = lpEl('div', 'lp-theme-card-title', title); ct.style.color = C(text);
     const cb = lpEl('div', 'lp-theme-card-body', 'The quick brown fox jumps over the lazy dog.'); cb.style.color = C(muted);
-    const cl = lpEl('span', 'lp-theme-card-link', 'Learn more →'); cl.style.color = C(accent);
+    const cl = lpEl('span', 'lp-theme-card-link', 'Learn more →'); cl.style.color = C(themeLink(th).hex);
     card.append(ct, cb, cl);
     cards.appendChild(card);
   });
@@ -4568,8 +4710,10 @@ document.addEventListener('pointerdown', e => {
   const t = /** @type {HTMLElement} */ (e.target);
   if (paletteSection.contains(t) || paletteToggle.contains(t)) return;
   // Pin buttons and the preview strips both open the sidebar on click, so
-  // don't let this close it first (that would flicker close→open)
-  if (t.closest && (t.closest('.pin-btn') || t.closest('.preview-palette'))) return;
+  // don't let this close it first (that would flicker close→open). The scale
+  // import popover lives on <body> (outside the sidebar) but adding a colour
+  // from it should keep the sidebar open too, so exempt it as well.
+  if (t.closest && (t.closest('.pin-btn') || t.closest('.preview-palette') || t.closest('.scale-import'))) return;
   setPaletteOpen(false);
 });
 
@@ -5054,7 +5198,7 @@ function openScaleImport(role, anchor) {
     sw.type = 'button';
     sw.className = 'scale-import-sw';
     sw.style.background = cvdTransformHex(hex);
-    sw.dataset.name = (label ? label + ' · ' : '') + hex.toUpperCase(); // instant hover label (CSS)
+    sw.dataset.name = (label ? label + ' · ' : '') + hexDisplay(hex); // instant hover label (CSS)
     sw.title = sw.dataset.name;
     sw.addEventListener('click', () => {
       if (roomLeft() <= 0) return;
@@ -5181,7 +5325,7 @@ function buildChipEditor() {
   _ceRefs.hex.addEventListener('change', () => {
     const m = /^#?([0-9a-fA-F]{6})$/.exec(_ceRefs.hex.value.trim());
     if (m) chipEditorSetRgb(...hexToRgb('#' + m[1]));
-    else _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b);
+    else _ceRefs.hex.value = formatHex(toHex(_ce.r, _ce.g, _ce.b));
   });
   // Match the main custom hex field: focusing/tapping selects all; the icon copies.
   // Also keep the field visible in the rail — the mobile keyboard shrinks the
@@ -5351,7 +5495,7 @@ function syncChipEditorVals() {
   else                         { V.gray.value = _ce.gray; }
 }
 
-function syncChipEditorHex() { _ceRefs.hex.value = toHex(_ce.r, _ce.g, _ce.b); }
+function syncChipEditorHex() { _ceRefs.hex.value = formatHex(toHex(_ce.r, _ce.g, _ce.b)); }
 
 function syncChipEditorControls() {
   syncChipEditorRanges();
