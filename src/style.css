@@ -2028,7 +2028,7 @@ body.about-modal-open { overflow: hidden; }
 .lp-theme-card { border: 1px solid; border-radius: 6px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .lp-theme-card-title { font-size: 0.7rem; font-weight: 600; }
 .lp-theme-card-body { font-size: 0.6rem; line-height: 1.35; }
-.lp-theme-card-link { font-size: 0.6rem; font-weight: 600; margin-top: auto; }
+.lp-theme-card-link { font-size: 0.6rem; font-weight: 600; margin-top: auto; text-decoration: underline; text-underline-offset: 2px; }
 .lp-hint { font-size: 0.7rem; line-height: 1.45; color: var(--muted); }
 
 /* ── Contrast audit panel (below each Layout preview) ─────────────────────────
@@ -2218,9 +2218,9 @@ body.about-modal-open { overflow: hidden; }
 .sg-check.pass .sg-check-val { color: var(--pass); }
 .sg-check.fail .sg-check-val { color: var(--error); }
 
-.sg-actions { display: flex; }
-.sg-copy { flex: 1; font-family: inherit; font-size: 0.66rem; padding: 0.42rem; border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; transition: background .12s ease; }
-.sg-copy:hover { background: var(--border); }
+/* Global-token export: reuses the sidebar palette-export layout
+   (.palette-export-tabs / .palette-export-actions / .palette-export-btn). */
+.sg-export { display: flex; flex-direction: column; gap: 0.4rem; }
 
 .settings-theme-row {
   display: flex;
