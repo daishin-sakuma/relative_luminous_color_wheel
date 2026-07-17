@@ -2161,13 +2161,7 @@ customHexInput.addEventListener('input', () => {
   if (val && !val.startsWith('#')) val = '#' + val;
   if (val.length > 7) val = val.slice(0, 7);
   customHexInput.value = val.toUpperCase();
-  if (/^#[0-9a-fA-F]{6}$/.test(val)) {
-    _bgLumTouched = true; // a pasted/typed hex fixes this side's luminance deliberately
-    const [r, g, b] = hexToRgb(val);
-    cR = r; cG = g; cB = b;
-    [cH, cS, cL] = rgbToHsl(r, g, b);
-    scheduleRender(false, true);
-  }
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) applyCustomHex(...hexToRgb(val));
 });
 const customHexCopyIcon = /** @type {HTMLElement} */ (document.getElementById('custom-hex-copy-icon'));
 
@@ -2219,6 +2213,15 @@ function applyMainHex(r, g, b) {
   saveToStorage('sel-lum', String(targetLum));
   saveToStorage('sel-hue', String(selHue));
   saveToStorage('sel-sat', String(selSat));
+}
+
+// Set the custom (background) picker from an RGB — the same path as typing a hex
+// into the custom field. Used by the custom hex input and the palette "recall".
+function applyCustomHex(r, g, b) {
+  _bgLumTouched = true; // a recalled/typed hex fixes the bg side's luminance deliberately
+  cR = r; cG = g; cB = b;
+  [cH, cS, cL] = rgbToHsl(r, g, b);
+  scheduleRender(false, true);
 }
 
 swatchHexInput.addEventListener('input', () => {
@@ -4778,6 +4781,8 @@ function paletteRankLabel(pos) {
 
 // Icons for the palette chips / group headers
 const PENCIL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>';
+// Eyedropper — "load this saved colour into the matching main picker".
+const RECALL_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 11.25 1.5 21H0v-1.5L9.75 6M15 11.25l3.75-3.75a2.121 2.121 0 0 0-3-3L12 8.25M15 11.25 12 8.25"/></svg>';
 const PLUS_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
 // Six-dot grip for the chip's drag handle (touch-action:none, so Android can't
 // hijack the press for scroll/long-press before the grab engages).
@@ -5663,6 +5668,18 @@ function renderPalette() {
     hexLabel.className = 'palette-chip-hex';
     hexLabel.textContent = display;
 
+    const recall = document.createElement('button');
+    recall.className = 'palette-chip-recall';
+    recall.innerHTML = RECALL_SVG;
+    recall.title = role === 'fg' ? 'Load into the main text picker' : 'Load into the main background picker';
+    recall.setAttribute('aria-label', recall.title);
+    recall.addEventListener('click', e => {
+      e.stopPropagation();
+      const [rr, gg, bb] = hexToRgb(hex);
+      if (role === 'fg') applyMainHex(rr, gg, bb);
+      else applyCustomHex(rr, gg, bb);
+    });
+
     const edit = document.createElement('button');
     edit.className = 'palette-chip-edit';
     edit.innerHTML = PENCIL_SVG;
@@ -5693,7 +5710,7 @@ function renderPalette() {
 
     attachChipDrag(chip, pos, role, list);
 
-    chip.append(grip, rank, hexLabel, edit, copy, remove);
+    chip.append(grip, rank, hexLabel, recall, edit, copy, remove);
     list.appendChild(chip);
     });
 
