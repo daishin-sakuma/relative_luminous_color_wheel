@@ -3408,7 +3408,13 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
     panel.style.setProperty('--pop-top', top + 'px');
   };
   const refresh = () => { syncPanelHeight(); if (onOpen) onOpen(); };
-  wrap.addEventListener('pointerenter', refresh);
+  // Re-render on ACTUAL hover only. On touch, pointerenter fires on every tap
+  // that lands inside the wrap — including taps on the panel's own tabs. Since
+  // onOpen rebuilds the panel (Layout/Scales wipe innerHTML), that destroyed the
+  // just-tapped control before its click could dispatch, so tabs silently did
+  // nothing on iOS/iPadOS. Touch opens via the click handler (openIt → refresh),
+  // which still renders; taps inside must NOT re-render.
+  wrap.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') refresh(); });
   window.addEventListener('resize', syncPanelHeight);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
   syncPanelHeight();
