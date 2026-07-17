@@ -3576,24 +3576,28 @@ function accentPair(scale, idx) {
 }
 
 function deriveTheme(scale, dark) {
+  // Body & muted text are picked against SURFACE, not bg. Surface is always the
+  // harder of the two backgrounds (one step in from bg toward the text), so
+  // clearing the threshold there guarantees it on the page bg too — otherwise
+  // muted text sat on cards below AA (e.g. dark muted was 3.78:1 on surface).
   if (!dark) {
     const bg = { step: null, hex: '#ffffff', lum: 1 };
-    const acc = accentPair(scale, 6);                    // step 600 — distinct from muted (700)/text (800)
+    const surface = scale[0];
+    const acc = accentPair(scale, 6);                        // step 600 — distinct from muted (700)/text (800)
     return {
-      dark: false, bg,
-      surface: scale[0], border: scale[2],
-      text:  pickByContrast(scale, bg.lum, 7,   false),  // lightest dark step ≥ AAA on white
-      muted: pickByContrast(scale, bg.lum, 4.5, false),  // …≥ AA
+      dark: false, bg, surface, border: scale[2],
+      text:  pickByContrast(scale, surface.lum, 7,   false), // lightest dark step ≥ AAA on surface & bg
+      muted: pickByContrast(scale, surface.lum, 4.5, false), // …≥ AA on surface & bg
       accent: acc.accent, accentText: acc.accentText,
     };
   }
-  const bg = scale[scale.length - 1];                    // 950
-  const acc = accentPair(scale, 3);                      // step 300 — a bright fill distinct from muted/text
+  const bg = scale[scale.length - 1];                        // 950
+  const surface = scale[scale.length - 2];                   // 900
+  const acc = accentPair(scale, 3);                          // step 300 — a bright fill distinct from muted/text
   return {
-    dark: true, bg,
-    surface: scale[scale.length - 2], border: scale[scale.length - 3],
-    text:  scale[1],                                     // 100 — high contrast on the dark bg
-    muted: pickByContrast(scale, bg.lum, 4.5, true),
+    dark: true, bg, surface, border: scale[scale.length - 3],
+    text:  scale[1],                                         // 100 — clears AAA on bg & surface
+    muted: pickByContrast(scale, surface.lum, 4.5, true),    // ≥ AA on surface (the harder bg)
     accent: acc.accent, accentText: acc.accentText,
   };
 }
