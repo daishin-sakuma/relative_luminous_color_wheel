@@ -4295,9 +4295,34 @@ paletteRail.addEventListener('touchcancel', springRailBack);
 function railFadePx() {
   return parseFloat(getComputedStyle(paletteRail).getPropertyValue('--pal-fade')) || 15;
 }
+// smoothstep — a bezier-like S-curve (gentle at both ends) so the mask alpha eases
+// in/out instead of a hard linear ramp, making the fade dissolve smoothly.
+function railEase(t) { return t * t * (3 - 2 * t); }
+const RAIL_EASE_STEPS = 8;
+let _railMaskKey = '';
 function setRailMask(topFade, botFade) {
-  const mask = 'linear-gradient(to bottom, transparent 0, #000 ' + topFade +
-    'px, #000 calc(100% - ' + botFade + 'px), transparent 100%)';
+  const key = topFade + '|' + botFade;
+  if (key === _railMaskKey) return; // skip rebuilding an identical mask on every scroll tick
+  _railMaskKey = key;
+  const stops = [];
+  if (topFade > 0) { // eased ramp 0→1 across the top band
+    for (let i = 0; i <= RAIL_EASE_STEPS; i++) {
+      const t = i / RAIL_EASE_STEPS;
+      stops.push('rgba(0,0,0,' + railEase(t).toFixed(3) + ') ' + (t * topFade).toFixed(2) + 'px');
+    }
+  } else {
+    stops.push('#000 0');
+  }
+  if (botFade > 0) { // eased ramp 1→0 across the bottom band
+    for (let i = 0; i <= RAIL_EASE_STEPS; i++) {
+      const t = i / RAIL_EASE_STEPS;
+      stops.push('rgba(0,0,0,' + railEase(1 - t).toFixed(3) +
+        ') calc(100% - ' + ((1 - t) * botFade).toFixed(2) + 'px)');
+    }
+  } else {
+    stops.push('#000 100%');
+  }
+  const mask = 'linear-gradient(to bottom, ' + stops.join(', ') + ')';
   paletteRail.style.webkitMaskImage = mask;
   paletteRail.style.maskImage = mask;
 }
