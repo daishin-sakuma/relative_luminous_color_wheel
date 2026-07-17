@@ -3459,8 +3459,6 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   setupHoverPopper(sBtn && sBtn.closest('.settings-wrap'), sBtn, document.getElementById('settings-panel'));
   const lBtn = document.getElementById('layout-btn');
   setupHoverPopper(lBtn && lBtn.closest('.layout-wrap'), lBtn, document.getElementById('layout-panel'), renderLayoutPreview);
-  const scBtn = document.getElementById('scale-btn');
-  setupHoverPopper(scBtn && scBtn.closest('.scale-wrap'), scBtn, document.getElementById('scale-panel'), renderScalePreview);
 }
 
 // ─── Scale & theme generator (v2 beta) ────────────────────────────────────────
@@ -3469,7 +3467,7 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
 // guaranteed by construction: each step is solved to a target WCAG relative
 // luminance, so pair contrasts are KNOWN (not audited afterwards). Reuses the
 // wheel's core idea — a colour at a target relative luminance — plus contrastRatio.
-const scalePreviewEl = document.getElementById('scale-preview');
+// (Surfaced inside the Layout preview's "Scales & themes" mode; no separate popper.)
 const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.048, 0.022];
 
@@ -3609,39 +3607,6 @@ function copyHexSwatch(hex, el) {
   }).catch(() => {});
 }
 
-function sgCheck(label, ratio, thr) {
-  const row = lpEl('div', 'sg-check ' + (ratio >= thr ? 'pass' : 'fail'));
-  row.append(lpEl('span', 'sg-check-label', label), lpEl('span', 'sg-check-val', ratio.toFixed(1) + ':1'));
-  return row;
-}
-
-function renderThemeCard(name, t) {
-  const card = lpEl('div', 'sg-theme');
-  card.appendChild(lpEl('div', 'sg-theme-name', name));
-  const ui = lpEl('div', 'sg-ui');
-  ui.style.background = cvdTransformHex(t.bg.hex);
-  ui.style.borderColor = cvdTransformHex(t.border.hex);
-  const surf = lpEl('div', 'sg-ui-surface');
-  surf.style.background = cvdTransformHex(t.surface.hex);
-  surf.style.borderColor = cvdTransformHex(t.border.hex);
-  const title = lpEl('div', 'sg-ui-title', 'Aa Heading'); title.style.color = cvdTransformHex(t.text.hex);
-  const body  = lpEl('div', 'sg-ui-body', 'The quick brown fox jumps.'); body.style.color = cvdTransformHex(t.text.hex);
-  const muted = lpEl('div', 'sg-ui-muted', 'Muted caption text'); muted.style.color = cvdTransformHex(t.muted.hex);
-  const btn = lpEl('span', 'sg-ui-btn', 'Button');
-  btn.style.background = cvdTransformHex(t.accent.hex); btn.style.color = cvdTransformHex(t.accentText.hex);
-  surf.append(title, body, muted, btn);
-  ui.appendChild(surf);
-  card.appendChild(ui);
-  const checks = lpEl('div', 'sg-checks');
-  checks.append(
-    sgCheck('Text', contrastRatio(t.text.lum, t.bg.lum), 7),
-    sgCheck('Muted', contrastRatio(t.muted.lum, t.bg.lum), 4.5),
-    sgCheck('Button', contrastRatio(t.accent.lum, t.accentText.lum), 4.5),
-  );
-  card.appendChild(checks);
-  return card;
-}
-
 function buildScaleCss(scale, light, dark) {
   // Palette steps are stored as SPACE-SEPARATED RGB CHANNELS (not #hex), the
   // Tailwind-style pattern that lets any token take an alpha:
@@ -3659,44 +3624,6 @@ function buildScaleCss(scale, light, dark) {
     + scale.map(c => `  --color-${c.step}: ${channels(c.hex)}; /* ${c.hex} */`).join('\n')
     + '\n}\n:root, [data-theme="light"] {\n' + roleLine(light) + '\n}\n'
     + '[data-theme="dark"] {\n' + roleLine(dark) + '\n}';
-}
-
-function renderScalePreview() {
-  if (!scalePreviewEl) return;
-  const scale = currentScale();
-  const light = deriveTheme(scale, false);
-  const dark  = deriveTheme(scale, true);
-
-  scalePreviewEl.innerHTML = '';
-  scalePreviewEl.appendChild(scaleSourceToggle(renderScalePreview));
-  scalePreviewEl.appendChild(scaleSeedLine());
-
-  scalePreviewEl.appendChild(lpEl('div', 'sg-label', 'Tonal scale — luminance-keyed, click a swatch to copy'));
-  const row = lpEl('div', 'sg-scale');
-  scale.forEach(c => {
-    const cell = lpEl('button', 'sg-swatch');
-    cell.type = 'button';
-    cell.style.background = cvdTransformHex(c.hex);
-    cell.dataset.name = c.hex.toUpperCase() + ' ⧉'; // hover label: hex + copy cue
-    cell.title = 'Click to copy ' + c.hex.toUpperCase() + ' (step ' + c.step + ')';
-    const lbl = lpEl('span', 'sg-swatch-step', String(c.step));
-    lbl.style.color = c.lum > 0.4 ? '#000' : '#fff';
-    cell.appendChild(lbl);
-    cell.addEventListener('click', () => copyHexSwatch(c.hex, cell));
-    row.appendChild(cell);
-  });
-  scalePreviewEl.appendChild(row);
-
-  const themes = lpEl('div', 'sg-themes');
-  themes.append(renderThemeCard('Light', light), renderThemeCard('Dark', dark));
-  scalePreviewEl.appendChild(themes);
-
-  const actions = lpEl('div', 'sg-actions');
-  const copyBtn = lpEl('button', 'sg-copy', 'Copy CSS variables');
-  copyBtn.type = 'button';
-  copyBtn.addEventListener('click', () => sgCopy(buildScaleCss(scale, light, dark), copyBtn, 'Copied CSS'));
-  actions.appendChild(copyBtn);
-  scalePreviewEl.appendChild(actions);
 }
 
 // ─── Layout preview ───────────────────────────────────────────────────────────
@@ -3903,7 +3830,11 @@ function renderPaletteLayout() {
 // dark theme (semantic roles: bg / surface / border / text / muted / accent). ──
 function renderThemeLayout() {
   const scale = currentScale();
+  const light = deriveTheme(scale, false);
+  const dark  = deriveTheme(scale, true);
+  // Generator controls (source + seed) folded in from the old standalone popper.
   layoutPreviewEl.appendChild(scaleSourceToggle(renderLayoutPreview));
+  layoutPreviewEl.appendChild(scaleSeedLine());
   layoutPreviewEl.appendChild(lpEl('div', 'lp-theme-name', 'Scale — click a swatch to copy'));
   const strip = lpEl('div', 'lp-theme-scale');
   scale.forEach(c => {
@@ -3915,8 +3846,17 @@ function renderThemeLayout() {
     strip.appendChild(sw);
   });
   layoutPreviewEl.appendChild(strip);
-  layoutPreviewEl.appendChild(themedScreen('Light', deriveTheme(scale, false)));
-  layoutPreviewEl.appendChild(themedScreen('Dark',  deriveTheme(scale, true)));
+  // The full mock website dressed in each theme is the preview (supersedes the
+  // old compact theme cards).
+  layoutPreviewEl.appendChild(themedScreen('Light', light));
+  layoutPreviewEl.appendChild(themedScreen('Dark',  dark));
+  // Export, folded in from the old popper.
+  const actions = lpEl('div', 'sg-actions');
+  const copyBtn = lpEl('button', 'sg-copy', 'Copy CSS variables');
+  copyBtn.type = 'button';
+  copyBtn.addEventListener('click', () => sgCopy(buildScaleCss(scale, light, dark), copyBtn, 'Copied CSS'));
+  actions.appendChild(copyBtn);
+  layoutPreviewEl.appendChild(actions);
 }
 
 function themedScreen(name, th) {
