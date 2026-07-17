@@ -86,6 +86,12 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The title is nowrap (can't shrink below its own width) and header-right
+     never shrinks, so on narrow phones — now that header-right carries three
+     icons + the version — let the icon cluster WRAP to a second row rather than
+     forcing the whole header (and the page) to overflow horizontally. */
+  flex-wrap: wrap;
+  row-gap: 0.35rem;
   border-bottom: 1px solid var(--border);
   padding: 0.5rem 0;
 }
@@ -95,6 +101,7 @@ header {
   align-items: center;
   gap: 1rem;
   flex-shrink: 0; /* the title is the scaling element, not the version/icons */
+  margin-left: auto; /* stay right-aligned even when wrapped onto its own row */
 }
 
 .theme-toggle {
@@ -1058,6 +1065,11 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 /* Export footer — same formats as Preferences, pinned below the rail */
 .palette-export {
   flex-shrink: 0;
+  /* Sit the divider directly under the rail's bottom fade band: cancel the
+     0.55rem flex gap coming from .palette-section (offset by the rail's -3px
+     margin) so the fade meets the divider with no slack. The rail is flex:1, so
+     the reclaimed height goes to the color list. Fade height (--pal-fade) unchanged. */
+  margin-top: calc(3px - 0.55rem);
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -1540,15 +1552,19 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 .scale-import.full .scale-import-row { opacity: 0.4; pointer-events: none; }
 
 /* Instant hover label (colour name + hex) for scale / import swatches. */
-.lp-theme-swatch, .scale-import-sw { position: relative; }
-.lp-theme-swatch::after, .scale-import-sw::after {
+.lp-theme-swatch, .scale-import-sw, .sg-swatch { position: relative; }
+.lp-theme-swatch::after, .scale-import-sw::after, .sg-swatch::after {
   content: attr(data-name);
   position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%);
   background: var(--surface2); color: var(--text); border: 1px solid var(--border);
   border-radius: 4px; padding: 0.12rem 0.4rem; font-size: 0.52rem; font-weight: 600;
   white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.1s ease; z-index: 10;
 }
-.lp-theme-swatch:hover::after, .scale-import-sw:hover::after { opacity: 1; }
+.lp-theme-swatch:hover::after, .scale-import-sw:hover::after, .sg-swatch:hover::after { opacity: 1; }
+/* Copy confirmation: a green outline + the tooltip forced visible as "✓ Copied". */
+.lp-theme-swatch { cursor: pointer; }
+.lp-theme-swatch.copied, .sg-swatch.copied { outline: 2px solid var(--pass); outline-offset: 1px; }
+.lp-theme-swatch.copied::after, .sg-swatch.copied::after { opacity: 1; color: var(--pass); border-color: var(--pass); }
 .palette-group-list {
   display: flex;
   flex-direction: column;
@@ -1615,7 +1631,7 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 }
 .palette-chip-edit svg { display: block; }
 @media (hover: hover) { .palette-chip-edit:hover { opacity: 1; } }
-/* Recall — load this saved color into the matching main picker (left of edit). */
+/* Recall — load this saved color into the matching main picker (between copy and delete). */
 .palette-chip-recall {
   display: flex;
   align-items: center;
@@ -2023,6 +2039,28 @@ body.about-modal-open { overflow: hidden; }
 
 /* ── Scale & theme generator popper ────────────────────────────────────────── */
 .scale-panel { width: 420px; }
+
+/* Mobile: header poppers (Preferences / Layout / Scale) anchor to their icon
+   (right:0), which isn't at the viewport's right edge — so as dropdowns the wide
+   ones run off the left side. Present them all as a modal-like sheet instead:
+   full width minus a minimal side margin, dropping from just below the header
+   (var(--pop-top) = the trigger's bottom, set by JS) so the HEADER STAYS VISIBLE
+   and its icon can toggle the sheet closed. JS also sets a fitting max-height
+   (down to a matching bottom gap). Fixed is viewport-relative here — zoom is off
+   below 861px and no ancestor is transformed. */
+@media (max-width: 640px) {
+  .settings-panel {
+    position: fixed;
+    top: var(--pop-top, 3rem);
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+  }
+}
+
 .scale-preview { display: flex; flex-direction: column; gap: 0.7rem; }
 .sg-seed { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--muted); }
 .sg-seed-dot { width: 1rem; height: 1rem; border-radius: 3px; border: 1px solid var(--border); flex: none; }
@@ -2033,7 +2071,7 @@ body.about-modal-open { overflow: hidden; }
 .sg-scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 2px; }
 .sg-swatch { position: relative; height: 2.6rem; border: none; border-radius: 4px; cursor: pointer; padding: 0; display: flex; align-items: flex-end; justify-content: center; transition: transform .1s ease; }
 .sg-swatch:hover { transform: translateY(-2px); }
-.sg-swatch.copied { outline: 2px solid var(--text); outline-offset: 1px; }
+/* .sg-swatch.copied outline handled with .lp-theme-swatch (green ✓ Copied). */
 .sg-swatch-step { font-size: 0.5rem; font-weight: 700; padding-bottom: 0.15rem; opacity: 0.9; }
 
 /* Light + dark theme cards */
