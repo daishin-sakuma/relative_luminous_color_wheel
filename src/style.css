@@ -1447,21 +1447,16 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--pal-fade), #000 calc(100% - var(--pal-fade)), transparent 100%);
           mask-image: linear-gradient(to bottom, transparent 0, #000 var(--pal-fade), #000 calc(100% - var(--pal-fade)), transparent 100%);
 }
-/* Rail content wrapper: stacks the two role groups, and on touch is sized just
-   past the rail height so there's ALWAYS a 1px scroll range — even with few (or
-   no) colors the list can be dragged elastically instead of feeling locked, and
-   the sidebar's touchmove guard (which only permits the rail's scroll when it
-   overflows) lets it through. Off-touch there's no forced overflow, so desktop
-   shows a scrollbar only when it genuinely needs one. */
+/* Rail content wrapper: stacks the two role groups. When the list is too short
+   to overflow, a JS rubber-band handler (see main.js) translates THIS element on
+   a vertical touch-drag and springs it back on release, so the list always feels
+   draggable. (A CSS forced-overflow was unreliable — a percentage min-height
+   doesn't resolve against the flex-grown rail on iOS Safari.) When the list does
+   overflow, native momentum scroll owns it and bounces on its own. */
 .palette-rail-content {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-}
-@media (hover: none) {
-  /* +2px (not 1) so the integer-rounded scrollHeight is reliably greater than
-     clientHeight — the touchmove guard gates on scrollHeight > clientHeight. */
-  .palette-rail-content { min-height: calc(100% + 2px); }
 }
 .palette-rail--editor-transition { pointer-events: none; }
 .palette-chip {
@@ -1560,8 +1555,10 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 .scale-import-title { font-size: 0.62rem; font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
 .scale-import-label { font-size: 0.52rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 0.15rem; }
 .scale-import-row { display: flex; flex-wrap: wrap; gap: 3px; }
-.scale-import-sw { width: 1.1rem; height: 1.1rem; border-radius: 3px; border: 1px solid rgba(128,128,128,0.25); cursor: pointer; padding: 0; transition: transform 0.1s ease; }
-.scale-import-sw:hover { transform: scale(1.18); }
+.scale-import-sw { width: 1.1rem; height: 1.1rem; border-radius: 3px; border: 1px solid rgba(128,128,128,0.25); cursor: pointer; padding: 0; transition: transform 0.12s ease; }
+/* Calm press-in on tap (matches the app's buttons); no hover-lift that would
+   stick on touch. */
+.scale-import-sw:active { transform: scale(0.9); }
 .scale-import-sw.ok  { outline: 2px solid var(--pass); outline-offset: 1px; }
 .scale-import-sw.dup { outline: 2px solid var(--muted); outline-offset: 1px; }
 .scale-import-status { font-size: 0.55rem; color: var(--muted); margin-top: 0.15rem; }
@@ -1571,16 +1568,21 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 .lp-theme-swatch, .scale-import-sw, .sg-swatch { position: relative; }
 .lp-theme-swatch::after, .scale-import-sw::after, .sg-swatch::after {
   content: attr(data-name);
-  position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%);
-  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
-  border-radius: 4px; padding: 0.12rem 0.4rem; font-size: 0.52rem; font-weight: 600;
+  position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+  background: var(--surface2); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.12rem 0.4rem; font-size: 0.52rem; font-weight: 500;
   white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.1s ease; z-index: 10;
 }
-.lp-theme-swatch:hover::after, .scale-import-sw:hover::after, .sg-swatch:hover::after { opacity: 1; }
-/* Copy confirmation: a green outline + the tooltip forced visible as "✓ Copied". */
-.lp-theme-swatch { cursor: pointer; }
-.lp-theme-swatch.copied, .sg-swatch.copied { outline: 2px solid var(--pass); outline-offset: 1px; }
-.lp-theme-swatch.copied::after, .sg-swatch.copied::after { opacity: 1; color: var(--pass); border-color: var(--pass); }
+/* Hover label only on hover devices — on touch it would stick after a tap; there
+   the tap→copy confirmation (below) is the feedback instead. */
+@media (hover: hover) {
+  .lp-theme-swatch:hover::after, .scale-import-sw:hover::after, .sg-swatch:hover::after { opacity: 1; }
+}
+/* Copy confirmation: understated, like the palette chips — no swatch outline,
+   just the tooltip forced visible as "✓ Copied" (kept neutral, no green). */
+.lp-theme-swatch { cursor: pointer; transition: transform 0.12s ease; }
+.lp-theme-swatch:active, .sg-swatch:active { transform: scale(0.96); }
+.lp-theme-swatch.copied::after, .sg-swatch.copied::after { opacity: 1; }
 .palette-group-list {
   display: flex;
   flex-direction: column;
@@ -2131,9 +2133,10 @@ body.about-modal-open { overflow: hidden; }
 
 /* Tonal scale row */
 .sg-scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 2px; }
-.sg-swatch { position: relative; height: 2.6rem; border: none; border-radius: 4px; cursor: pointer; padding: 0; display: flex; align-items: flex-end; justify-content: center; transition: transform .1s ease; }
-.sg-swatch:hover { transform: translateY(-2px); }
-/* .sg-swatch.copied outline handled with .lp-theme-swatch (green ✓ Copied). */
+.sg-swatch { position: relative; height: 2.6rem; border: none; border-radius: 4px; cursor: pointer; padding: 0; display: flex; align-items: flex-end; justify-content: center; transition: transform 0.12s ease; }
+/* No hover-lift (it stuck after a tap on touch and read louder than the rest of
+   the app); calm press-in on :active is shared with .lp-theme-swatch above. */
+/* .sg-swatch.copied confirmation (neutral tooltip only) shared with .lp-theme-swatch. */
 .sg-swatch-step { font-size: 0.5rem; font-weight: 700; padding-bottom: 0.15rem; opacity: 0.9; }
 
 /* Light + dark theme cards */
