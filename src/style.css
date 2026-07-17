@@ -1901,16 +1901,27 @@ body.about-modal-open { overflow: hidden; }
 /* Invisible bridge over the gap so hover doesn't break when moving to panel
    (lives on the wrap, not the panel, so the panel's overflow can't clip it;
    only exists while hovered, so it never intercepts stray pointer events) */
-.settings-wrap:hover::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 0;
-  width: min(360px, calc(100vw - 4rem));
-  height: 8px;
+/* The hover reveal + gap bridge are for POINTER devices only. On touch a tap
+   applies a sticky :hover that would reveal the panel BEFORE onOpen renders it
+   (an empty popper on first open); touch instead reveals it via .settings-open,
+   which openIt sets immediately AFTER rendering. */
+@media (hover: hover) {
+  .settings-wrap:hover::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: min(360px, calc(100vw - 4rem));
+    height: 8px;
+  }
+  .settings-wrap:hover .settings-panel {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
 }
-
-.settings-wrap:hover .settings-panel,
 .settings-wrap.settings-open .settings-panel {
   opacity: 1;
   transform: translateY(0);
@@ -1949,7 +1960,8 @@ body.about-modal-open { overflow: hidden; }
     pointer-events: none;
     transition: opacity 0.18s ease, visibility 0s linear 0.18s;
   }
-  .settings-wrap:hover .settings-backdrop,
+  /* Reveal via .settings-open only (set after render) — never via a sticky
+     tap :hover, which would show the dim before the panel content exists. */
   .settings-wrap.settings-open .settings-backdrop {
     opacity: 1;
     visibility: visible;

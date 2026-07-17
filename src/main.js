@@ -3423,8 +3423,11 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   // onOpen rebuilds the panel (Layout/Scales wipe innerHTML), that destroyed the
   // just-tapped control before its click could dispatch, so tabs silently did
   // nothing on iOS/iPadOS. Touch opens via the click handler (openIt → refresh),
-  // which still renders; taps inside must NOT re-render.
-  wrap.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') refresh(); });
+  // which still renders; taps inside must NOT re-render. Gate on `!== 'touch'`
+  // (not `=== 'mouse'`): the FIRST pointer event after load can report an empty
+  // pointerType, which `=== 'mouse'` dropped — so hover revealed the panel via
+  // CSS but onOpen never ran and the popper showed empty on the first open.
+  wrap.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') refresh(); });
   window.addEventListener('resize', syncPanelHeight);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
   syncPanelHeight();
@@ -3442,8 +3445,8 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   backdrop.setAttribute('aria-hidden', 'true');
   wrap.appendChild(backdrop);
   backdrop.addEventListener('pointerdown', () => closeIt());
-  btn.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') openIt(); });
-  wrap.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') reset(); });
+  btn.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') openIt(); });
+  wrap.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') reset(); });
   btn.addEventListener('click', () => { sOpen ? closeIt() : openIt(); });
   // Tap/click anywhere outside the control closes it. closeIt sets
   // .settings-dismissed so it beats a lingering sticky :hover on touch.
