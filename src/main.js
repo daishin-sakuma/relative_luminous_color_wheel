@@ -3403,6 +3403,9 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
     // here renders zoom× larger — divide the real-px budget back out.
     const zoom = parseFloat((document.getElementById('app-wrapper') || {}).style?.zoom) || 1;
     panel.style.maxHeight = Math.max(140, (vh - top - gap) / zoom) + 'px';
+    // Mobile modal (CSS): drop the sheet from just below the trigger so the header
+    // stays visible and its icon can toggle it closed (zoom is off there → raw px).
+    panel.style.setProperty('--pop-top', top + 'px');
   };
   const refresh = () => { syncPanelHeight(); if (onOpen) onOpen(); };
   wrap.addEventListener('pointerenter', refresh);
@@ -3560,12 +3563,21 @@ function deriveTheme(scale, dark) {
 function sgCopy(text, el, done) {
   if (!navigator.clipboard) return;
   navigator.clipboard.writeText(text).then(() => {
-    if (el.classList.contains('sg-swatch')) {
-      el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 800);
-    } else {
-      const prev = el.textContent; el.textContent = done || 'Copied';
-      setTimeout(() => { el.textContent = prev; }, 1200);
-    }
+    const prev = el.textContent; el.textContent = done || 'Copied';
+    setTimeout(() => { el.textContent = prev; }, 1200);
+  }).catch(() => {});
+}
+
+// Copy a swatch's hex and confirm it: flash a green outline and flip the hover
+// tooltip (the [data-name] ::after) to "✓ Copied #HEX" so it's obvious a click
+// copied the value.
+function copyHexSwatch(hex, el) {
+  if (!navigator.clipboard) return;
+  navigator.clipboard.writeText(hex.toUpperCase()).then(() => {
+    const orig = el.dataset.name;
+    el.classList.add('copied');
+    el.dataset.name = '✓ Copied ' + hex.toUpperCase();
+    setTimeout(() => { el.classList.remove('copied'); el.dataset.name = orig; }, 1000);
   }).catch(() => {});
 }
 
@@ -3637,11 +3649,12 @@ function renderScalePreview() {
     const cell = lpEl('button', 'sg-swatch');
     cell.type = 'button';
     cell.style.background = cvdTransformHex(c.hex);
-    cell.title = c.step + ' · ' + c.hex.toUpperCase() + ' · L ' + c.lum.toFixed(3);
+    cell.dataset.name = c.hex.toUpperCase() + ' ⧉'; // hover label: hex + copy cue
+    cell.title = 'Click to copy ' + c.hex.toUpperCase() + ' (step ' + c.step + ')';
     const lbl = lpEl('span', 'sg-swatch-step', String(c.step));
     lbl.style.color = c.lum > 0.4 ? '#000' : '#fff';
     cell.appendChild(lbl);
-    cell.addEventListener('click', () => sgCopy(c.hex, cell));
+    cell.addEventListener('click', () => copyHexSwatch(c.hex, cell));
     row.appendChild(cell);
   });
   scalePreviewEl.appendChild(row);
@@ -3863,12 +3876,14 @@ function renderPaletteLayout() {
 function renderThemeLayout() {
   const scale = currentScale();
   layoutPreviewEl.appendChild(scaleSourceToggle(renderLayoutPreview));
+  layoutPreviewEl.appendChild(lpEl('div', 'lp-theme-name', 'Scale — click a swatch to copy'));
   const strip = lpEl('div', 'lp-theme-scale');
   scale.forEach(c => {
     const sw = lpEl('span', 'lp-theme-swatch');
     sw.style.background = cvdTransformHex(c.hex);
-    sw.dataset.name = c.step + ' · ' + c.hex.toUpperCase(); // instant hover label (CSS)
-    sw.title = sw.dataset.name;
+    sw.dataset.name = c.step + ' · ' + c.hex.toUpperCase() + ' ⧉'; // hover label: step + hex + copy cue
+    sw.title = 'Click to copy ' + c.hex.toUpperCase() + ' (step ' + c.step + ')';
+    sw.addEventListener('click', () => copyHexSwatch(c.hex, sw));
     strip.appendChild(sw);
   });
   layoutPreviewEl.appendChild(strip);
@@ -5710,7 +5725,7 @@ function renderPalette() {
 
     attachChipDrag(chip, pos, role, list);
 
-    chip.append(grip, rank, hexLabel, recall, edit, copy, remove);
+    chip.append(grip, rank, hexLabel, edit, copy, recall, remove);
     list.appendChild(chip);
     });
 
