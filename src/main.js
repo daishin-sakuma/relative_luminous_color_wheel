@@ -365,6 +365,17 @@ function apcaAnchorLc(tile) {
   return apcaLcYs(bgLumAnchor(), targetLum); // 'pb'
 }
 
+// WCAG counterpart of apcaAnchorLc: judge the ratio/badges from the CONTINUOUS
+// held relative luminances, not the rendered 8-bit RGB — so a Lum-picker hue/sat
+// sweep can't flip a badge on quantization wobble while the luminances are held.
+// Only when UNLOCKED and NOT in APCA mode: there wheelLum IS relative luminance,
+// so targetLum (TEXT) and bgLumAnchor() (BG — cuLum in Lum mode, live otherwise)
+// are the real relative-luminance anchors. When locked, the rendered pair is the
+// lock's own guarantee (kept as-is); in APCA mode the WCAG rows are hidden.
+function wcagJudgesAnchor() { return contrastLockMode !== 'apca' && activeContrastTarget() === 0; }
+function wcagTextLum(liveLum) { return wcagJudgesAnchor() ? targetLum : liveLum; }
+function wcagBgLum(liveLum)   { return wcagJudgesAnchor() ? bgLumAnchor() : liveLum; }
+
 // ─── APCA font-size/weight lookup (v2 beta) ──────────────────────────────────
 // fontMatrixAscend from the official apca-w3 package: for each |Lc| row, the
 // minimum font px per weight 100–900. 999 = text prohibited at this contrast,
@@ -1076,7 +1087,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   }
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
-    selectedLum, 1, 1,
+    wcagTextLum(selectedLum), 1, 1,
     hexToRgb(selectedHex), [255, 255, 255],
     apcaAnchorLc('pvw'),
   );
@@ -1093,7 +1104,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   }
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
-    selectedLum, 0, 0,
+    wcagTextLum(selectedLum), 0, 0,
     hexToRgb(selectedHex), [0, 0, 0],
     apcaAnchorLc('pvb'),
   );
@@ -1126,7 +1137,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   paBg.style.borderColor   = cvdTransformRgba(dotBorderA);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
-    selectedLum, customLum, customLum,
+    wcagTextLum(selectedLum), wcagBgLum(customLum), customLum,
     hexToRgb(selectedHex), hexToRgb(customHex),
     apcaAnchorLc('pa'), true,
   );
@@ -1150,7 +1161,7 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   pbBg.style.borderColor   = cvdTransformRgba(dotBorderB);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
-    customLum, selectedLum, selectedLum,
+    wcagBgLum(customLum), wcagTextLum(selectedLum), selectedLum,
     hexToRgb(customHex), hexToRgb(selectedHex),
     apcaAnchorLc('pb'), true,
   );
@@ -1850,32 +1861,17 @@ function setCustomFromHsl(h, s, l) {
 // contrast: re-solve the lightness to hold the colour's wheel-luminance
 // (quantization biased away from the text side so the achieved contrast
 // stays at-or-above, never below). Otherwise keep the classic HSL behaviour.
-let _textLumTouched = false; // main TEXT target-luminance operated
-let _bgLumTouched = false;   // BG Lum-mode luminance operated
-function customHueSatHoldsLum() {
-  // Always hold in APCA mode: its readouts (usage tier, required text size)
-  // must be hue/sat-invariant regardless of how the luminances were set.
-  return contrastLockMode === 'apca'
-    || activeContrastTarget() > 0
-    || (_textLumTouched && _bgLumTouched);
-}
-// Anchor luminance for consecutive H/S ops. Re-deriving y from the previous
-// step's quantized colour lets ±1-step rounding errors random-walk across a
-// sweep (visibly so at low luminance); instead the first H/S op captures the
-// anchor and later ones reuse it, re-capturing only when something else
-// (RGB/L sliders, hex, lock adjustments, mode switches) changed the colour.
+// Continuous luminance anchor for the BG, maintained by the contrast lock
+// (applyLockAdjustment) so the anchor-based APCA/WCAG readouts stay frozen
+// through locked sweeps. Not touched by the HSL sliders — those are classic.
 let _bgHeldLum = 0, _bgHeldRgb = '';
+// Color mode's H/S = a CLASSIC HSL picker: hold lightness, so dragging hue or
+// saturation never moves the Lightness slider (luminance/contrast may change).
+// Luminance-locked exploration is Lum mode's job (setCustomFromLumHueSat holds
+// the luminance); when a contrast lock is on, enforceContrastLock re-pins the
+// OTHER side to the target — the classic HSL side you drag is left as you set it.
 function setCustomHueSat(h, s) {
-  if (customMode === 'color' && customHueSatHoldsLum()) {
-    const key = cR + ',' + cG + ',' + cB;
-    if (_bgHeldRgb !== key) _bgHeldLum = wheelLum(cR, cG, cB);
-    const y = _bgHeldLum;
-    const dir = Math.sign(y - wheelLum(...selectedRgbBiased()));
-    setCustomFromHsl(h, s, findLightnessBiased(h, s, y, dir));
-    _bgHeldRgb = cR + ',' + cG + ',' + cB;
-  } else {
-    setCustomFromHsl(h, s, cL);
-  }
+  setCustomFromHsl(h, s, cL);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1946,7 +1942,6 @@ const hueValEl  = /** @type {HTMLInputElement} */ (document.getElementById('hue-
 const satValEl  = /** @type {HTMLInputElement} */ (document.getElementById('sat-val'));
 
 lumSlider.addEventListener('input', () => {
-  _textLumTouched = true;
   targetLum = lumSlider.value / 1000;
   if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
   scheduleRender(true);
@@ -2019,7 +2014,6 @@ function setCustomFromLumHueSat(lum, hue, sat) {
 }
 
 document.getElementById('cu-lum-slider').addEventListener('input', e => {
-  _bgLumTouched = true;
   setCustomFromLumHueSat(+/** @type {HTMLInputElement} */ (e.target).value / 1000, cuHue, cuSat);
 });
 document.getElementById('cu-sat-slider').addEventListener('input', e => {
@@ -2032,7 +2026,6 @@ document.getElementById('cu-hue-slider').addEventListener('input', e => {
 // ─── Wire editable value inputs ──────────────────────────────────────────────
 
 wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
-  _textLumTouched = true;
   targetLum = v;
   lumSlider.value = String(Math.round(v * 1000));
   scheduleRender(true);
@@ -2092,7 +2085,7 @@ wireValInput(
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-val')),
   0, 1, 0.001, parseFloat, v => v.toFixed(3),
-  v => { _bgLumTouched = true; /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider')).value = String(Math.round(v * 1000)); setCustomFromLumHueSat(v, cuHue, cuSat); }
+  v => { /** @type {HTMLInputElement} */ (document.getElementById('cu-lum-slider')).value = String(Math.round(v * 1000)); setCustomFromLumHueSat(v, cuHue, cuSat); }
 );
 wireValInput(
   /** @type {HTMLInputElement} */ (document.getElementById('cu-sat-val')),
@@ -2207,7 +2200,6 @@ const swatchHexInput = /** @type {HTMLInputElement} */ (document.getElementById(
 const swatchHexCopy  = /** @type {HTMLElement} */ (document.getElementById('swatch-hex-copy'));
 
 function applyMainHex(r, g, b) {
-  _textLumTouched = true; // a pasted/typed hex fixes this side's luminance deliberately
   targetLum = wheelLum(r, g, b); // interpret under the active definition (WCAG / APCA Ys)
   const [h, s] = rgbToHsl(r, g, b);
   selHue = h;
@@ -2228,9 +2220,15 @@ function applyMainHex(r, g, b) {
 // Set the custom (background) picker from an RGB — the same path as typing a hex
 // into the custom field. Used by the custom hex input and the palette "recall".
 function applyCustomHex(r, g, b) {
-  _bgLumTouched = true; // a recalled/typed hex fixes the bg side's luminance deliberately
   cR = r; cG = g; cB = b;
   [cH, cS, cL] = rgbToHsl(r, g, b);
+  // Reseed the Lum-mode substate from the new colour too — otherwise a paste /
+  // palette-recall while the BG picker is in Lum mode leaves the Lum wheel (drawn
+  // at cuLum) and its hue/sat/lum sliders showing the OLD colour (they only track
+  // cuLum/cuHue/cuSat, which this didn't touch). Mirrors setCustomMode's reseed.
+  cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
+  cuHue = cH;
+  cuSat = cS;
   scheduleRender(false, true);
 }
 
