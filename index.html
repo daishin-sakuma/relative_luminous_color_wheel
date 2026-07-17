@@ -188,7 +188,7 @@
         "name": "How do I generate an accessible color palette, light and dark theme?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Open Scales & themes: from your current colors the tool builds a luminance-keyed tonal scale (50–950) and ready-made light and dark themes with semantic roles (background, surface, border, text, muted, accent). Because each step is solved to a target relative luminance, the text, muted, and accent contrasts are guaranteed by construction rather than audited afterwards. You can blend your text and background colors across the scale or use either alone, preview the palette or the themes on a real mock layout, save a theme to the palette, and copy the scale and both themes as alpha-ready CSS custom properties."
+          "text": "Open Scales: from your current colors the tool builds a luminance-keyed tonal scale (50–950) and ready-made light and dark themes with semantic roles (background, surface, border, text, muted, accent). Because each step is solved to a target relative luminance, the text, muted, and accent contrasts are guaranteed by construction rather than audited afterwards. You can blend your text and background colors across the scale or use either alone, preview the palette or the themes on a real mock layout, save a theme to the palette, and copy the scale and both themes as alpha-ready CSS custom properties."
         }
       },
       {
@@ -221,14 +221,14 @@
   <div class="header-right">
     <span class="app-version">ver. 2.0.0-beta.2</span>
     <div class="settings-wrap layout-wrap">
-      <button class="theme-toggle" id="layout-btn" title="Layout preview &amp; Scales" aria-label="Preview the palette in a real layout, and generate an accessible tonal scale and light/dark theme">
+      <button class="theme-toggle" id="layout-btn" title="Layout Preview" aria-label="Preview the palette in a real layout, and generate an accessible tonal scale and light/dark theme">
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 8.25V18a2.25 2.25 0 0 0 2.25 2.25h13.5A2.25 2.25 0 0 0 21 18V8.25m-18 0V6a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 6v2.25m-18 0h18"/>
         </svg>
       </button>
       <div class="settings-panel layout-panel" id="layout-panel">
         <div class="settings-panel-scroll">
-          <div class="settings-panel-label">Layout preview &amp; Scales</div>
+          <div class="settings-panel-label">Layout Preview</div>
           <div class="layout-preview" id="layout-preview"></div>
         </div>
       </div>
@@ -798,7 +798,7 @@
         colors are safely backed up inside CSS/Tailwind comments and JSON extension properties.
         Your colors and palette also travel in a shareable URL.</p>
       <p><strong>How do I generate an accessible color palette, light and dark theme?</strong><br>
-        Open <em>Scales &amp; themes</em>: from your current colors the tool builds a luminance-keyed
+        Open <em>Scales</em>: from your current colors the tool builds a luminance-keyed
         tonal scale (50&ndash;950) and ready-made light and dark themes with semantic roles
         (background, surface, border, text, muted, accent). Because each step is solved to a target
         relative luminance, the text, muted, and accent contrasts are guaranteed <strong>by

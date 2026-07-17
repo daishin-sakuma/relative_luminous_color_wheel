@@ -3465,7 +3465,7 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
 // guaranteed by construction: each step is solved to a target WCAG relative
 // luminance, so pair contrasts are KNOWN (not audited afterwards). Reuses the
 // wheel's core idea — a colour at a target relative luminance — plus contrastRatio.
-// (Surfaced inside the Layout preview's "Scales & themes" mode; no separate popper.)
+// (Surfaced inside the Layout preview's "Scales" mode; no separate popper.)
 const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.048, 0.022];
 
@@ -3662,7 +3662,7 @@ let _lpMode = 'palette'; // layout-preview source: saved palette | generated sca
 
 function lpModeToggle() {
   const wrap = lpEl('div', 'lp-modes');
-  for (const [m, label] of [['palette', 'Palette'], ['theme', 'Scales & themes']]) {
+  for (const [m, label] of [['palette', 'Palette'], ['theme', 'Scales']]) {
     const btn = lpEl('button', 'lp-mode-btn' + (_lpMode === m ? ' active' : ''), label);
     btn.type = 'button';
     btn.addEventListener('click', () => { if (_lpMode !== m) { _lpMode = m; renderLayoutPreview(); } });
@@ -3677,6 +3677,110 @@ function renderLayoutPreview() {
   layoutPreviewEl.appendChild(lpModeToggle());
   if (_lpMode === 'theme') renderThemeLayout();
   else renderPaletteLayout();
+}
+
+// ── Contrast audit (shared by both Layout preview modes) ──────────────────────
+// A panel below each preview, judged in the app's CURRENT contrast mode: WCAG 2
+// ratio tiers, or APCA |Lc| + usage tier + the chosen font-size/weight verdict.
+// Text tokens (AA / AAA / ✗ / Lc numbers) are the primary signal — colour only
+// reinforces them — so the audit itself reads under colour-vision deficiency.
+function lpAuditIsApca() { return contrastLockMode === 'apca'; }
+
+// WCAG: show the ACHIEVED contrast ratio itself — an "AA"/"AAA" token can't say
+// whether it's the normal- or large-text bar (3:1 = AA large / UI, 4.5:1 = AA
+// normal & AAA large, 7:1 = AAA normal), so the ratio is the unambiguous value.
+// Colour still reinforces: pass ≥ 4.5 (AA normal), warn ≥ 3 (large text / UI),
+// else fail. The tooltip spells out exactly which levels the ratio meets.
+function wcagLevels(r) {
+  if (r >= 7)   return 'AAA normal & large text';
+  if (r >= 4.5) return 'AA normal & large text · AAA large text';
+  if (r >= 3)   return 'AA large text (≥24px, or ≥18.66px bold) / UI only';
+  return 'below AA (fails 3:1)';
+}
+function lpWcagVerdict(txtHex, bgHex) {
+  const r = contrastRatio(relativeLuminance(...hexToRgb(txtHex)), relativeLuminance(...hexToRgb(bgHex)));
+  const cls = r >= 4.5 ? 'pass' : r >= 3 ? 'warn' : 'fail';
+  return {
+    cls,
+    cell: r >= 10 ? r.toFixed(0) : r.toFixed(1), // compact for a matrix cell (e.g. 6.2, 13)
+    full: r.toFixed(2) + ':1',                   // precise, for the checklist + tooltips
+    levels: wcagLevels(r),
+  };
+}
+
+// APCA: |Lc| + usage tier + verdict for the currently selected font size/weight.
+function lpApcaVerdict(txtHex, bgHex) {
+  const lc = Math.abs(apcaLc(hexToRgb(txtHex), hexToRgb(bgHex)));
+  const v = apcaFontVerdict(lc);
+  return { lc, cls: v.pass ? 'pass' : (lc > 29.7 ? 'warn' : 'fail'),
+           tier: apcaUsageTier(lc), fontText: v.text, fontTitle: v.title };
+}
+
+/** Palette mode: a Text × Background contrast matrix, one cell per pair. */
+function buildContrastMatrix(texts, bgs) {
+  const apca = lpAuditIsApca();
+  const wrap = lpEl('div', 'lp-audit');
+  wrap.appendChild(lpEl('div', 'lp-audit-head',
+    'Contrast — ' + (apca ? 'APCA · |Lc| at ' + apcaFontSize + 'px/' + apcaFontWeight : 'WCAG 2 · ratio (n:1) · text × background')));
+  const table = lpEl('div', 'lp-matrix');
+  table.style.gridTemplateColumns = 'auto repeat(' + bgs.length + ', minmax(0, 1fr))';
+  const corner = lpEl('div', 'lp-matrix-corner', 'T \\ BG');
+  corner.title = 'Rows = text ranks · Columns = background ranks';
+  table.appendChild(corner);
+  bgs.forEach((hex, j) => {
+    const c = lpEl('div', 'lp-matrix-colh', String(j + 1));
+    c.title = 'Background ' + paletteRankLabel(j) + ' · ' + hex.toUpperCase();
+    const sw = lpEl('span', 'lp-matrix-dot'); sw.style.background = cvdTransformHex(hex);
+    c.prepend(sw);
+    table.appendChild(c);
+  });
+  texts.forEach((thex, i) => {
+    const rh = lpEl('div', 'lp-matrix-rowh', String(i + 1));
+    rh.title = 'Text ' + paletteRankLabel(i) + ' · ' + thex.toUpperCase();
+    const sw = lpEl('span', 'lp-matrix-dot'); sw.style.background = cvdTransformHex(thex);
+    rh.prepend(sw);
+    table.appendChild(rh);
+    bgs.forEach(bhex => {
+      let label, cls, title;
+      if (apca) {
+        const v = lpApcaVerdict(thex, bhex);
+        label = String(Math.round(v.lc)); cls = v.cls;
+        title = 'Text ' + thex.toUpperCase() + ' on ' + bhex.toUpperCase() + '\n' + v.fontText + ' · ' + v.tier;
+      } else {
+        const v = lpWcagVerdict(thex, bhex);
+        label = v.cell; cls = v.cls;
+        title = 'Text ' + thex.toUpperCase() + ' on ' + bhex.toUpperCase() + ' — ' + v.full + '\n' + v.levels;
+      }
+      const cell = lpEl('div', 'lp-matrix-cell lp-v-' + cls, label);
+      cell.title = title;
+      table.appendChild(cell);
+    });
+  });
+  wrap.appendChild(table);
+  return wrap;
+}
+
+/** Themes mode: a per-theme checklist of the semantic text pairs. */
+function buildThemeChecklist(th) {
+  const apca = lpAuditIsApca();
+  const wrap = lpEl('div', 'lp-audit');
+  wrap.appendChild(lpEl('div', 'lp-audit-head', 'Contrast — ' + (apca ? 'APCA' : 'WCAG 2')));
+  // Body & muted judged on SURFACE (the harder bg of bg/surface); button label
+  // on the accent fill. These are the theme's binding text-contrast constraints.
+  [['Body text', th.text.hex, th.surface.hex],
+   ['Muted text', th.muted.hex, th.surface.hex],
+   ['Button label', th.accentText.hex, th.accent.hex]].forEach(([label, tHex, bHex]) => {
+    const row = lpEl('div', 'lp-check');
+    row.appendChild(lpEl('span', 'lp-check-label', label));
+    let detail, cls, title;
+    if (apca) { const v = lpApcaVerdict(tHex, bHex); detail = 'Lc ' + Math.round(v.lc); cls = v.cls; title = v.tier + ' — ' + v.fontText; }
+    else      { const v = lpWcagVerdict(tHex, bHex); detail = v.full; cls = v.cls; title = v.levels; }
+    const val = lpEl('span', 'lp-check-val lp-v-' + cls, detail);
+    val.title = title;
+    row.appendChild(val);
+    wrap.appendChild(row);
+  });
+  return wrap;
 }
 
 // ── Palette mode: a colourful mock site where every saved colour is a section
@@ -3716,7 +3820,7 @@ function renderPaletteLayout() {
   const dot = lpEl('span', 'lp-brand-dot'); dot.style.background = t(0);
   brandWrap.append(dot, tx('span', 'lp-brand', 'Aurora', 0));
   const navLinks = lpEl('div', 'lp-navlinks');
-  ['Product', 'Pricing', 'Docs'].forEach((txt, i) => navLinks.appendChild(tx('span', 'lp-navlink', txt, i + 1)));
+  ['Product', 'Docs', 'Blog'].forEach((txt, i) => navLinks.appendChild(tx('span', 'lp-navlink', txt, i + 1)));
   const navRight = lpEl('div', 'lp-navright');
   const search = tx('span', 'lp-search', 'Search', 3); search.style.borderColor = t(3);
   navRight.append(search, btn('Sign up'));
@@ -3771,13 +3875,13 @@ function renderPaletteLayout() {
   quote.appendChild(person);
   screen.appendChild(quote);
 
-  // ── Pricing panel (bg 6) ──────────────────────────────────────────────────
+  // ── Highlights panel (bg 6) — no pricing: this tool is entirely free ──────
   const pricing = lpEl('div', 'lp-pricing'); pricing.style.background = b(6);
   const priceHead = lpEl('div', 'lp-price-head');
-  priceHead.append(tx('span', 'lp-price-plan', 'Pro', 0), tx('span', 'lp-price-amt', '$12/mo', 3));
+  priceHead.append(tx('span', 'lp-price-plan', 'Everything included', 0), tx('span', 'lp-price-amt', 'Free forever', 3));
   const feats = lpEl('div', 'lp-price-feats');
   [['✓ Unlimited palettes', 1], ['✓ APCA verdicts', 7], ['✓ Token export', 8]].forEach(([f, ti]) => feats.appendChild(tx('div', 'lp-price-feat', f, ti)));
-  pricing.append(priceHead, feats, btn('Choose Pro', 'lp-btn-block'));
+  pricing.append(priceHead, feats, btn('Start creating', 'lp-btn-block'));
   screen.appendChild(pricing);
 
   // ── Newsletter band (bg 7) — the field reacts on hover/press ──────────────
@@ -3804,7 +3908,7 @@ function renderPaletteLayout() {
   fBrand.append(fdot, tx('span', 'lp-brand', 'Aurora', 0),
     tx('div', 'lp-footer-tag', 'Accessible colour tooling for design systems.', 1));
   const cols = lpEl('div', 'lp-footer-cols');
-  [['Product', ['Features', 'Pricing', 'Changelog']], ['Company', ['About', 'Blog', 'Careers']]].forEach(([head, items]) => {
+  [['Product', ['Features', 'Guides', 'Changelog']], ['Company', ['About', 'Blog', 'Careers']]].forEach(([head, items]) => {
     const col = lpEl('div', 'lp-footer-col');
     col.appendChild(tx('div', 'lp-footer-head', head, 2));
     items.forEach((it, i) => col.appendChild(tx('span', 'lp-footer-link', it, i + 1)));
@@ -3837,9 +3941,11 @@ function renderPaletteLayout() {
   screen.appendChild(footer);
 
   layoutPreviewEl.appendChild(screen);
+  // Contrast audit of every text × background pair the mock draws from.
+  layoutPreviewEl.appendChild(buildContrastMatrix(texts, bgs));
 }
 
-// ── Scales & themes mode: preview the GENERATED scale/themes in a real layout —
+// ── Scales mode: preview the GENERATED scale/themes in a real layout —
 // the tonal scale strip, then a mock site dressed in the light theme and the
 // dark theme (semantic roles: bg / surface / border / text / muted / accent). ──
 function renderThemeLayout() {
@@ -3911,7 +4017,7 @@ function themedScreen(name, th) {
   const brand = lpEl('span', 'lp-brand', 'Aurora'); brand.style.color = C(text);
   brandWrap.append(dot, brand);
   const navLinks = lpEl('div', 'lp-navlinks');
-  ['Product', 'Pricing', 'Docs'].forEach(x => { const a = lpEl('span', 'lp-navlink', x); a.style.color = C(muted); navLinks.appendChild(a); });
+  ['Product', 'Docs', 'Blog'].forEach(x => { const a = lpEl('span', 'lp-navlink', x); a.style.color = C(muted); navLinks.appendChild(a); });
   const navCta = lpEl('span', 'lp-btn', 'Sign up'); navCta.style.background = C(accent); navCta.style.color = C(accentFg);
   nav.append(brandWrap, navLinks, navCta);
   screen.appendChild(nav);
@@ -3954,6 +4060,7 @@ function themedScreen(name, th) {
   screen.appendChild(footer);
 
   block.appendChild(screen);
+  block.appendChild(buildThemeChecklist(th)); // contrast audit for this theme
   return block;
 }
 
@@ -4907,9 +5014,10 @@ const DUPLICATE_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="n
 // Six-dot grip for the chip's drag handle (touch-action:none, so Android can't
 // hijack the press for scroll/long-press before the grab engages).
 const GRIP_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
-const IMPORT_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l3 3m0 0 3-3m-3 3V2.25"/></svg>';
+// A painter's palette: the kidney-shaped board with a thumb hole and paint dabs.
+const IMPORT_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3c-4.97 0-9 3.58-9 8 0 2.9 2.35 4.7 4.7 4.7.95 0 1.55.62 1.55 1.55 0 1.24 1.03 2.45 2.75 2.45 4.83 0 8.5-3.75 8.5-8.65C20.5 6.35 16.7 3 12 3Z"/><circle cx="7.6" cy="10.2" r="1.05" fill="currentColor" stroke="none"/><circle cx="11" cy="7.4" r="1.05" fill="currentColor" stroke="none"/><circle cx="14.8" cy="7.7" r="1.05" fill="currentColor" stroke="none"/><circle cx="17" cy="10.9" r="1.05" fill="currentColor" stroke="none"/></svg>';
 
-// ── Import a colour from the generated Scales & themes into a palette role ─────
+// ── Import a colour from the generated Scales into a palette role ─────
 let _scaleImportEl = null;
 function closeScaleImport() {
   if (_scaleImportEl) { _scaleImportEl.remove(); _scaleImportEl = null; }
@@ -5751,7 +5859,7 @@ function renderPalette() {
     const importBtn = document.createElement('button');
     importBtn.className = 'palette-group-import';
     importBtn.innerHTML = IMPORT_SVG;
-    importBtn.title = 'Import a colour from Scales & themes';
+    importBtn.title = 'Import a colour from Scales';
     importBtn.setAttribute('aria-label', importBtn.title);
     importBtn.disabled = entries.length >= PALETTE_ROLE_MAX;
     importBtn.addEventListener('click', () => openScaleImport(role, importBtn));

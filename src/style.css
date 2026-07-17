@@ -1547,7 +1547,9 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 
 /* Scale-import popover (fixed to the viewport, opened from an import button). */
 .scale-import {
-  position: fixed; z-index: 300; width: 236px; max-width: calc(100vw - 1rem);
+  /* Wide enough for the 11-step Scale row to stay on one line (11 × 1.1rem
+     swatches + 10 × 3px gaps + padding, border-box). */
+  position: fixed; z-index: 300; width: 250px; max-width: calc(100vw - 1rem);
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
   padding: 0.6rem; display: flex; flex-direction: column; gap: 0.3rem;
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
@@ -1908,6 +1910,12 @@ body.about-modal-open { overflow: hidden; }
   padding: 0.9rem 1rem;
   min-height: 0;
   overflow-y: auto;
+  /* Vertical scroll only (like the other poppers). Without an explicit value,
+     CSS computes overflow-x to `auto` whenever overflow-y is `auto`, so any
+     sub-pixel-wide descendant produced a stray sideways scroll (seen in the
+     Layout preview on mobile). Content is already width-constrained, so hiding
+     the x-axis clips nothing — it just removes that horizontal scroll. */
+  overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
@@ -1998,7 +2006,7 @@ body.about-modal-open { overflow: hidden; }
    real website context. Wider than Preferences; still capped to the viewport by
    the shared .settings-panel max-width. */
 .layout-panel { width: 440px; }
-.layout-preview { display: flex; flex-direction: column; gap: 0.9rem; }
+.layout-preview { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
 
 /* Palette ⇄ Scales & themes source toggle */
 .lp-modes { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
@@ -2022,6 +2030,33 @@ body.about-modal-open { overflow: hidden; }
 .lp-theme-card-body { font-size: 0.6rem; line-height: 1.35; }
 .lp-theme-card-link { font-size: 0.6rem; font-weight: 600; margin-top: auto; }
 .lp-hint { font-size: 0.7rem; line-height: 1.45; color: var(--muted); }
+
+/* ── Contrast audit panel (below each Layout preview) ─────────────────────────
+   Verdict tokens carry the meaning (AA / AAA / 3:1 / ✗ / Lc n); colour only
+   reinforces, so the audit reads under colour-vision deficiency too. */
+.lp-audit { margin-top: 0.55rem; display: flex; flex-direction: column; gap: 0.28rem; }
+.lp-audit-head { font-size: 0.56rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.lp-matrix { display: grid; gap: 2px; align-items: stretch; }
+.lp-matrix-corner { font-size: 0.5rem; color: var(--muted); display: flex; align-items: center; white-space: nowrap; }
+.lp-matrix-colh, .lp-matrix-rowh {
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+  font-size: 0.5rem; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.lp-matrix-dot { width: 0.5rem; height: 0.5rem; border-radius: 2px; border: 1px solid var(--border); flex: none; }
+.lp-matrix-cell {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0.2rem 0.1rem; border-radius: 3px; min-width: 0;
+  font-size: 0.52rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--surface2);
+}
+.lp-check { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; font-size: 0.62rem; }
+.lp-check-label { color: var(--muted); }
+.lp-check-val { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+/* Shared verdict colours (matrix cells + checklist values) */
+.lp-v-pass { color: var(--pass); }
+.lp-matrix-cell.lp-v-pass { background: var(--pass-bg); }
+.lp-v-warn { color: var(--text); }          /* 3:1 — large text / non-text only */
+.lp-v-fail { color: var(--error); opacity: 0.85; }
 
 .lp-screen { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; display: flex; flex-direction: column; }
 
