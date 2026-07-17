@@ -2130,10 +2130,9 @@ body.about-modal-open { overflow: hidden; }
 .lp-pal-swatch { cursor: pointer; transition: transform .1s ease; }
 .lp-pal-swatch:hover { transform: scale(1.14); }
 
-/* ── Scale & theme generator popper ────────────────────────────────────────── */
-.scale-panel { width: 420px; }
+/* ── Scale & theme generator (now inside the Layout preview's theme mode) ───── */
 
-/* Mobile: header poppers (Preferences / Layout / Scale) anchor to their icon
+/* Mobile: header poppers (Preferences / Layout) anchor to their icon
    (right:0), which isn't at the viewport's right edge — so as dropdowns the wide
    ones run off the left side. Present them all as a modal-like sheet instead:
    full width minus a minimal side margin, dropping from just below the header
@@ -2154,7 +2153,6 @@ body.about-modal-open { overflow: hidden; }
   }
 }
 
-.scale-preview { display: flex; flex-direction: column; gap: 0.7rem; }
 .sg-seed { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--muted); }
 .sg-seed-dot { width: 1rem; height: 1rem; border-radius: 3px; border: 1px solid var(--border); flex: none; }
 .sg-seed-txt { font-variant-numeric: tabular-nums; }
