@@ -444,16 +444,6 @@ function apcaAnchorLc(tile) {
   return apcaLcYs(compositeYs(bgLumAnchor(), cAlpha, bY), bY);
 }
 
-// WCAG counterpart of apcaAnchorLc: judge the ratio/badges from the CONTINUOUS
-// held relative luminances, not the rendered 8-bit RGB — so a Lum-picker hue/sat
-// sweep can't flip a badge on quantization wobble while the luminances are held.
-// Only when UNLOCKED and NOT in APCA mode: there wheelLum IS relative luminance,
-// so targetLum (TEXT) and bgLumAnchor() (BG — cuLum in Lum mode, live otherwise)
-// are the real relative-luminance anchors. When locked, the rendered pair is the
-// lock's own guarantee (kept as-is); in APCA mode the WCAG rows are hidden.
-function wcagJudgesAnchor() { return contrastLockMode !== 'apca' && activeContrastTarget() === 0; }
-function wcagTextLum(liveLum) { return wcagJudgesAnchor() ? targetLum : liveLum; }
-function wcagBgLum(liveLum)   { return wcagJudgesAnchor() ? bgLumAnchor() : liveLum; }
 
 // ─── APCA font-size/weight lookup (v2 beta) ──────────────────────────────────
 // fontMatrixAscend from the official apca-w3 package: for each |Lc| row, the
@@ -1174,7 +1164,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   // invariant) in the anchor regime; live composite otherwise.
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
-    (wcagJudgesAnchor() || a < 0.9995) ? compositeRelLum(targetLum, a, 1) : relativeLuminance(...onW), 1, 1,
+    (contrastLockMode !== 'apca' || a < 0.9995) ? compositeRelLum(targetLum, a, 1) : relativeLuminance(...onW), 1, 1,
     onW, [255, 255, 255],
     apcaAnchorLc('pvw'),
   );
@@ -1192,7 +1182,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   const onB = compositeRgb(selRgb, a, [0, 0, 0]);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
-    (wcagJudgesAnchor() || a < 0.9995) ? compositeRelLum(targetLum, a, 0) : relativeLuminance(...onB), 0, 0,
+    (contrastLockMode !== 'apca' || a < 0.9995) ? compositeRelLum(targetLum, a, 0) : relativeLuminance(...onB), 0, 0,
     onB, [0, 0, 0],
     apcaAnchorLc('pvb'),
   );
@@ -1233,16 +1223,14 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   paTxt.style.borderColor  = cvdTransformRgba(dotBorderA);
   paBg.style.background    = cusBgCss;
   paBg.style.borderColor   = cvdTransformRgba(dotBorderA);
-  // Anchor regime: text is always luminance-locked (hue-invariant); the custom BG
-  // is luminance-held only in Lum mode. Held sides use the gray-composited anchor
-  // so a Lum-picker hue/sat sweep can't shift the verdict; Color/Gray & lock/APCA
-  // use the live composite.
-  // Translucent → always judge from the gray-composite anchor so the status
-  // matches what the contrast lock pins (no flicker / residual gap). Opaque keeps
-  // the v1.47 gate (anchor only when unlocked & non-APCA). bgLumAnchor() carries
-  // the held value (cuLum in Lum mode, the lock's solved value when locked) or the
-  // live luminance in Color/HSL mode (where the status may change — as intended).
-  const useAnchor = wcagJudgesAnchor() || selAlpha < 0.9995 || cAlpha < 0.9995;
+  // Anchor regime: the WCAG ratio/badges judge the HELD anchor luminances (targetLum for
+  // the wheel text, bgLumAnchor() for the custom BG — cuLum in Lum mode, the lock's solved
+  // value when locked, or the live luminance in Color/HSL mode), NOT the rendered 8-bit RGB.
+  // So a Lum-picker hue/sat sweep can't shift the verdict via quantization — matching what
+  // the (anchor-based) contrast lock pins. Used whenever the WCAG rows are shown (non-APCA)
+  // or anything is translucent; in Color/HSL mode bgLumAnchor() tracks the live luminance,
+  // so the status still changes there — as intended.
+  const useAnchor = contrastLockMode !== 'apca' || selAlpha < 0.9995 || cAlpha < 0.9995;
   const uRel = relativeLuminance(...underlayRgb);
   const effTextA = compositeRgb(selRgb, selAlpha, effBgCustom);
   const effBgRelA = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, uRel) : relativeLuminance(...effBgCustom);
@@ -1561,22 +1549,6 @@ function lumStateKey() {
   return `${targetLum.toFixed(6)}|${bgLumAnchor().toFixed(6)}|${selAlpha.toFixed(4)}|${cAlpha.toFixed(4)}|${underlayRgb.join(',')}`;
 }
 
-/**
- * Most moderate luminance for the free side that reaches `ratio` against
- * `fixedLum`. Both boundary values meet the ratio exactly, so prefer the one
- * closer to mid luminance (0.5) — never white/black when a calmer color works.
- * Returns null when neither direction can reach it (possible for 7:1 when
- * 0.1 < fixedLum < 0.3, since max contrast is capped by white and black).
- */
-function solveContrastLum(fixedLum, ratio) {
-  const hi = ratio * (fixedLum + 0.05) - 0.05; // free side lighter than fixed
-  const lo = (fixedLum + 0.05) / ratio - 0.05; // free side darker than fixed
-  const canHi = hi <= 1, canLo = lo >= 0;
-  if (!canHi && !canLo) return null;
-  if (canHi && canLo) return Math.abs(hi - 0.5) <= Math.abs(lo - 0.5) ? hi : lo;
-  return canHi ? hi : lo;
-}
-
 function setContrastLockError(msg, full) {
   const el = document.getElementById('contrast-lock-error');
   if (el) { el.textContent = msg; el.title = full ?? msg; }
@@ -1754,56 +1726,25 @@ function _enforceContrastLockInner(changed) {
   if (!contrastLockTarget) { _contrastLockMet = false; _lumStateKey = null; return; }
   const R = contrastLockTarget;
 
-  // Translucent: pin so the COMPOSITED (visible) ratio meets R (numeric search;
-  // best-effort maximise when R is unreachable at this opacity). Skip entirely when the
-  // contrast-relevant luminance state is unchanged (a hue/sat sweep holds every luminance
-  // in Lum mode) — otherwise merely TOUCHING a side would re-pin the free side and shift
-  // the status, even though hue/sat changed no contrast. HSL-mode hue/sat moves
-  // bgLumAnchor(), so its key changes and the lock re-pins (the intended exception).
-  if (lockHasAlpha()) {
-    if (lumStateKey() === _lumStateKey) return; // nothing contrast-relevant changed; leave both sides put
-    const sol = solveLockAlpha(changed, 'wcag', R);
-    _contrastLockMet = sol.reached;
-    applyLockAlpha(changed, sol.lum);
-    _lumStateKey = lumStateKey(); // remember the post-pin state so the settle pass no-ops
-    setContrastLockError(
-      sol.reached ? '' : changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
-      sol.reached ? undefined : changed === 'fg' ? `No background reaches ${R}:1 at this opacity.` : `No wheel color reaches ${R}:1 at this opacity.`);
-    return;
-  }
-
-  // Use the luminances of the actual rendered colors (RGB-quantized)
-  const fgLum = relativeLuminance(...selectedRgbBiased());
-  const bgLum = relativeLuminance(cR, cG, cB);
-  const fixedLum = changed === 'fg' ? fgLum : bgLum;
-
-  const solved = solveContrastLum(fixedLum, R);
-  if (solved === null) {
-    _contrastLockMet = false;
-    setContrastLockError(
-      changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
-      changed === 'fg'
-        ? `No background can reach ${R}:1 from this luminance.`
-        : `No wheel color can reach ${R}:1 from this luminance.`);
-    return;
-  }
-  _contrastLockMet = true;
-
-  // The free side is pinned to the exact boundary; directional quantization
-  // in applyLockAdjustment guarantees the rendered color lands at-or-beyond
-  // it (a fixed luminance overshoot would balloon the ratio margin on the
-  // dark side, where (L + 0.05) makes the ratio hyper-sensitive).
-  const desired = solved;
-
-  // Skip only when the adjustment wouldn't change the free side's rendered
-  // color — any real movement of the fixed side re-pins immediately
-  if (lockFreeAtRgb(changed, lockFreeRgbAt(changed, desired)) && contrastRatio(fgLum, bgLum) >= R) {
-    setContrastLockError('');
-    return;
-  }
-
-  applyLockAdjustment(changed, desired);
-  setContrastLockError('');
+  // Skip when nothing contrast-relevant changed. By the wheel's construction only Lum and
+  // Opacity move relative luminance, so a hue/sat sweep in Lum mode holds every luminance —
+  // the lock must NOT re-pin the free side or shift the status. lumStateKey() (both sides'
+  // held luminances + both alphas + underlay) is unchanged then, so we return. A Lum/Opacity
+  // edit — or an HSL-mode hue/sat sweep, which moves bgLumAnchor() — changes the key and
+  // re-pins (the intended exception where the main picker is in HSL mode).
+  if (lumStateKey() === _lumStateKey) return;
+  // Anchor-based numeric solve — for opaque OR translucent (solveLockAlpha composites over
+  // alpha, a no-op at alpha 1, and judges the HELD anchor luminances, not the rendered 8-bit
+  // RGB). It pins the free side's anchor so the ANCHOR pair meets R exactly and every
+  // reachable hue/sat (which shares that anchor luminance) meets it too; best-effort
+  // maximise when R is unreachable at this luminance/opacity.
+  const sol = solveLockAlpha(changed, 'wcag', R);
+  _contrastLockMet = sol.reached;
+  applyLockAlpha(changed, sol.lum);
+  _lumStateKey = lumStateKey(); // post-pin state, so the settle pass and hue/sat sweeps no-op
+  setContrastLockError(
+    sol.reached ? '' : changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
+    sol.reached ? undefined : changed === 'fg' ? `No background can reach ${R}:1 here.` : `No wheel color can reach ${R}:1 here.`);
 }
 
 // ─── APCA lock ────────────────────────────────────────────────────────────────
@@ -1820,81 +1761,18 @@ function enforceApcaLock(changed) {
   if (!T) { _contrastLockMet = false; _lumStateKey = null; return; }
   const Td = Math.round(T); // integer for human-readable messages (T may be a fractional Type target)
 
-  // Translucent: pin so the COMPOSITED (visible) |Lc| meets T (numeric search;
-  // best-effort maximise when T is unreachable at this opacity).
-  if (lockHasAlpha()) {
-    if (lumStateKey() === _lumStateKey) return; // hue/sat-only: nothing contrast-relevant changed
-    const sol = solveLockAlpha(changed, 'apca', T);
-    _contrastLockMet = sol.reached;
-    applyLockAlpha(changed, sol.lum);
-    _lumStateKey = lumStateKey();
-    setContrastLockError(
-      sol.reached ? '' : changed === 'fg' ? `BG can't reach Lc ${Td}` : `Text can't reach Lc ${Td}`,
-      sol.reached ? undefined : changed === 'fg' ? `No background reaches |Lc| ${Td} at this opacity.` : `No wheel color reaches |Lc| ${Td} at this opacity.`);
-    return;
-  }
-
-  const fgRgb = selectedRgbBiased();
-  const bgRgb = [cR, cG, cB];
-
-  // Free side's hue/sat (preserved while its luminance moves)
-  let freeHue, freeSat;
-  if (changed === 'fg') { // custom bg is free
-    if (customMode === 'gray')     { freeHue = 0;     freeSat = 0; }
-    else if (customMode === 'lum') { freeHue = cuHue; freeSat = cuSat; }
-    else                           { freeHue = cH;    freeSat = cS; }
-  } else {
-    freeHue = selHue; freeSat = selSat;
-  }
-
-  const lcAt = lum => {
-    const rgb = hslToRgb(freeHue, freeSat, findLightness(freeHue, freeSat, lum));
-    return Math.abs(changed === 'fg' ? apcaLc(fgRgb, rgb) : apcaLc(rgb, bgRgb));
-  };
-
-  const split   = wheelLum(...(changed === 'fg' ? fgRgb : bgRgb));
-  const currentLc = Math.abs(apcaLc(fgRgb, bgRgb));
-
-  // On each branch the satisfying region ends at a boundary: binary-search
-  // from a satisfying endpoint toward the (unsatisfying) split point.
-  const solveBranch = endpoint => {
-    let sat = endpoint, unsat = split;
-    for (let i = 0; i < 36; i++) {
-      const mid = (sat + unsat) / 2;
-      if (lcAt(mid) >= T) sat = mid; else unsat = mid;
-    }
-    return sat;
-  };
-  const candidates = [];
-  if (lcAt(0) >= T) candidates.push(solveBranch(0));
-  if (lcAt(1) >= T) candidates.push(solveBranch(1));
-
-  if (!candidates.length) {
-    _contrastLockMet = false;
-    setContrastLockError(
-      changed === 'fg' ? `BG can't reach Lc ${Td}` : `Text can't reach Lc ${Td}`,
-      changed === 'fg'
-        ? `No background can reach |Lc| ${Td} against this text color.`
-        : `No wheel color can reach |Lc| ${Td} on this background.`);
-    return;
-  }
-  _contrastLockMet = true;
-
-  // Exact boundary — the directional quantization in applyLockAdjustment
-  // only ever moves the color further from the split, so |Lc| stays ≥ T
-  const desired = candidates.length === 2
-    ? (Math.abs(candidates[0] - 0.5) <= Math.abs(candidates[1] - 0.5) ? candidates[0] : candidates[1])
-    : candidates[0];
-
-  // Skip only when the adjustment wouldn't change the free side's rendered
-  // color — any real movement of the fixed side re-pins immediately
-  if (lockFreeAtRgb(changed, lockFreeRgbAt(changed, desired)) && currentLc >= T) {
-    setContrastLockError('');
-    return;
-  }
-
-  applyLockAdjustment(changed, desired);
-  setContrastLockError('');
+  // Skip when nothing contrast-relevant changed (hue/sat sweep in Lum mode holds every
+  // luminance — see the WCAG lock's note). Otherwise pin the free side's HELD luminance
+  // (anchor-based, opaque or translucent) so the anchor |Lc| meets T for every reachable
+  // hue/sat; best-effort maximise when T is unreachable.
+  if (lumStateKey() === _lumStateKey) return;
+  const sol = solveLockAlpha(changed, 'apca', T);
+  _contrastLockMet = sol.reached;
+  applyLockAlpha(changed, sol.lum);
+  _lumStateKey = lumStateKey();
+  setContrastLockError(
+    sol.reached ? '' : changed === 'fg' ? `BG can't reach Lc ${Td}` : `Text can't reach Lc ${Td}`,
+    sol.reached ? undefined : changed === 'fg' ? `No background can reach |Lc| ${Td} here.` : `No wheel color can reach |Lc| ${Td} here.`);
 }
 
 // ─── Custom color wheel ───────────────────────────────────────────────────────
