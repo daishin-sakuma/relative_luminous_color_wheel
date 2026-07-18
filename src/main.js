@@ -4070,28 +4070,42 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
                     :                       oklchCss(hex);
   const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
 
+  // Theme values that aren't on the scale are pure #fff/#000 (the light bg and the
+  // black/white accent-foreground). Promote them to base primitive vars so the semantic
+  // layer references ONLY globals — never a raw color — exactly as the JSON export does.
+  const BASE_NAMES = { '#ffffff': 'white', '#000000': 'black' };
+
   if (format === 'css') {
     // RGB is emitted as alpha-ready channels (rgb(var(--color-500) / .5)); hex
     // and oklch are stored whole and referenced directly.
     const rgbCh = colorFmt === 'rgb';
     const gval = hex => rgbCh ? hexToRgb(hex).join(' ') : cval(hex);
-    const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
-    const ref = e => e.step === null ? (rgbCh ? rgbCss(e.hex) : cval(e.hex))
-                                     : (rgbCh ? `rgb(var(--color-${e.step}))` : `var(--color-${e.step})`);
+    const baseUsed = new Map(); // hex → var name, for the base primitives actually referenced
+    const ref = e => {
+      if (e.step !== null) return rgbCh ? `rgb(var(--color-${e.step}))` : `var(--color-${e.step})`;
+      const h = e.hex.toLowerCase();
+      const name = BASE_NAMES[h] || ('c' + h.slice(1));
+      baseUsed.set(h, name);
+      return rgbCh ? `rgb(var(--color-${name}))` : `var(--color-${name})`;
+    };
     const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --${n}: ${ref(t[k])};`).join('\n');
-    return `/* Global tokens — luminance-keyed tonal scale (50–950), primitives.
-   The semantic themes below reference them, so re-theming means swapping aliases.
-   From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
+    const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
+    const baseGlobals = [...baseUsed.entries()].sort((a, b) => a[0] < b[0] ? 1 : -1) // white → black
+      .map(([hex, name]) => `  --color-${name}: ${gval(hex)};  /* ${alt(hex)} */`).join('\n');
+    const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
+    return `/* Global tokens — base white/black + the luminance-keyed tonal scale (50–950),
+   primitives. The semantic themes below reference ONLY these, so re-theming is swapping
+   aliases. From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
 :root {
-${globals}
+${baseGlobals ? baseGlobals + '\n' : ''}${globals}
 }
 /* Semantic tokens — light theme (default), referencing the globals above. */
 :root, [data-theme="light"] {
-${roleLines(light)}
+${lightLines}
 }
 /* Semantic tokens — dark theme. */
 [data-theme="dark"] {
-${roleLines(dark)}
+${darkLines}
 }
 `;
   }
@@ -4099,19 +4113,29 @@ ${roleLines(dark)}
   if (format === 'tailwind') {
     // Tailwind v4 @theme: the scale becomes global colour tokens, so you get
     // utilities like bg-brand-500 / text-brand-700; the semantic layer follows.
-    const globals = scale.map(c => `  --color-brand-${c.step}: ${cval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
-    const ref = e => e.step === null ? cval(e.hex) : `var(--color-brand-${e.step})`;
+    const baseUsed = new Map();
+    const ref = e => {
+      if (e.step !== null) return `var(--color-brand-${e.step})`;
+      const h = e.hex.toLowerCase();
+      const name = BASE_NAMES[h] || ('c' + h.slice(1));
+      baseUsed.set(h, name);
+      return `var(--color-${name})`; // Tailwind's own --color-white/--color-black namespace
+    };
     const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --color-${n}: ${ref(t[k])};`).join('\n');
+    const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
+    const baseGlobals = [...baseUsed.entries()].sort((a, b) => a[0] < b[0] ? 1 : -1) // white → black
+      .map(([hex, name]) => `  --color-${name}: ${cval(hex)};  /* ${alt(hex)} */`).join('\n');
+    const globals = scale.map(c => `  --color-brand-${c.step}: ${cval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
     return `@theme {
-  /* Global tokens — tonal scale → utilities like bg-brand-500, text-brand-700. */
-${globals}
+  /* Global tokens — base white/black + tonal scale → utilities like bg-brand-500, text-brand-700. */
+${baseGlobals ? baseGlobals + '\n' : ''}${globals}
 }
-/* Semantic tokens (reference the scale). Toggle dark with [data-theme="dark"]. */
+/* Semantic tokens (reference the globals only). Toggle dark with [data-theme="dark"]. */
 :root, [data-theme="light"] {
-${roleLines(light)}
+${lightLines}
 }
 [data-theme="dark"] {
-${roleLines(dark)}
+${darkLines}
 }
 `;
   }
@@ -4140,7 +4164,7 @@ ${roleLines(dark)}
   // bg and the black/white accent-foreground labels are pure #fff/#000) is promoted to
   // a color.base.* primitive and referenced, so changing e.g. "black" is a one-line
   // edit that cascades to every theme (no absolute colors hard-coded under theme.*).
-  const BASE_NAMES = { '#ffffff': 'white', '#000000': 'black' };
+  // (BASE_NAMES is declared once near the top of the function, shared by all formats.)
   const baseUsed = new Map(); // hex → { name, lum } for every base primitive actually referenced
   const themeRef = e => {
     if (e.step !== null) return { $value: `{color.scale.${e.step}}` };
