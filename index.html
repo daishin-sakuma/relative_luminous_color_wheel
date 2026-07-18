@@ -92,7 +92,7 @@
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "1.53.0",
+    "softwareVersion": "2.0.0",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -231,7 +231,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 1.53.0</span>
+    <span class="app-version">ver. 2.0.0</span>
     <div class="settings-wrap layout-wrap">
       <button class="theme-toggle" id="layout-btn" title="Layout Preview" aria-label="Preview the palette in a real layout, and generate an accessible tonal scale and light/dark theme">
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
@@ -263,19 +263,19 @@
           </div>
         </div>
         <div class="settings-row">
-          <span class="settings-row-label">Saturation</span>
-          <input type="range" id="ui-sat-slider" min="0" max="200" value="0">
-          <span class="settings-row-val" id="ui-sat-val">100%</span>
+          <span class="settings-row-label" title="Saturation">S</span>
+          <input type="range" id="ui-sat-slider" min="0" max="200" value="0" aria-label="Saturation">
+          <input type="text" class="settings-row-val" id="ui-sat-val" inputmode="numeric" autocomplete="off" spellcheck="false" value="100%" aria-label="Saturation value">
         </div>
         <div class="settings-row">
-          <span class="settings-row-label">Hue</span>
-          <input type="range" id="ui-hue-slider" min="0" max="359" value="240">
-          <span class="settings-row-val" id="ui-hue-val">240°</span>
+          <span class="settings-row-label" title="Hue">H</span>
+          <input type="range" id="ui-hue-slider" min="0" max="359" value="240" aria-label="Hue">
+          <input type="text" class="settings-row-val" id="ui-hue-val" inputmode="numeric" autocomplete="off" spellcheck="false" value="240°" aria-label="Hue value">
         </div>
         <div class="settings-row">
-          <span class="settings-row-label">Brightness</span>
-          <input type="range" id="ui-brightness-slider" min="0" max="50" value="7">
-          <span class="settings-row-val" id="ui-brightness-val">7%</span>
+          <span class="settings-row-label" title="Brightness">B</span>
+          <input type="range" id="ui-brightness-slider" min="0" max="50" value="7" aria-label="Brightness">
+          <input type="text" class="settings-row-val" id="ui-brightness-val" inputmode="numeric" autocomplete="off" spellcheck="false" value="7%" aria-label="Brightness value">
         </div>
         <div class="settings-btns">
           <button class="settings-reset-btn" id="settings-neutralize">Neutralize</button>
@@ -361,19 +361,23 @@
 
   <!-- ── Left: Wheel + Color info ──────────────────────────────────────────────── -->
   <div class="col-left">
-    <div>
-      <div class="lum-row">
-        <span class="field-label">Target Relative Luminance</span>
-        <input type="text" class="field-value" id="lum-val" value="0.546" inputmode="decimal" autocomplete="off" spellcheck="false">
+    <div class="lum-alpha-group">
+      <div>
+        <div class="lum-row">
+          <span class="field-label">Target Relative Luminance</span>
+          <input type="text" class="field-value" id="lum-val" value="0.546" inputmode="decimal" autocomplete="off" spellcheck="false">
+        </div>
+        <input type="range" id="lum-slider" min="0" max="1000" value="546" step="1">
       </div>
-      <input type="range" id="lum-slider" min="0" max="1000" value="546" step="1">
       <!-- Opacity sits with luminance: unlike hue/sat it changes contrast (a
            translucent colour composites over its background). -->
-      <div class="lum-row alpha-row">
-        <span class="field-label">Opacity</span>
-        <input type="text" class="field-value" id="alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+      <div>
+        <div class="lum-row alpha-row">
+          <span class="field-label">Opacity</span>
+          <input type="text" class="field-value" id="alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+        </div>
+        <input type="range" id="alpha-slider" min="0" max="100" value="100" step="1">
       </div>
-      <input type="range" id="alpha-slider" min="0" max="100" value="100" step="1">
     </div>
 
     <div class="wheel-wrap">
