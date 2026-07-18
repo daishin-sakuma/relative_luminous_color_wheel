@@ -1550,6 +1550,16 @@ let _lastTouchedSide = 'fg'; // which side the user adjusted most recently
 // only while this is true — otherwise the unreachable best-effort |Lc|/ratio would snap
 // up and read as "achieved" while the lock itself shows "can't reach …".
 let _contrastLockMet = false;
+// The contrast-relevant luminance state at the last alpha-lock pin: both sides' HELD
+// luminances, both alphas, and the underlay. When it's unchanged the alpha lock skips
+// enforcement entirely, so a hue/sat sweep in Lum mode (which holds every luminance)
+// never re-pins the free side or shifts the status — reachable or best-effort alike. A
+// real lum/alpha edit (or an HSL-mode hue/sat sweep, which moves bgLumAnchor()) changes
+// the key and re-pins. Reset to null when the lock is off/target-less so re-entry re-arms.
+let _lumStateKey = null;
+function lumStateKey() {
+  return `${targetLum.toFixed(6)}|${bgLumAnchor().toFixed(6)}|${selAlpha.toFixed(4)}|${cAlpha.toFixed(4)}|${underlayRgb.join(',')}`;
+}
 
 /**
  * Most moderate luminance for the free side that reaches `ratio` against
@@ -1734,22 +1744,28 @@ function applyLockAlpha(changed, desired) {
 }
 
 function enforceContrastLock(changed) {
-  if (contrastLockMode === 'off') { _contrastLockMet = false; return; }
+  if (contrastLockMode === 'off') { _contrastLockMet = false; _lumStateKey = null; return; }
   _inEnforcement = true;
   try { _enforceContrastLockInner(changed); } finally { _inEnforcement = false; }
 }
 
 function _enforceContrastLockInner(changed) {
   if (apcaLockActive()) { enforceApcaLock(changed); return; }
-  if (!contrastLockTarget) { _contrastLockMet = false; return; }
+  if (!contrastLockTarget) { _contrastLockMet = false; _lumStateKey = null; return; }
   const R = contrastLockTarget;
 
   // Translucent: pin so the COMPOSITED (visible) ratio meets R (numeric search;
-  // best-effort maximise when R is unreachable at this opacity).
+  // best-effort maximise when R is unreachable at this opacity). Skip entirely when the
+  // contrast-relevant luminance state is unchanged (a hue/sat sweep holds every luminance
+  // in Lum mode) — otherwise merely TOUCHING a side would re-pin the free side and shift
+  // the status, even though hue/sat changed no contrast. HSL-mode hue/sat moves
+  // bgLumAnchor(), so its key changes and the lock re-pins (the intended exception).
   if (lockHasAlpha()) {
+    if (lumStateKey() === _lumStateKey) return; // nothing contrast-relevant changed; leave both sides put
     const sol = solveLockAlpha(changed, 'wcag', R);
     _contrastLockMet = sol.reached;
     applyLockAlpha(changed, sol.lum);
+    _lumStateKey = lumStateKey(); // remember the post-pin state so the settle pass no-ops
     setContrastLockError(
       sol.reached ? '' : changed === 'fg' ? `BG can't reach ${R}:1` : `Text can't reach ${R}:1`,
       sol.reached ? undefined : changed === 'fg' ? `No background reaches ${R}:1 at this opacity.` : `No wheel color reaches ${R}:1 at this opacity.`);
@@ -1801,15 +1817,17 @@ function _enforceContrastLockInner(changed) {
 
 function enforceApcaLock(changed) {
   const T = apcaLockTarget;
-  if (!T) { _contrastLockMet = false; return; }
+  if (!T) { _contrastLockMet = false; _lumStateKey = null; return; }
   const Td = Math.round(T); // integer for human-readable messages (T may be a fractional Type target)
 
   // Translucent: pin so the COMPOSITED (visible) |Lc| meets T (numeric search;
   // best-effort maximise when T is unreachable at this opacity).
   if (lockHasAlpha()) {
+    if (lumStateKey() === _lumStateKey) return; // hue/sat-only: nothing contrast-relevant changed
     const sol = solveLockAlpha(changed, 'apca', T);
     _contrastLockMet = sol.reached;
     applyLockAlpha(changed, sol.lum);
+    _lumStateKey = lumStateKey();
     setContrastLockError(
       sol.reached ? '' : changed === 'fg' ? `BG can't reach Lc ${Td}` : `Text can't reach Lc ${Td}`,
       sol.reached ? undefined : changed === 'fg' ? `No background reaches |Lc| ${Td} at this opacity.` : `No wheel color reaches |Lc| ${Td} at this opacity.`);
