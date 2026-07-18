@@ -1370,7 +1370,11 @@ function updateUI() {
   document.getElementById('vr-r').textContent = String(r);
   document.getElementById('vr-g').textContent = String(g);
   document.getElementById('vr-b').textContent = String(b);
-  document.getElementById('v-rgb').dataset.copy = `${r} ${g} ${b}`;
+  const aPct = Math.round(selAlpha * 100);
+  setUnitVal(document.getElementById('vr-a'), aPct, '%');
+  // Copy as CSS Color 4: bytes plus a percentage alpha only when translucent, so an
+  // opaque colour still copies the plain "r g b" (usable straight inside rgb()/rgba()).
+  document.getElementById('v-rgb').dataset.copy = aPct < 100 ? `${r} ${g} ${b} / ${aPct}%` : `${r} ${g} ${b}`;
 
   // Contrast previews
   const customLum = relativeLuminance(cR, cG, cB);
