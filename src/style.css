@@ -1959,6 +1959,15 @@ body.about-modal-open { overflow: hidden; }
     pointer-events: none;
     transition: opacity 0.18s ease, visibility 0s linear 0.18s;
   }
+  /* Lift the OPEN popper's own trigger above its dim backdrop (z-index 199), which
+     otherwise covers the whole viewport including the header icon. Without this, a tap on
+     the icon lands on the backdrop first (→ close), so re-pressing the open popper's own
+     icon flickered it shut then back. Now the tap hits the button (a no-op that keeps it
+     open); everything else stays under the backdrop, so an outside tap still closes. */
+  .settings-wrap.settings-open .theme-toggle {
+    position: relative;
+    z-index: 200;
+  }
 }
 
 /* ── Layout preview popper ─────────────────────────────────────────────────── */
