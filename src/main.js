@@ -3341,11 +3341,12 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
-// Color value format for exports: 'oklch' (default), 'hex' or 'rgb'. Shared by
-// the Preferences preview and the palette sidebar; toggled via any
-// .export-colorfmt-btn and persisted across sessions.
+// Color value format for exports: 'hex' (default — the most universal notation,
+// understood by every tool and pipeline), 'oklch' or 'rgb'. Shared by the
+// Preferences preview and the palette sidebar; toggled via any .export-colorfmt-btn
+// and persisted across sessions.
 const EXPORT_COLOR_FMTS = ['oklch', 'hex', 'rgb'];
-let exportColorFmt = 'oklch';
+let exportColorFmt = 'hex';
 try {
   const v = localStorage.getItem('export-color-fmt');
   if (EXPORT_COLOR_FMTS.includes(v)) exportColorFmt = v;
@@ -3428,52 +3429,40 @@ ${lines.join('\n')}
 }
 `;
   }
-  // W3C Design Tokens (DTCG) 2025.10: a color $value is an OBJECT with a
-  // required colorSpace + components array (a bare hex string is not valid).
-  // sRGB components are 0–1 (not 0–255) and there is no separate "rgb" space —
-  // so hex and RGB both live in sRGB. We keep them distinct by notation: HEX
-  // carries the `hex` fallback string, RGB is pure sRGB channels, and OKLCH
-  // uses OKLCH components with an sRGB hex fallback for non-OKLCH consumers.
-  const colorToken = c => {
-    const hex = c.hex.toLowerCase();
-    const alpha = +hexToRgba(c.hex)[3].toFixed(4); // DTCG alpha (0–1)
-    if (exportColorFmt === 'oklch') {
-      return { $value: { colorSpace: 'oklch', components: oklchComponents(c.hex), alpha, hex } };
-    }
-    const [r, g, b] = hexToRgb(c.hex);
-    const components = [r, g, b].map(v => +(v / 255).toFixed(4));
-    return exportColorFmt === 'hex'
-      ? { $value: { colorSpace: 'srgb', components, alpha, hex } }
-      : { $value: { colorSpace: 'srgb', components, alpha } };
+  // W3C Design Tokens (DTCG), tool-implemented editors'-draft form: a color $value
+  // is a CSS hex STRING — #rrggbb, or #rrggbbaa when translucent (alpha in the hex).
+  // Every DTCG processor (Style Dictionary, Tokens Studio, Cobalt, Terrazzo) parses
+  // this directly, with no custom transformer. The 2025.x "object color" drafts
+  // (colorSpace/components) are labelled "do not implement", so we don't emit them;
+  // instead the OKLCH/sRGB components the export toggle selects, plus the app's
+  // luminance, live under $extensions (which tools MUST preserve) — a single source
+  // of truth in $value, richer data alongside.
+  const NS = 'app.vercel.relative-luminous-color-wheel'; // reverse-DNS ext namespace (DTCG SHOULD)
+  const colorMeta = c => {
+    const meta = { alpha: +hexToRgba(c.hex)[3].toFixed(4), luminance: +c.lum.toFixed(4) };
+    if (exportColorFmt === 'oklch') { meta.colorSpace = 'oklch'; meta.components = oklchComponents(c.hex); meta.oklch = oklchCss(c.hex); }
+    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(c.hex).map(v => +(v / 255).toFixed(4)); if (exportColorFmt === 'rgb') meta.rgb = rgbCss(c.hex); }
+    return meta;
   };
+  const colorToken = c => ({ $value: c.hex.toLowerCase(), $extensions: { [NS]: colorMeta(c) } });
   const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
   const fmtNote = exportColorFmt === 'oklch'
-    ? 'Colors use the OKLCH color space, each with an sRGB hex fallback.'
+    ? 'Each $value is a CSS hex string; the OKLCH components, alpha, and the colour’s relative luminance are under $extensions.'
     : exportColorFmt === 'hex'
-    ? 'Colors use the sRGB color space (components 0–1) with an sRGB hex fallback string.'
-    : 'Colors use the sRGB color space as numeric channels (components 0–1).';
+    ? 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and relative luminance are under $extensions.'
+    : 'Each $value is a CSS hex string; sRGB channel components (0–1), alpha, and relative luminance are under $extensions.';
   const json = {
-    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Per the W3C Design Tokens format (2025.10).`,
+    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
     color: {
       $type: 'color',
       text: groupTokens(text),
       bg:   groupTokens(bg),
     },
     $extensions: {
-      // Reverse-DNS namespace (DTCG SHOULD) to avoid clashes with other vendors'
-      // extension data; matches the app's reverse-domain identifier.
-      'app.vercel.relative-luminous-color-wheel': {
+      [NS]: {
         textBgContrastRatio: +ratio.toFixed(2),
-        textLuminances: text.map(c => +c.lum.toFixed(4)),
-        bgLuminances:   bg.map(c => +c.lum.toFixed(4)),
-        liveText: {
-          hex: wheelHex,
-          oklch: oklchCss(wheelHex),
-        },
-        liveBg: {
-          hex: customHex,
-          oklch: oklchCss(customHex),
-        },
+        liveText: { hex: wheelHex, oklch: oklchCss(wheelHex) },
+        liveBg:   { hex: customHex, oklch: oklchCss(customHex) },
       },
     },
   };
@@ -3514,8 +3503,8 @@ function downloadExport(format) {
   // Click-only selection (no hover previews): one tab is pinned and its
   // preview stays visible — across popper close/reopen too. Clicking the
   // pinned tab again hides the preview. JSON starts selected.
-  let pinnedFormat = /** @type {string | null} */ ('json');
-  let previewFormat = 'json';
+  let pinnedFormat = /** @type {string | null} */ ('css'); // CSS custom properties — the most universally usable default
+  let previewFormat = 'css';
 
   const render = format => {
     previewFormat = format;
@@ -4060,8 +4049,8 @@ function copyHexSwatch(hex, el) {
 }
 
 // Scale export controls (independent of the sidebar palette export).
-let _scaleExportFmt = 'css';        // 'css' | 'tailwind' | 'json'
-let _scaleExportColorFmt = 'oklch'; // 'oklch' | 'hex' | 'rgb'
+let _scaleExportFmt = 'css';      // 'css' | 'tailwind' | 'json' — CSS custom properties by default
+let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' | 'rgb' — HEX (most universal) by default
 
 // Semantic role → theme key. The order the themes are emitted in.
 const SCALE_SEM_ROLES = [
@@ -4127,32 +4116,63 @@ ${roleLines(dark)}
 `;
   }
 
-  // JSON — W3C Design Tokens (DTCG 2025.10): global scale tokens under color.scale,
-  // and light/dark themes under theme.* whose values are ALIASES ({color.scale.N}).
-  const tokenValue = hex => {
-    const h = hex.toLowerCase();
-    if (colorFmt === 'oklch') return { colorSpace: 'oklch', components: oklchComponents(hex), alpha: 1, hex: h };
-    const [r, g, b] = hexToRgb(hex);
-    const components = [r, g, b].map(v => +(v / 255).toFixed(4));
-    return colorFmt === 'hex' ? { colorSpace: 'srgb', components, alpha: 1, hex: h }
-                              : { colorSpace: 'srgb', components, alpha: 1 };
+  // JSON — W3C Design Tokens (DTCG), tool-implemented editors'-draft form: every color
+  // $value is a CSS hex STRING (Style Dictionary / Tokens Studio / Cobalt parse it
+  // directly). Scale primitives live under color.scale; the light/dark themes under
+  // theme.* are ALIASES ({color.scale.N}) — the standard, widely-supported reference
+  // form. The OKLCH/sRGB components the toggle selects, plus luminance, ride in
+  // $extensions (which tools MUST preserve). The 2025.x "object color" drafts are
+  // labelled "do not implement", so we don't emit that shape in $value.
+  const NS = 'app.vercel.relative-luminous-color-wheel';
+  const colorMeta = hex => {
+    const meta = { alpha: 1 };
+    if (colorFmt === 'oklch') { meta.colorSpace = 'oklch'; meta.components = oklchComponents(hex); meta.oklch = oklchCss(hex); }
+    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(hex).map(v => +(v / 255).toFixed(4)); if (colorFmt === 'rgb') meta.rgb = rgbCss(hex); }
+    return meta;
   };
-  const scaleGroup = Object.fromEntries(scale.map(c => [String(c.step), { $value: tokenValue(c.hex) }]));
-  const themeGroup = t => Object.fromEntries(SCALE_SEM_ROLES.map(([n, k]) => {
-    const e = t[k];
-    // Reference the global scale token where possible; synthesized values
-    // (dark bg/surface/border, black/white accent labels) are literal.
-    return [n, e.step === null ? { $value: tokenValue(e.hex) } : { $value: `{color.scale.${e.step}}` }];
-  }));
-  const fmtNote = colorFmt === 'oklch' ? 'Colors use OKLCH with an sRGB hex fallback.'
-                : colorFmt === 'hex'   ? 'Colors use sRGB (components 0–1) with an sRGB hex fallback string.'
-                :                        'Colors use sRGB numeric channels (components 0–1).';
+  const litToken = (hex, lum) => {
+    const meta = colorMeta(hex);
+    if (lum != null) meta.luminance = +lum.toFixed(4);
+    return { $value: hex.toLowerCase(), $extensions: { [NS]: meta } };
+  };
+  const scaleGroup = Object.fromEntries(scale.map(c => [String(c.step), litToken(c.hex, c.lum)]));
+  // Keep the semantic layer alias-ONLY: any theme value not on the scale (the light
+  // bg and the black/white accent-foreground labels are pure #fff/#000) is promoted to
+  // a color.base.* primitive and referenced, so changing e.g. "black" is a one-line
+  // edit that cascades to every theme (no absolute colors hard-coded under theme.*).
+  const BASE_NAMES = { '#ffffff': 'white', '#000000': 'black' };
+  const baseUsed = new Map(); // hex → { name, lum } for every base primitive actually referenced
+  const themeRef = e => {
+    if (e.step !== null) return { $value: `{color.scale.${e.step}}` };
+    const hex = e.hex.toLowerCase();
+    const name = BASE_NAMES[hex] || ('c' + hex.slice(1)); // stable name for any non-white/black literal
+    baseUsed.set(hex, { name, lum: e.lum });
+    return { $value: `{color.base.${name}}` };
+  };
+  const themeGroup = t => Object.fromEntries(SCALE_SEM_ROLES.map(([n, k]) => [n, themeRef(t[k])]));
+  const lightGroup = themeGroup(light), darkGroup = themeGroup(dark); // populates baseUsed
+  const baseGroup = Object.fromEntries([...baseUsed.entries()]
+    .sort((a, b) => b[1].lum - a[1].lum) // white → black
+    .map(([hex, { name, lum }]) => [name, litToken(hex, lum)]));
+  const fmtNote = colorFmt === 'oklch' ? 'Each $value is a CSS hex string; OKLCH components, alpha, and luminance are under $extensions.'
+                : colorFmt === 'hex'   ? 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and luminance are under $extensions.'
+                :                        'Each $value is a CSS hex string; sRGB channel components (0–1), alpha, and luminance are under $extensions.';
   const json = {
-    $description: `Global tonal-scale tokens (primitives, color.scale.*) plus light and dark semantic themes (theme.*) that alias them, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Per the W3C Design Tokens format (2025.10).`,
-    color: { $type: 'color', scale: scaleGroup },
-    theme: { $type: 'color', light: themeGroup(light), dark: themeGroup(dark) },
+    $description: `Global tonal-scale tokens (primitives, color.scale.* and color.base.*) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
+    color: {
+      $type: 'color',
+      $description: 'Primitive colors — the luminance-keyed tonal scale (50–950) plus base white/black. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      base:  baseGroup,
+      scale: scaleGroup,
+    },
+    theme: {
+      $type: 'color',
+      $description: 'Semantic role tokens; every value is an alias to a color.scale or color.base primitive, so re-theming means swapping references, never editing colors here.',
+      light: lightGroup,
+      dark:  darkGroup,
+    },
     $extensions: {
-      'app.vercel.relative-luminous-color-wheel': {
+      [NS]: {
         scaleSteps: scale.map(c => c.step),
         scaleLuminances: scale.map(c => +c.lum.toFixed(4)),
       },
