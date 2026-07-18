@@ -1327,6 +1327,12 @@ function updatePreviewFontSizes() {
 window.addEventListener('resize', updatePreviewFontSizes);
 requestAnimationFrame(updatePreviewFontSizes);             // once styles are applied
 
+// Re-fit every hex field when the layout width changes (orientation, sidebar resize),
+// so a value that shrank on a narrow field restores its size when there's room again.
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.custom-hex-input').forEach(el => fitHexField(/** @type {HTMLInputElement} */ (el)));
+});
+
 // ─── Main UI update ───────────────────────────────────────────────────────────
 
 function updateUI() {
@@ -1347,6 +1353,7 @@ function updateUI() {
   const swatchHexEl = /** @type {HTMLInputElement} */ (document.getElementById('swatch-hex'));
   // Don't clobber the field while the user is typing/editing it.
   if (document.activeElement !== swatchHexEl) swatchHexEl.value = formatHex(selHexA);
+  fitHexField(swatchHexEl);
   // The pin overlays the coloured swatch, so tint it to stay legible on top.
   /** @type {HTMLElement} */ (document.getElementById('pin-selected')).style.color =
     cvdSelLum > 0.179 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
@@ -1436,6 +1443,31 @@ function hexDisplay(hex) { return formatHex(hex).toUpperCase(); }
 function cvdDisplayHex(hex) {
   const [r, g, b, a] = hexToRgba(hex);
   return cvdTransformHex(toHex(...compositeRgb([r, g, b], a, underlayRgb)));
+}
+
+// Shrink a hex <input>'s font only as much as needed so its (centered) value never
+// runs under the trailing copy icon — a translucent 8-digit #RRGGBBAA in a narrow
+// mobile field would otherwise overlap it. The value stays centered on the field; we
+// only reduce the type size, and only when it wouldn't otherwise fit clear of the icon.
+const _hexFitCtx = document.createElement('canvas').getContext('2d');
+function fitHexField(input) {
+  if (!input) return;
+  input.style.fontSize = ''; // reset to the CSS base each time so widening restores it
+  const cs = getComputedStyle(input);
+  const baseFont = parseFloat(cs.fontSize);
+  if (!baseFont) return;
+  const val = input.value || '';
+  _hexFitCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const textW = _hexFitCtx.measureText(val).width + (parseFloat(cs.letterSpacing) || 0) * val.length;
+  const rect = input.getBoundingClientRect();
+  const center = rect.left + rect.width / 2;
+  // Widest the centered value may be: bounded by the left padding, and — the real
+  // constraint — by clearing the copy icon on the right (with a little breathing room).
+  let maxHalf = rect.width / 2 - (parseFloat(cs.paddingLeft) || 0);
+  const icon = input.parentElement && input.parentElement.querySelector('.custom-hex-copy-icon');
+  if (icon) maxHalf = Math.min(maxHalf, icon.getBoundingClientRect().left - 3 - center);
+  const maxW = maxHalf * 2;
+  if (maxW > 0 && textW > maxW) input.style.fontSize = Math.max(8, baseFont * (maxW / textW)) + 'px';
 }
 
 // ─── RAF render scheduler ─────────────────────────────────────────────────────
@@ -2106,7 +2138,9 @@ function syncCustomControls() {
 
 /** Full sync including hex text input (use when change did NOT come from that input). */
 function syncCustomUI() {
-  /** @type {HTMLInputElement} */ (document.getElementById('custom-hex-input')).value = formatHex(toHexA(cR, cG, cB, cAlpha));
+  const chi = /** @type {HTMLInputElement} */ (document.getElementById('custom-hex-input'));
+  chi.value = formatHex(toHexA(cR, cG, cB, cAlpha));
+  fitHexField(chi);
   syncCustomControls();
 }
 
@@ -2488,6 +2522,7 @@ customHexCopyIcon.addEventListener('click', doCopyCustomHex);
 customHexInput.addEventListener('blur', () => {
   const full = normalizeHexInput(customHexInput.value); // expand shorthand / revert invalid
   customHexInput.value = full ? formatHex(full.toUpperCase()) : formatHex(toHexA(cR, cG, cB, cAlpha));
+  fitHexField(customHexInput);
 });
 customHexInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') customHexInput.blur();
@@ -2548,6 +2583,7 @@ swatchHexInput.addEventListener('click', () => swatchHexInput.select());
 swatchHexInput.addEventListener('blur', () => {
   const [r, g, b] = selectedRgbBiased();
   swatchHexInput.value = formatHex(toHexA(r, g, b, selAlpha)); // normalize / revert invalid
+  fitHexField(swatchHexInput);
 });
 swatchHexInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') swatchHexInput.blur();
@@ -2657,7 +2693,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
       else if (mode === 'lum') { setV(vals.ulum, (lum[0] / 1000).toFixed(3)); setV(vals.usat, lum[1] + '%'); setV(vals.uhue, lum[2] + '°'); }
       else setV(vals.gray, underlayRgb[0]);
     };
-    const syncHex = () => { if (document.activeElement !== hexEl) hexEl.value = formatHex(toHex(...underlayRgb)); };
+    const syncHex = () => { if (document.activeElement !== hexEl) hexEl.value = formatHex(toHex(...underlayRgb)); fitHexField(hexEl); };
     const syncSwatch = () => { swatchEl.style.background = cvdTransformHex(toHex(...underlayRgb)); };
     const syncAll = () => { syncRanges(); syncVals(); syncHex(); syncSwatch(); };
     const refresh = () => {
@@ -5951,7 +5987,7 @@ function syncChipEditorAlpha() {
   (_ceRefs.alphaVals || []).forEach(v => { if (document.activeElement !== v) v.value = pct + '%'; });
 }
 
-function syncChipEditorHex() { _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)); }
+function syncChipEditorHex() { _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)); fitHexField(_ceRefs.hex); }
 
 function syncChipEditorControls() {
   syncChipEditorRanges();
