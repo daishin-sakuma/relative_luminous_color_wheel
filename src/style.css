@@ -2337,7 +2337,7 @@ body.about-modal-open { overflow: hidden; }
 
 .settings-row {
   display: grid;
-  grid-template-columns: 5rem 1fr 4.5ch; /* value column + gap match .custom-slider-row (underlay) */
+  grid-template-columns: 0.9rem 1fr 4.5ch; /* label + value columns + gap all match .custom-slider-row (underlay) */
   gap: 0.45rem;
   align-items: center;
 }
@@ -2347,6 +2347,15 @@ body.about-modal-open { overflow: hidden; }
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Theme sliders use single-initial labels (S / H / B) styled like the underlay's
+   channel labels (.custom-ch), so both slider groups in the popper share one look. */
+.settings-row .settings-row-label {
+  font-size: 0.70rem;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: right;
 }
 
 /* Editable numeric readout, styled identically to the underlay/main-picker value
