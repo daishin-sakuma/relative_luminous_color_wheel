@@ -627,15 +627,17 @@ input.settings-row-val:focus {
 .preview-wcag { display: flex; gap: 0.4rem; align-items: flex-start; flex-wrap: wrap; align-self: flex-end; max-width: 100%; }
 /* Each row (usage tier, font verdict, Normal/Large badge rows) right-aligns
    independently, so one row's length never shifts another's right edge.
-   The APCA verdict group and the WCAG chip group are STACKED in one grid cell,
-   so the block always reserves the taller (APCA) height; switching contrast
-   mode flips only their visibility (below), never the tile height — otherwise
-   the desktop fit-to-viewport zoom would rescale the whole app on every toggle. */
-.preview-wcag-rows { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: end; min-width: 0; max-width: 100%; }
+   The APCA verdict group and the WCAG chip group are STACKED in one grid cell.
+   Only the group for the CURRENT mode sizes the tile: the hidden group is taken
+   out of layout (position: absolute) so its height can't leak into the other mode.
+   This keeps WCAG-mode card height constant regardless of the APCA font verdict's
+   wrapping (a long "needs ≥Npx" line no longer changes the tile in WCAG mode), while
+   APCA mode still grows naturally to fit its wrapped verdict. */
+.preview-wcag-rows { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: end; min-width: 0; max-width: 100%; position: relative; }
 .preview-verdict-group { grid-area: 1 / 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end; gap: 0.18rem; min-width: 0; max-width: 100%; }
-.preview-verdict-apca { visibility: hidden; }                              /* shown only in APCA mode */
-.preview-wcag-rows.apca .preview-verdict-apca { visibility: visible; }
-.preview-wcag-rows.apca .preview-verdict-wcag { visibility: hidden; }
+.preview-verdict-apca { visibility: hidden; position: absolute; top: 0; right: 0; }  /* WCAG mode: hidden + out of layout */
+.preview-wcag-rows.apca .preview-verdict-apca { visibility: visible; position: static; }
+.preview-wcag-rows.apca .preview-verdict-wcag { visibility: hidden; position: absolute; top: 0; right: 0; }
 .preview-wcag-row { display: flex; gap: 0.15rem; align-items: center; flex-wrap: wrap; }
 .preview-wcag-cat {
   font-size: 0.6rem;
