@@ -223,6 +223,21 @@ header {
   margin-bottom: 0.28rem;
 }
 
+/* Target-luminance + opacity block: each label+slider is a wrapped pair. Within a pair
+   the label hugs its slider; the gap between the two pairs is set clearly larger so each
+   label unambiguously reads with the slider directly below it, and a margin-bottom keeps
+   the whole block the most separated from its neighbour (the wheel) — giving a clear
+   label→slider  <  pair↔pair  <  block↔wheel  hierarchy. */
+.lum-alpha-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+.lum-alpha-group .lum-row {
+  margin-bottom: 0.1rem;
+}
+
 .field-label {
   font-size: 0.86rem;
   letter-spacing: 0.18em;

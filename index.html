@@ -361,19 +361,23 @@
 
   <!-- ── Left: Wheel + Color info ──────────────────────────────────────────────── -->
   <div class="col-left">
-    <div>
-      <div class="lum-row">
-        <span class="field-label">Target Relative Luminance</span>
-        <input type="text" class="field-value" id="lum-val" value="0.546" inputmode="decimal" autocomplete="off" spellcheck="false">
+    <div class="lum-alpha-group">
+      <div>
+        <div class="lum-row">
+          <span class="field-label">Target Relative Luminance</span>
+          <input type="text" class="field-value" id="lum-val" value="0.546" inputmode="decimal" autocomplete="off" spellcheck="false">
+        </div>
+        <input type="range" id="lum-slider" min="0" max="1000" value="546" step="1">
       </div>
-      <input type="range" id="lum-slider" min="0" max="1000" value="546" step="1">
       <!-- Opacity sits with luminance: unlike hue/sat it changes contrast (a
            translucent colour composites over its background). -->
-      <div class="lum-row alpha-row">
-        <span class="field-label">Opacity</span>
-        <input type="text" class="field-value" id="alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+      <div>
+        <div class="lum-row alpha-row">
+          <span class="field-label">Opacity</span>
+          <input type="text" class="field-value" id="alpha-val" value="100%" inputmode="numeric" autocomplete="off" spellcheck="false">
+        </div>
+        <input type="range" id="alpha-slider" min="0" max="100" value="100" step="1">
       </div>
-      <input type="range" id="alpha-slider" min="0" max="100" value="100" step="1">
     </div>
 
     <div class="wheel-wrap">
