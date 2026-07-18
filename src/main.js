@@ -3068,6 +3068,31 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     saveToStorage('ui-sat', '0');
   });
 
+  // The value readouts are editable inputs (matching the underlay / main-picker
+  // sliders): typing or arrow-keys drives the slider + applies + persists, mirroring
+  // each slider's own input handler above.
+  wireValInput(uiSatVal, 0, 200, 1, s => parseInt(s, 10), v => v + '%', v => {
+    uiSatSlider.value = String(v);
+    applyUiColors(+uiHueSlider.value, v);
+    saveToStorage('ui-sat', String(v));
+  });
+  wireValInput(uiHueVal, 0, 359, 1, s => parseInt(s, 10), v => v + '°', v => {
+    uiHueSlider.value = String(v);
+    applyUiColors(v, +uiSatSlider.value);
+    updateSatSliderBg(v);
+    saveToStorage('ui-hue', String(v));
+  }, true);
+  // Brightness min/max depend on the theme (dark 0–50, light 50–100); read them live
+  // off the slider, which applyBrightness() keeps in sync with the active theme.
+  wireValInput(uiBrightnessVal, 0, 100, 1, s => parseInt(s, 10), v => v + '%', v => {
+    const lo = +uiBrightnessSlider.min, hi = +uiBrightnessSlider.max;
+    const cl = Math.max(lo, Math.min(hi, v));
+    uiBrightnessVal.value = cl + '%';
+    uiBrightnessSlider.value = String(cl);
+    document.documentElement.style.setProperty('--ui-ground-l', String(cl));
+    saveToStorage(`ui-ground-l-${document.documentElement.dataset.theme || 'dark'}`, String(cl));
+  });
+
 }
 
 // ─── Restore persisted selection state ────────────────────────────────────────

@@ -531,7 +531,8 @@ input[type="range"]::-moz-range-thumb {
 
 /* ── Editable value inputs (inline, styled like their sibling spans) ─────────── */
 input.field-value,
-input.custom-val {
+input.custom-val,
+input.settings-row-val {
   -webkit-appearance: none;
   appearance: none;
   background: none;
@@ -553,10 +554,13 @@ input.custom-val {
    column (short viewports shrink the wheel column), clipping the number. */
 input.field-value { width: 5ch; min-width: 5ch; flex-shrink: 0; }
 input.custom-val  { width: 100%; }
+input.settings-row-val { width: 100%; }
 input.field-value:hover,
 input.custom-val:hover,
+input.settings-row-val:hover,
 input.field-value:focus,
-input.custom-val:focus {
+input.custom-val:focus,
+input.settings-row-val:focus {
   background: var(--surface);
   border-bottom-style: solid;
   border-bottom-color: var(--muted);
@@ -2318,8 +2322,8 @@ body.about-modal-open { overflow: hidden; }
 
 .settings-row {
   display: grid;
-  grid-template-columns: 5rem 1fr 3.5rem;
-  gap: 0.5rem;
+  grid-template-columns: 5rem 1fr 4.5ch; /* value column + gap match .custom-slider-row (underlay) */
+  gap: 0.45rem;
   align-items: center;
 }
 
@@ -2330,8 +2334,11 @@ body.about-modal-open { overflow: hidden; }
   color: var(--muted);
 }
 
+/* Editable numeric readout, styled identically to the underlay/main-picker value
+   inputs (input.custom-val / input.field-value) so every slider in the popper shares
+   one look: 0.70rem tabular mono, dashed underline that turns solid on hover/focus. */
 .settings-row-val {
-  font-size: 0.73rem;
+  font-size: 0.70rem;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, monospace;
   color: var(--text);
