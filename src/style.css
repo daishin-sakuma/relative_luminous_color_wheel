@@ -2424,10 +2424,8 @@ body.about-modal-open { overflow: hidden; }
 }
 
 /* Transparent-BG underlay picker (Preferences) — RGB/HSL/Lum/Gray, reusing the
-   custom-picker slider/tab classes. */
-.underlay-heading { font-weight: 600; color: var(--text); }
-.settings-underlay-note { font-size: 0.62rem; line-height: 1.4; color: var(--muted); margin: 0.1rem 0 0.35rem; }
-.underlay-picker { display: flex; flex-direction: column; gap: 0.45rem; }
+   custom-picker slider/tab classes. Label is a plain .settings-row-label like Theme. */
+.underlay-picker { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.35rem; }
 .underlay-top { display: flex; align-items: center; gap: 0.5rem; }
 .underlay-swatch {
   width: 1.6rem; height: 1.6rem; flex: none; border-radius: 4px;
