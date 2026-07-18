@@ -449,16 +449,21 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 5px;
   color: var(--text);
   font-family: ui-monospace, monospace;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em; /* tight so an 8-digit #RRGGBBAA fits narrow mobile fields */
   height: var(--custom-field-h, 22px);
-  padding: 0.15rem 0.4rem;
+  /* Asymmetric side padding: a small left inset, and a wider right inset that reserves
+     room for the trailing copy icon. Text stays centered within that box, so a
+     translucent 8-digit hex never runs under the icon or out of the field, even at ~320px
+     (a symmetric inset wasted width on the left and left too little for the value). */
+  padding: 0.15rem 1.5em 0.15rem 0.6em;
   text-align: center;
   text-transform: uppercase;
   width: 100%;
   outline: none;
   transition: border-color 0.15s;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .custom-hex-input:focus {
   border-color: var(--muted);
