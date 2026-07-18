@@ -1412,9 +1412,10 @@ let shareTheme = true;
 let contrastLockTarget = 0;
 // APCA lock (WCAG 3 working-draft candidate, not yet normative):
 // 0 = off, or a minimum |Lc| of 45 / 60 / 75 / 90 (Bronze Simple Mode levels)
-// Always starts 'off': an active lock surviving a reload would silently move
-// colors at launch. The per-mode targets are still remembered.
-let contrastLockMode = 'off'; // 'off' | 'wcag2' | 'apca'
+// Always launches with the target Off (per mode) so an active lock never survives a reload
+// and silently moves colors at launch. WCAG 2 is the default mode; the standalone Off tab is
+// gone, so the "no lock" state is each mode's own Off target.
+let contrastLockMode = 'wcag2'; // 'wcag2' | 'apca' ('off' kept as a defensive internal value)
 let apcaLockTarget = 0;
 function apcaLockActive() { return contrastLockMode === 'apca'; }
 /** The target the current mode enforces (0 when the lock is off). */
@@ -1719,6 +1720,16 @@ function enforceContrastLock(changed) {
   if (contrastLockMode === 'off') { _contrastLockMet = false; _lumStateKey = null; return; }
   _inEnforcement = true;
   try { _enforceContrastLockInner(changed); } finally { _inEnforcement = false; }
+}
+
+// Re-pin after a lock CONFIG change (turned on, mode switched, or a new target) rather than a
+// colour change. The lumStateKey guard normally skips frames whose held luminances are
+// unchanged (hue/sat sweeps) — but a target/mode change keeps the luminances yet must still
+// move the free side to the NEW target, so clear the key to force one enforcement. Holds
+// `changed` (the last-touched side) and adjusts the other, exactly like a colour edit does.
+function reenforceContrastLock(changed) {
+  _lumStateKey = null;
+  enforceContrastLock(changed);
 }
 
 function _enforceContrastLockInner(changed) {
@@ -2720,7 +2731,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     typeReadout.textContent = font + ' → Lc ' + shownLc;
     typeReadout.title = font + ' needs |Lc| ' + shownLc + ' (APCA font lookup) — set the size/weight in a tile’s Font selector';
     setContrastLockError('');
-    enforceContrastLock(_lastTouchedSide);
+    reenforceContrastLock(_lastTouchedSide); // Type target changed; force a re-pin
   }
 
   // Called by the tiles' APCA font selectors: re-target the Type lock when it's on.
@@ -2728,14 +2739,6 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     if (apcaTypeLock && contrastLockMode === 'apca') applyApcaTypeLock();
   };
 
-  function storedLockTarget() {
-    const t = parseFloat(localStorage.getItem('contrast-lock-target') ?? '0');
-    return t === 3 || t === 4.5 || t === 7 ? t : 0;
-  }
-  function storedApcaTarget() {
-    const t = parseFloat(localStorage.getItem('contrast-lock-apca-target') ?? '0');
-    return t === 45 || t === 60 || t === 75 || t === 90 ? t : 0;
-  }
   // The target groups swap with the selected mode; Off hides both
   function refreshLockUI() {
     modeBtns.forEach(b => b.classList.toggle('active', b.dataset.lockmode === contrastLockMode));
@@ -2749,8 +2752,9 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === target));
     setContrastLockError('');
     if (persist) { try { localStorage.setItem('contrast-lock-target', String(target)); } catch(e) {} }
-    // The side the user touched last stays put; the other one gets adjusted
-    if (target > 0) enforceContrastLock(_lastTouchedSide);
+    // The side the user touched last stays put; the other one gets adjusted (force-repin:
+    // the target changed but the luminances didn't, so the normal guard would skip it).
+    if (target > 0) reenforceContrastLock(_lastTouchedSide);
   }
 
   function setApcaTarget(target, persist) {
@@ -2758,15 +2762,13 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     apcaBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.apcaTarget) === target));
     setContrastLockError('');
     if (persist) { try { localStorage.setItem('contrast-lock-apca-target', String(target)); } catch(e) {} }
-    if (target > 0) enforceContrastLock(_lastTouchedSide);
+    if (target > 0) reenforceContrastLock(_lastTouchedSide);
   }
 
-  // Restore the per-mode targets only — the mode itself always launches
-  // 'off' so a reload never starts silently adjusting colors
-  try {
-    contrastLockTarget = storedLockTarget();
-    apcaLockTarget = storedApcaTarget();
-  } catch(e) {}
+  // Launch with each mode's Off target selected so a reload never starts silently adjusting
+  // colors (WCAG 2 is the default mode now that the standalone Off tab is gone).
+  contrastLockTarget = 0;
+  apcaLockTarget = 0;
   lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === contrastLockTarget));
   apcaBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.apcaTarget) === apcaLockTarget));
 
@@ -2774,7 +2776,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
 
   modeBtns.forEach(btn => btn.addEventListener('click', () => {
     const m = btn.dataset.lockmode;
-    const next = m === 'apca' || m === 'off' ? m : 'wcag2';
+    const next = m === 'apca' ? 'apca' : 'wcag2';
     // Entering/leaving APCA changes the luminance definition the wheels equalize
     // on (WCAG relative luminance ↔ APCA Ys). Keep every currently-chosen colour
     // IDENTICAL across the switch by re-expressing its number under the new
@@ -2811,18 +2813,24 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
       _ceWheelCache = null;
       if (_ce) { reseedSubstates(); syncChipEditorControls(); }
       // This render is the mode switch itself, not a user touch: don't let it
-      // overwrite _lastTouchedSide (syncCustom=true would record 'bg' and the
-      // follow-up enforcement would then move the side the user touched last),
-      // and skip the frame's own enforcement pass — the explicit
-      // enforceContrastLock(_lastTouchedSide) below handles it.
+      // overwrite _lastTouchedSide (syncCustom=true records 'bg', which would make the
+      // re-pin below move the side the user touched last), and skip the frame's own
+      // enforcement pass — the explicit reenforceContrastLock(_lastTouchedSide) below
+      // handles it. scheduleRender's bookkeeping guards on _inEnforcement, not
+      // _skipEnforceOnce, so capture the real last-touched side and restore it after.
+      const heldSide = _lastTouchedSide;
       _skipEnforceOnce = true;
       scheduleRender(true, true);
+      _lastTouchedSide = heldSide;
+      _pendingUserSide = null;
+      _userDirty = false;
     } else {
       contrastLockMode = next;
     }
     setContrastLockError('');
     refreshLockUI();
-    if (activeContrastTarget() > 0) enforceContrastLock(_lastTouchedSide);
+    // Turning the lock on or switching mode must re-pin even though no colour moved.
+    if (activeContrastTarget() > 0) reenforceContrastLock(_lastTouchedSide);
   }));
 
   lockBtns.forEach(btn => btn.addEventListener('click', () => {
@@ -3540,7 +3548,7 @@ function downloadExport(format) {
   const modal   = document.getElementById('about-modal');
   const content = document.getElementById('about-modal-content');
   if (details && summary && body && modal && content) {
-    const wide = window.matchMedia('(min-width: 1024px)');
+    const wide = window.matchMedia('(min-width: 861px)'); // match the app's desktop/mobile breakpoint
     let lastFocus = null;
 
     const openModal = () => {
@@ -3571,7 +3579,7 @@ function downloadExport(format) {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && !modal.hidden) closeModal();
     });
-    // Keep the two presentations consistent when the viewport crosses 1024px.
+    // Keep the two presentations consistent when the viewport crosses the breakpoint.
     const onChange = () => {
       if (wide.matches) { if (details.open) openModal(); }  // inline → modal
       else if (!modal.hidden) closeModal();                 // modal → collapsed
@@ -6516,9 +6524,32 @@ function renderPalette() {
     remove.title = 'Remove from palette';
     remove.addEventListener('click', () => removeFromPalette(flatIdx));
 
+    // Figma plugin only: fill the Figma selection with this saved colour. The web build
+    // never sees this button (styling + the postMessage relay live in the plugin's shim).
+    let figmaApply = null;
+    if (typeof window !== 'undefined' && window.__RLCW_PLUGIN__) {
+      figmaApply = document.createElement('button');
+      figmaApply.className = 'palette-chip-figma';
+      // Official Figma mark — instantly reads as "send this colour to Figma".
+      figmaApply.innerHTML = '<svg width="9" height="13" viewBox="0 0 38 57" fill="none" aria-hidden="true">' +
+        '<path d="M0 9.5A9.5 9.5 0 0 1 9.5 0H19v19H9.5A9.5 9.5 0 0 1 0 9.5z" fill="#F24E1E"/>' +
+        '<path d="M0 28.5A9.5 9.5 0 0 1 9.5 19H19v19H9.5A9.5 9.5 0 0 1 0 28.5z" fill="#A259FF"/>' +
+        '<path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83"/>' +
+        '<path d="M19 0h9.5a9.5 9.5 0 1 1 0 19H19V0z" fill="#FF7262"/>' +
+        '<path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE"/></svg>';
+      figmaApply.title = 'Apply to the Figma selection';
+      figmaApply.setAttribute('aria-label', figmaApply.title);
+      figmaApply.addEventListener('click', e => {
+        e.stopPropagation();
+        window.dispatchEvent(new CustomEvent('rlcw-apply-fill', { detail: { hex } }));
+      });
+    }
+
     attachChipDrag(chip, pos, role, list);
 
-    chip.append(grip, rank, hexLabel, edit, copy, duplicate, recall, remove);
+    chip.append(grip, rank, hexLabel, edit, copy, duplicate, recall);
+    if (figmaApply) chip.append(figmaApply);
+    chip.append(remove);
     list.appendChild(chip);
     });
 

@@ -13,6 +13,10 @@ const root = resolve(here, '..');
 const dist = join(root, 'dist');
 const out = join(here, 'dist');
 
+// The plugin is versioned independently of the web app (which lives at 2.x). This is the
+// version shown in the plugin UI; bump it on each published plugin release.
+const PLUGIN_VERSION = '1.0.0';
+
 // 1. Build the web app (single JS chunk, single CSS). Force the font to inline as a data
 //    URI by raising the asset inline limit for this build (it's ~95 KB).
 console.log('▸ vite build (font inlined)…');
@@ -45,6 +49,12 @@ html = html
   .replace(/<link[^>]+rel="stylesheet"[^>]*>/i, `<style>${css}</style>`)
   .replace(/<script[^>]+type="module"[^>]*><\/script>/i, `<script type="module">\n${js}\n</script>`)
   .replace(/<head>/i, `<head>\n<!--__RLCW_INIT__-->\n<script>\n${shim}\n</script>`);
+
+// 4b. Stamp the plugin's own version (the web app's version stays in index.html untouched):
+//     the visible "ver. …" line and the JSON-LD softwareVersion.
+html = html
+  .replace(/(<span class="app-version">)[^<]*(<\/span>)/i, `$1ver. ${PLUGIN_VERSION}$2`)
+  .replace(/("softwareVersion":\s*")[^"]*(")/i, `$1${PLUGIN_VERSION}$2`);
 
 // 5. Write figma/dist/.
 mkdirSync(out, { recursive: true });

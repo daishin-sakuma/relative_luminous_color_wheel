@@ -5,15 +5,19 @@ document integration:
 
 - **Text → selection / BG → selection** — fill the selected layers with the current
   TEXT or BG color (opacity included).
-- **Import selection** — read the selected layers' solid fills into TEXT / BG and check
-  their WCAG / APCA contrast on the spot.
+- **Import as Text / Import as BG** — read the selected layer's solid fill into the TEXT
+  or BG picker and check its WCAG / APCA contrast on the spot.
 - **Create variables** — turn the generated luminance-keyed tonal scale (50–950) and
   light/dark themes into Figma variable collections:
-  - **… · Scale** — primitives (`50`–`950` + `base/white`, `base/black`).
-  - **… · Theme** — semantic roles (`bg`, `surface`, `border`, `text`, `muted`, `accent`,
+  - **… · Primitives** — primitive tokens (`50`–`950` + `base/white`, `base/black`).
+  - **… · Semantic** — semantic roles (`bg`, `surface`, `border`, `text`, `muted`, `accent`,
     `accent-foreground`) with **Light** and **Dark** modes, each aliasing the primitives.
+    On plans limited to one mode per collection, these ship as separate **… · Semantic (Light)**
+    and **… · Semantic (Dark)** collections instead.
 
-Preferences and the palette persist across sessions via `figma.clientStorage`.
+The window is **resizable** — drag the bottom-right corner. Widening it past the desktop
+breakpoint switches the app to its two-column fit-to-window layout. Preferences, the palette,
+and the last window size all persist across sessions via `figma.clientStorage`.
 
 ## Architecture
 

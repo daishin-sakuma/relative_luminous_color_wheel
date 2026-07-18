@@ -5,6 +5,15 @@
 // dark themes as Figma variable collections (primitives + a themed collection aliasing them).
 
 const STORE_KEY = 'rlcw-state';
+const WIN_KEY = 'rlcw-window';       // persisted plugin-window size {w,h}
+const WIN_MIN = { w: 320, h: 400 };  // below this the app switches to its narrow/scroll layout
+const WIN_MAX = { w: 1600, h: 1600 };
+function clampWin(w, h) {
+  return {
+    w: Math.max(WIN_MIN.w, Math.min(WIN_MAX.w, w | 0)),
+    h: Math.max(WIN_MIN.h, Math.min(WIN_MAX.h, h | 0)),
+  };
+}
 
 // ── hex ⇄ Figma colour ({r,g,b} / {r,g,b,a}, all 0–1) ─────────────────────────
 function parseHex(hex) {
@@ -56,8 +65,8 @@ function alias(id) { return { type: 'VARIABLE_ALIAS', id }; }
 function createVariables(data) {
   const name = 'Relative Luminous';
 
-  // Primitives: the tonal scale (50–950) plus the base white/black used by the themes.
-  const prim = figma.variables.createVariableCollection(name + ' · Scale');
+  // Primitive tokens: the tonal scale (50–950) plus the base white/black the themes alias.
+  const prim = figma.variables.createVariableCollection(name + ' · Primitives');
   const pMode = prim.modes[0].modeId;
   const scaleVars = {};
   for (const c of data.scale) {
@@ -80,18 +89,20 @@ function createVariables(data) {
     else v.setValueForMode(modeId, figColor(entry.hex)); // literal fallback for any synthesized colour
   }
 
-  // Semantic theme: one variable per role, aliasing the primitives. Prefer a single
+  // Semantic tokens: one variable per role, aliasing the primitives. Prefer a single
   // collection with Light + Dark MODES; on plans limited to one mode per collection (Starter),
-  // addMode() throws — fall back to a separate "· Theme (Dark)" collection so both themes still
-  // ship. Aliases can cross collections, so Dark still references the same Scale primitives.
-  const light = figma.variables.createVariableCollection(name + ' · Theme');
+  // addMode() throws — fall back to separate "· Semantic (Light)" / "· Semantic (Dark)" collections
+  // so both themes still ship with symmetric names. Aliases can cross collections, so Dark still
+  // references the same Primitives.
+  const light = figma.variables.createVariableCollection(name + ' · Semantic');
   const lightMode = light.modes[0].modeId;
   light.renameMode(lightMode, 'Light');
   let darkColl = null, darkMode;
   try {
     darkMode = light.addMode('Dark');
   } catch (e) {
-    darkColl = figma.variables.createVariableCollection(name + ' · Theme (Dark)');
+    light.name = name + ' · Semantic (Light)'; // mirror the separate Dark collection
+    darkColl = figma.variables.createVariableCollection(name + ' · Semantic (Dark)');
     darkMode = darkColl.modes[0].modeId;
     darkColl.renameMode(darkMode, 'Dark');
   }
@@ -102,8 +113,8 @@ function createVariables(data) {
     else setRole(vL, darkMode, data.dark[role]);
   }
   figma.notify(darkColl
-    ? `Created “${name} · Scale” + “· Theme” + “· Theme (Dark)” variables`
-    : `Created “${name} · Scale” + “· Theme” (Light / Dark) variables`);
+    ? `Created “${name} · Primitives” + “· Semantic (Light)” + “· Semantic (Dark)” variables`
+    : `Created “${name} · Primitives” + “· Semantic” (Light / Dark) variables`);
 }
 
 // ── Persistence (batched clientStorage writes) ────────────────────────────────
@@ -114,12 +125,22 @@ function scheduleFlush() {
   flushTimer = setTimeout(() => { flushTimer = null; figma.clientStorage.setAsync(STORE_KEY, state); }, 400);
 }
 
+// Window size persistence (separate key so it survives palette/preference clears).
+let winSize = null;
+let winFlushTimer = null;
+function scheduleWinFlush() {
+  if (winFlushTimer) return;
+  winFlushTimer = setTimeout(() => { winFlushTimer = null; figma.clientStorage.setAsync(WIN_KEY, winSize); }, 400);
+}
+
 // ── Boot: load persisted state, inject it into the UI, show it ────────────────
 (async () => {
   try { state = (await figma.clientStorage.getAsync(STORE_KEY)) || {}; } catch (e) { state = {}; }
+  try { winSize = (await figma.clientStorage.getAsync(WIN_KEY)) || null; } catch (e) { winSize = null; }
+  const start = clampWin(winSize && winSize.w ? winSize.w : 540, winSize && winSize.h ? winSize.h : 820);
   const html = __html__.replace('<!--__RLCW_INIT__-->',
     '<script>window.__RLCW_INIT__=' + JSON.stringify(state) + '</' + 'script>');
-  figma.showUI(html, { width: 540, height: 820, themeColors: false });
+  figma.showUI(html, { width: start.w, height: start.h, themeColors: false });
 
   figma.ui.onmessage = (msg) => {
     if (!msg) return;
@@ -137,17 +158,21 @@ function scheduleFlush() {
       case 'import-selection': {
         const hexes = readSelection();
         if (!hexes.length) { figma.notify('Select a layer with a solid fill first'); break; }
-        figma.ui.postMessage({ type: 'imported', text: hexes[0], bg: hexes[1] });
-        figma.notify(hexes.length > 1 ? 'Imported TEXT + BG from selection' : 'Imported TEXT from selection');
+        const target = msg.target === 'bg' ? 'bg' : 'text';
+        figma.ui.postMessage({ type: 'imported', target, hex: hexes[0] });
+        figma.notify('Imported ' + (target === 'bg' ? 'BG' : 'TEXT') + ' from selection');
         break;
       }
       case 'create-variables':
         try { createVariables(msg.data); }
         catch (e) { figma.notify('Could not create variables: ' + (e && e.message ? e.message : e)); }
         break;
-      case 'resize':
-        figma.ui.resize(Math.max(320, msg.width | 0), Math.max(400, msg.height | 0));
+      case 'resize': {
+        winSize = clampWin(msg.width, msg.height);
+        figma.ui.resize(winSize.w, winSize.h);
+        scheduleWinFlush();
         break;
+      }
     }
   };
 })();
