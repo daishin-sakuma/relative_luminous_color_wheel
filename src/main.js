@@ -3406,14 +3406,20 @@ ${lines.join('\n')}
 `;
   }
   if (format === 'tailwind') {
-    // Tailwind v4 @theme; its default palette is OKLCH, so OKLCH is idiomatic.
+    // Tailwind v4 @theme. Every --color-* here becomes a colour name, so the role
+    // prefix is mapped to the design-system-standard content/surface pair (text→content,
+    // bg→surface) — otherwise the app's text/bg roles would double the utility prefix
+    // (--color-text-primary → text-text-primary, --color-bg-primary → bg-bg-primary).
+    // content/surface reads naturally as text-content-primary / bg-surface-primary. The
+    // CSS and JSON exports keep the plain text/bg roles (no utility-prefix collision there).
     const twLine = (name, c) => `  ${name}: ${cssVal(c)};  /* ${altComment(c)} */`;
     const lines = [
-      ...text.map((c, i) => twLine(`--color-text-${key(i)}`, c)),
-      ...bg.map((c, i)   => twLine(`--color-bg-${key(i)}`, c)),
+      ...text.map((c, i) => twLine(`--color-content-${key(i)}`, c)),
+      ...bg.map((c, i)   => twLine(`--color-surface-${key(i)}`, c)),
     ];
     return `@theme {
-  /* liveText: ${wheelHex} (${oklchCss(wheelHex)}), liveBg: ${customHex} (${oklchCss(customHex)}) */
+  /* content-* = text-role colours (use as text-content-*), surface-* = background-role
+     colours (use as bg-surface-*). liveText: ${wheelHex} (${oklchCss(wheelHex)}), liveBg: ${customHex} (${oklchCss(customHex)}) */
 ${lines.join('\n')}
 }
 `;
