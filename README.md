@@ -1,6 +1,6 @@
 # Relative Luminous Color Wheel
 
-**Accessible color picker and WCAG 2.2 contrast checker with a contrast lock.** Every color on the wheel shares the same WCAG 2.2 relative luminance, so you can explore hue and saturation freely while the contrast against your background never breaks — and a target lock (WCAG 2.2 ratios, or an experimental APCA Lc target) keeps a color pair pinned to a threshold in real time. Meet WCAG 2.1/2.2 AA — the standard referenced by the ADA and the European Accessibility Act — *by construction*, not by after-the-fact auditing.
+**An accessibility-first color and design-token workspace, built on a WCAG 2.2 contrast lock.** Every color on the wheel shares the same WCAG 2.2 relative luminance, so you can explore hue and saturation freely while the contrast against your background never breaks — and a target lock (WCAG 2.2 ratios, or an experimental APCA Lc target) keeps a color pair pinned to a threshold in real time, opacity included: translucent colors are checked on their composited (alpha-blended) result. From there, build an accessible palette, generate a luminance-keyed tonal scale plus light/dark themes, and export tool-ready CSS, Tailwind v4, or W3C design tokens. Meet WCAG 2.1/2.2 AA — the standard referenced by the ADA and the European Accessibility Act — *by construction*, not by after-the-fact auditing.
 
 **Live:** https://relative-luminous-color-wheel.vercel.app/
 
