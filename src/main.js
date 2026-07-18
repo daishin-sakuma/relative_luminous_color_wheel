@@ -372,12 +372,6 @@ function oklchComponents(hex) {
   return [+L.toFixed(4), +C.toFixed(4), +H.toFixed(2)];
 }
 
-/** sRGB as a CSS rgb() string, e.g. 'rgb(76 187 255)'. An 8-digit hex adds an
-    alpha: 'rgb(76 187 255 / 0.5)' (CSS Color 4 slash syntax). */
-function rgbCss(hex) {
-  const [r, g, b, a] = hexToRgba(hex);
-  return a < 0.9995 ? `rgb(${r} ${g} ${b} / ${+a.toFixed(3)})` : `rgb(${r} ${g} ${b})`;
-}
 
 /**
  * Return a foreground color (near-black or near-white) that contrasts with bgLum.
@@ -3342,10 +3336,12 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
 // Color value format for the palette-sidebar export: 'hex' (default — the most
-// universal notation, understood by every tool and pipeline), 'oklch' or 'rgb'.
-// Toggled via any .export-colorfmt-btn and persisted across sessions. (The Scales
-// global-token export keeps its own independent color-format state.)
-const EXPORT_COLOR_FMTS = ['oklch', 'hex', 'rgb'];
+// universal notation, understood by every tool and pipeline) or 'oklch' (modern,
+// perceptual, wide-gamut, Tailwind v4's native format). Toggled via any
+// .export-colorfmt-btn and persisted across sessions. (The Scales global-token
+// export keeps its own independent color-format state.) A previously-persisted
+// 'rgb' value is ignored by the .includes() guard below and falls back to hex.
+const EXPORT_COLOR_FMTS = ['oklch', 'hex'];
 let exportColorFmt = 'hex';
 try {
   const v = localStorage.getItem('export-color-fmt');
@@ -3391,11 +3387,9 @@ function buildExport(format) {
   const key = pos => RANKS[pos] || String(pos + 1);
   const ratio = contrastRatio(text[0].lum, bg[0].lum); // text-primary vs bg-primary
 
-  // Color value in the chosen format (hex string, rgb() or oklch()); the
-  // alternate representation is kept in a trailing comment for reference.
-  const cssVal = c => exportColorFmt === 'hex' ? c.hex.toLowerCase()
-                    : exportColorFmt === 'rgb' ? rgbCss(c.hex)
-                    :                            oklchCss(c.hex);
+  // Color value in the chosen format (hex string or oklch()); the alternate
+  // representation is kept in a trailing comment for reference.
+  const cssVal = c => exportColorFmt === 'hex' ? c.hex.toLowerCase() : oklchCss(c.hex);
   const altComment = c => exportColorFmt === 'hex' ? oklchCss(c.hex) : c.hex.toLowerCase();
 
   if (format === 'css') {
@@ -3412,14 +3406,20 @@ ${lines.join('\n')}
 `;
   }
   if (format === 'tailwind') {
-    // Tailwind v4 @theme; its default palette is OKLCH, so OKLCH is idiomatic.
+    // Tailwind v4 @theme. Every --color-* here becomes a colour name, so the role
+    // prefix is mapped to the design-system-standard content/surface pair (text→content,
+    // bg→surface) — otherwise the app's text/bg roles would double the utility prefix
+    // (--color-text-primary → text-text-primary, --color-bg-primary → bg-bg-primary).
+    // content/surface reads naturally as text-content-primary / bg-surface-primary. The
+    // CSS and JSON exports keep the plain text/bg roles (no utility-prefix collision there).
     const twLine = (name, c) => `  ${name}: ${cssVal(c)};  /* ${altComment(c)} */`;
     const lines = [
-      ...text.map((c, i) => twLine(`--color-text-${key(i)}`, c)),
-      ...bg.map((c, i)   => twLine(`--color-bg-${key(i)}`, c)),
+      ...text.map((c, i) => twLine(`--color-content-${key(i)}`, c)),
+      ...bg.map((c, i)   => twLine(`--color-surface-${key(i)}`, c)),
     ];
     return `@theme {
-  /* liveText: ${wheelHex} (${oklchCss(wheelHex)}), liveBg: ${customHex} (${oklchCss(customHex)}) */
+  /* content-* = text-role colours (use as text-content-*), surface-* = background-role
+     colours (use as bg-surface-*). liveText: ${wheelHex} (${oklchCss(wheelHex)}), liveBg: ${customHex} (${oklchCss(customHex)}) */
 ${lines.join('\n')}
 }
 `;
@@ -3436,16 +3436,14 @@ ${lines.join('\n')}
   const colorMeta = c => {
     const meta = { alpha: +hexToRgba(c.hex)[3].toFixed(4), luminance: +c.lum.toFixed(4) };
     if (exportColorFmt === 'oklch') { meta.colorSpace = 'oklch'; meta.components = oklchComponents(c.hex); meta.oklch = oklchCss(c.hex); }
-    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(c.hex).map(v => +(v / 255).toFixed(4)); if (exportColorFmt === 'rgb') meta.rgb = rgbCss(c.hex); }
+    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(c.hex).map(v => +(v / 255).toFixed(4)); }
     return meta;
   };
   const colorToken = c => ({ $value: c.hex.toLowerCase(), $extensions: { [NS]: colorMeta(c) } });
   const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
   const fmtNote = exportColorFmt === 'oklch'
     ? 'Each $value is a CSS hex string; the OKLCH components, alpha, and the colour’s relative luminance are under $extensions.'
-    : exportColorFmt === 'hex'
-    ? 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and relative luminance are under $extensions.'
-    : 'Each $value is a CSS hex string; sRGB channel components (0–1), alpha, and relative luminance are under $extensions.';
+    : 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and relative luminance are under $extensions.';
   const json = {
     $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
     color: {
@@ -3500,10 +3498,10 @@ function downloadExport(format) {
   let selectedFormat = 'css';
   const mkGroup = () => { const d = document.createElement('div'); d.className = 'settings-theme-btns'; return d; };
 
-  // OKLCH/HEX/RGB color-format toggle (the .export-colorfmt-btn delegated click handler
+  // HEX/OKLCH color-format toggle (the .export-colorfmt-btn delegated click handler
   // drives it and persists exportColorFmt).
   const colorGroup = mkGroup();
-  for (const cf of ['oklch', 'hex', 'rgb']) {
+  for (const cf of EXPORT_COLOR_FMTS) {
     const b = document.createElement('button');
     b.className = 'settings-theme-btn export-colorfmt-btn';
     b.dataset.colorfmt = cf;
@@ -3529,10 +3527,11 @@ function downloadExport(format) {
     fileGroup.appendChild(b);
   }
 
-  // Mode-switch tabs and file-format tabs sit on one row, side by side.
+  // One row: file-format tabs first (you pick the target format), then the colour
+  // format — matching the usual "choose a file format, then tune the colour" flow.
   const tabs = document.createElement('div');
   tabs.className = 'palette-export-tabs';
-  tabs.append(colorGroup, fileGroup);
+  tabs.append(fileGroup, colorGroup);
 
   // Copy + Download — two independent buttons that each fill half the row.
   const flashLabel = (btn, text, cls) => {
@@ -3983,7 +3982,7 @@ function copyHexSwatch(hex, el) {
 
 // Scale export controls (independent of the sidebar palette export).
 let _scaleExportFmt = 'css';      // 'css' | 'tailwind' | 'json' — CSS custom properties by default
-let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' | 'rgb' — HEX (most universal) by default
+let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by default
 
 // Semantic role → theme key. The order the themes are emitted in.
 const SCALE_SEM_ROLES = [
@@ -3996,11 +3995,9 @@ const SCALE_SEM_ROLES = [
  *  those globals (var() in CSS/Tailwind, DTCG aliases in JSON). This is distinct
  *  from the palette export, which is purely semantic role tokens.
  *  @param {'css'|'tailwind'|'json'} format
- *  @param {'oklch'|'hex'|'rgb'} colorFmt */
+ *  @param {'oklch'|'hex'} colorFmt */
 function buildScaleExport(format, colorFmt, scale, light, dark) {
-  const cval = hex => colorFmt === 'hex' ? hex.toLowerCase()
-                    : colorFmt === 'rgb' ? rgbCss(hex)
-                    :                       oklchCss(hex);
+  const cval = hex => colorFmt === 'hex' ? hex.toLowerCase() : oklchCss(hex);
   const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
 
   // Theme values that aren't on the scale are pure #fff/#000 (the light bg and the
@@ -4009,17 +4006,14 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
   const BASE_NAMES = { '#ffffff': 'white', '#000000': 'black' };
 
   if (format === 'css') {
-    // RGB is emitted as alpha-ready channels (rgb(var(--color-500) / .5)); hex
-    // and oklch are stored whole and referenced directly.
-    const rgbCh = colorFmt === 'rgb';
-    const gval = hex => rgbCh ? hexToRgb(hex).join(' ') : cval(hex);
+    const gval = hex => cval(hex);
     const baseUsed = new Map(); // hex → var name, for the base primitives actually referenced
     const ref = e => {
-      if (e.step !== null) return rgbCh ? `rgb(var(--color-${e.step}))` : `var(--color-${e.step})`;
+      if (e.step !== null) return `var(--color-${e.step})`;
       const h = e.hex.toLowerCase();
       const name = BASE_NAMES[h] || ('c' + h.slice(1));
       baseUsed.set(h, name);
-      return rgbCh ? `rgb(var(--color-${name}))` : `var(--color-${name})`;
+      return `var(--color-${name})`;
     };
     const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --${n}: ${ref(t[k])};`).join('\n');
     const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
@@ -4084,7 +4078,7 @@ ${darkLines}
   const colorMeta = hex => {
     const meta = { alpha: 1 };
     if (colorFmt === 'oklch') { meta.colorSpace = 'oklch'; meta.components = oklchComponents(hex); meta.oklch = oklchCss(hex); }
-    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(hex).map(v => +(v / 255).toFixed(4)); if (colorFmt === 'rgb') meta.rgb = rgbCss(hex); }
+    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(hex).map(v => +(v / 255).toFixed(4)); }
     return meta;
   };
   const litToken = (hex, lum) => {
@@ -4112,8 +4106,7 @@ ${darkLines}
     .sort((a, b) => b[1].lum - a[1].lum) // white → black
     .map(([hex, { name, lum }]) => [name, litToken(hex, lum)]));
   const fmtNote = colorFmt === 'oklch' ? 'Each $value is a CSS hex string; OKLCH components, alpha, and luminance are under $extensions.'
-                : colorFmt === 'hex'   ? 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and luminance are under $extensions.'
-                :                        'Each $value is a CSS hex string; sRGB channel components (0–1), alpha, and luminance are under $extensions.';
+                :                        'Each $value is a CSS hex string; sRGB components (0–1), alpha, and luminance are under $extensions.';
   const json = {
     $description: `Global tonal-scale tokens (primitives, color.scale.* and color.base.*) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
     color: {
@@ -4501,12 +4494,12 @@ function renderThemeLayout() {
     });
     return g;
   };
-  const tabs = lpEl('div', 'palette-export-tabs'); // colour group, then file-format group
+  const tabs = lpEl('div', 'palette-export-tabs'); // file-format group first, then colour group
   tabs.append(
-    seg([['oklch', 'OKLCH'], ['hex', 'HEX'], ['rgb', 'RGB']], _scaleExportColorFmt,
-      v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
     seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']], _scaleExportFmt,
       v => { _scaleExportFmt = v; renderLayoutPreview(); }),
+    seg([['oklch', 'OKLCH'], ['hex', 'HEX']], _scaleExportColorFmt,
+      v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
   );
   exp.appendChild(tabs);
   const flash = (btn, text, cls) => {
