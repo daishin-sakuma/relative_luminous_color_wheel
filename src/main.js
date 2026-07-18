@@ -3521,10 +3521,11 @@ function downloadExport(format) {
     fileGroup.appendChild(b);
   }
 
-  // Mode-switch tabs and file-format tabs sit on one row, side by side.
+  // One row: file-format tabs first (you pick the target format), then the colour
+  // format — matching the usual "choose a file format, then tune the colour" flow.
   const tabs = document.createElement('div');
   tabs.className = 'palette-export-tabs';
-  tabs.append(colorGroup, fileGroup);
+  tabs.append(fileGroup, colorGroup);
 
   // Copy + Download — two independent buttons that each fill half the row.
   const flashLabel = (btn, text, cls) => {
@@ -4487,12 +4488,12 @@ function renderThemeLayout() {
     });
     return g;
   };
-  const tabs = lpEl('div', 'palette-export-tabs'); // colour group, then file-format group
+  const tabs = lpEl('div', 'palette-export-tabs'); // file-format group first, then colour group
   tabs.append(
-    seg([['oklch', 'OKLCH'], ['hex', 'HEX']], _scaleExportColorFmt,
-      v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
     seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']], _scaleExportFmt,
       v => { _scaleExportFmt = v; renderLayoutPreview(); }),
+    seg([['oklch', 'OKLCH'], ['hex', 'HEX']], _scaleExportColorFmt,
+      v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
   );
   exp.appendChild(tabs);
   const flash = (btn, text, cls) => {
