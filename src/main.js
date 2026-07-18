@@ -3824,7 +3824,22 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   backdrop.addEventListener('pointerdown', () => closeIt());
   btn.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') openIt(); });
   wrap.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') reset(); });
-  btn.addEventListener('click', () => { sOpen ? closeIt() : openIt(); });
+  // Track how the button was last actuated so the click can behave per input type.
+  let lastPointerType = '';
+  btn.addEventListener('pointerdown', e => { lastPointerType = e.pointerType; });
+  btn.addEventListener('click', e => {
+    // Touch and keyboard (Enter/Space → click with detail 0) toggle open/closed — on
+    // touch, re-pressing the icon is the documented way to close the sheet. But a MOUSE
+    // click lands on a popper the hover already opened; toggling it shut there made it
+    // flicker (closeIt, then the sticky :hover immediately reopened it). So a mouse press
+    // on an already-open popper is a no-op — it stays open, and moving the pointer away
+    // closes it as usual.
+    if (e.detail === 0 || lastPointerType === 'touch') {
+      sOpen ? closeIt() : openIt();
+    } else if (!sOpen) {
+      openIt();
+    }
+  });
   // Tap/click anywhere outside the control closes it. closeIt sets
   // .settings-dismissed so it beats a lingering sticky :hover on touch.
   document.addEventListener('pointerdown', e => {
