@@ -1721,6 +1721,13 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   margin-top: 0.4rem;
 }
 .about-body ul { padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+/* Mobile (single-column, matching the app's 861px breakpoint): the inline About
+   spans the full content width. Desktop widths open the reading modal instead (see
+   the JS at "What is this?"), so the 720px cap above only applies to the no-JS
+   desktop fallback. */
+@media (max-width: 860px) {
+  .about-body { max-width: none; }
+}
 
 /* On wide screens the About opens as a centered reading modal (JS moves the
    .about-body in here) so the copy isn't a narrow column stranded to the left
