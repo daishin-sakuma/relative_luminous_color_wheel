@@ -4682,6 +4682,10 @@ function _runFitSession() {
   _fitQueued = false;
   const el = document.getElementById('app-wrapper');
   if (!el) return;
+  // Height available to the app. The Figma plugin build reserves space at the bottom for
+  // its fixed action bar via --rlcw-fit-reserve; 0 on the web, so this is a no-op there.
+  const _reserve = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rlcw-fit-reserve')) || 0;
+  const availH = window.innerHeight - _reserve;
   if (window.innerWidth < 861 || !CSS.supports('zoom', '1')) {
     if (el.style.zoom) el.style.zoom = '';
     const ab = el.querySelector('.app-body');
@@ -4719,7 +4723,7 @@ function _runFitSession() {
     }
     const natural = el.scrollHeight;
     if (!natural) break;
-    let nz = (window.innerHeight - 1) / natural; // −1: keep rounding on the no-scroll side
+    let nz = (availH - 1) / natural; // −1: keep rounding on the no-scroll side
     // Never squeeze the layout narrower than the two-column desktop design
     // (very tall portrait windows hit this cap first — the leftover height is
     // then centered by the body flex rule); clamp the extremes (below ~0.55
@@ -4742,8 +4746,8 @@ function _runFitSession() {
   // ends below the flip point. Compare real rendered px against the window
   // directly: document.scrollHeight can under-report the spill when the body
   // flex-centering clips the top edge.
-  for (let i = 0; i < 4 && el.getBoundingClientRect().height > window.innerHeight - 0.5; i++) {
-    z = Math.max(0.55, z * (window.innerHeight - 1) / el.getBoundingClientRect().height);
+  for (let i = 0; i < 4 && el.getBoundingClientRect().height > availH - 0.5; i++) {
+    z = Math.max(0.55, z * (availH - 1) / el.getBoundingClientRect().height);
     el.style.zoom = z.toFixed(4);
   }
   _fitLast = { zoom: el.style.zoom, natural: el.scrollHeight, w: window.innerWidth, h: window.innerHeight };
@@ -6628,3 +6632,39 @@ try {
   paletteOpen = po !== null ? po === '1' : palette.length > 0;
 } catch (e) { paletteOpen = palette.length > 0; }
 applyPaletteOpen();
+
+// ─── Figma plugin bridge (active only inside the Figma plugin UI) ──────────────
+// The plugin's UI shim sets window.__RLCW_PLUGIN__ before this module runs; it then
+// reads/drives the picker through this small explicit surface (no DOM scraping) and
+// forwards the current colours + the generated tonal scale / themes to the plugin's
+// main thread, which writes them to the Figma document (fills, variable collections).
+// Entirely inert on the web build.
+if (typeof window !== 'undefined' && window.__RLCW_PLUGIN__) {
+  const _roleNames = SCALE_SEM_ROLES.map(([name]) => name);
+  const _semantic = t => Object.fromEntries(
+    SCALE_SEM_ROLES.map(([name, key]) => [name, { step: t[key].step, hex: t[key].hex.toLowerCase() }]));
+  window.__rlcw = {
+    // Current wheel (text) and custom (bg) colours as 6/8-digit hex (#rrggbb[aa]).
+    getMainColors() {
+      const [r, g, b] = selectedRgbBiased();
+      return { text: toHexA(r, g, b, selAlpha).toLowerCase(), bg: toHexA(cR, cG, cB, cAlpha).toLowerCase() };
+    },
+    setText(hex) { const f = normalizeHexInput(hex); if (f) applyMainHex(...hexToRgba(f)); },
+    setBg(hex)   { const f = normalizeHexInput(hex); if (f) applyCustomHex(...hexToRgba(f)); },
+    getPalette() { return palette.map(e => ({ hex: e.hex.toLowerCase(), role: e.role })); },
+    // The luminance-keyed tonal scale (primitives) plus light/dark semantic themes, shaped
+    // for the main thread to write as a Figma variable collection of primitives + a themed
+    // collection whose Light/Dark modes alias them. entry.step is null for synthesized
+    // white/black (light bg, black/white accent-foreground).
+    getScaleData() {
+      const scale = currentScale();
+      return {
+        scale: scale.map(c => ({ step: c.step, hex: c.hex.toLowerCase() })),
+        light: _semantic(deriveTheme(scale, false)),
+        dark:  _semantic(deriveTheme(scale, true)),
+        roles: _roleNames,
+      };
+    },
+  };
+  window.dispatchEvent(new Event('rlcw-ready'));
+}

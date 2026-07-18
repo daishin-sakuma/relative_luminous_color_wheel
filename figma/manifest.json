@@ -1,0 +1,12 @@
+{
+  "name": "Relative Luminous Color Wheel",
+  "id": "relative-luminous-color-wheel",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "reasoning": "Fully self-contained — the picker, fonts and all logic are inlined into the UI; the plugin makes no network requests."
+  }
+}

@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+figma/dist/
 
 # Electron local build files (not for Vercel)
 electron/
