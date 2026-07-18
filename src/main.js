@@ -3341,20 +3341,16 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 
 // ─── Export (CSS / Tailwind / design tokens JSON) ─────────────────────────────
 
-// Color value format for exports: 'hex' (default — the most universal notation,
-// understood by every tool and pipeline), 'oklch' or 'rgb'. Shared by the
-// Preferences preview and the palette sidebar; toggled via any .export-colorfmt-btn
-// and persisted across sessions.
+// Color value format for the palette-sidebar export: 'hex' (default — the most
+// universal notation, understood by every tool and pipeline), 'oklch' or 'rgb'.
+// Toggled via any .export-colorfmt-btn and persisted across sessions. (The Scales
+// global-token export keeps its own independent color-format state.)
 const EXPORT_COLOR_FMTS = ['oklch', 'hex', 'rgb'];
 let exportColorFmt = 'hex';
 try {
   const v = localStorage.getItem('export-color-fmt');
   if (EXPORT_COLOR_FMTS.includes(v)) exportColorFmt = v;
 } catch (e) {}
-
-const _exportColorFmtListeners = [];
-/** Register a callback fired whenever the export color format changes. */
-function onExportColorFmtChange(fn) { _exportColorFmtListeners.push(fn); }
 
 function syncExportColorFmtButtons() {
   document.querySelectorAll('.export-colorfmt-btn').forEach(b =>
@@ -3366,7 +3362,6 @@ function setExportColorFmt(fmt) {
   exportColorFmt = fmt;
   try { localStorage.setItem('export-color-fmt', fmt); } catch (e) {}
   syncExportColorFmtButtons();
-  _exportColorFmtListeners.forEach(fn => fn());
 }
 
 // Delegated so one handler covers both the static Preferences buttons and the
@@ -3492,83 +3487,21 @@ function downloadExport(format) {
   URL.revokeObjectURL(url);
 }
 
-{
-  const previewEl  = /** @type {HTMLElement} */ (document.getElementById('export-preview'));
-  const previewCode = /** @type {HTMLElement} */ (document.getElementById('export-preview-code'));
-  const previewCopy = /** @type {HTMLButtonElement} */ (document.getElementById('export-preview-copy'));
-  const previewDl  = /** @type {HTMLButtonElement} */ (document.getElementById('export-preview-dl'));
-  const exportBtns = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.export-option')]);
-  const wrapEl = /** @type {HTMLElement} */ (previewEl.closest('.settings-wrap'));
-
-  // Click-only selection (no hover previews): one tab is pinned and its
-  // preview stays visible — across popper close/reopen too. Clicking the
-  // pinned tab again hides the preview. JSON starts selected.
-  let pinnedFormat = /** @type {string | null} */ ('css'); // CSS custom properties — the most universally usable default
-  let previewFormat = 'css';
-
-  const render = format => {
-    previewFormat = format;
-    previewCode.textContent = buildExport(format);
-  };
-
-  // Visibility/active state only — content is rendered lazily. This runs at
-  // module init, before `palette` (declared further down) exists, so calling
-  // buildExport() here would throw and abort the whole script.
-  const sync = () => {
-    exportBtns.forEach(b => b.classList.toggle('active', b.dataset.format === pinnedFormat));
-    previewEl.hidden = pinnedFormat === null;
-  };
-
-  previewCopy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(buildExport(previewFormat));
-      previewCopy.classList.add('copied');
-      setTimeout(() => { previewCopy.classList.remove('copied'); }, 1500);
-    } catch (_) { /* clipboard denied */ }
-  });
-
-  previewDl.addEventListener('click', () => {
-    downloadExport(previewFormat);
-    previewDl.classList.add('done');
-    setTimeout(() => { previewDl.classList.remove('done'); }, 1500);
-  });
-
-  exportBtns.forEach(btn => {
-    const format = btn.dataset.format;
-    btn.addEventListener('click', () => {
-      pinnedFormat = pinnedFormat === format ? null : format;
-      sync();
-      if (pinnedFormat !== null) render(pinnedFormat);
-    });
-  });
-
-  // The popper opens via CSS :hover on the wrap, so this always fires before
-  // the panel is seen — it both fills the initial JSON preview and refreshes
-  // a pinned one on reopen (colors may have changed meanwhile)
-  wrapEl.addEventListener('mouseenter', () => {
-    if (pinnedFormat !== null) render(pinnedFormat);
-  });
-
-  // Re-render the live preview when the color format toggles.
-  onExportColorFmtChange(() => { if (pinnedFormat !== null) render(pinnedFormat); });
-
-  sync();
-}
-
 // ─── Palette sidebar export ───────────────────────────────────────────────────
-// The sidebar surfaces the same export formats as Preferences (palette colors
-// are included), so users can copy or download straight from the palette.
+// Color-palette export lives in the palette sidebar (this block); global tokens
+// export from the Scales panel in the Layout Preview. Preferences has no export UI.
 {
   const host = /** @type {HTMLElement} */ (document.getElementById('palette-export'));
   const FORMATS = [['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']];
 
-  // Match the Preferences export controls exactly: segmented .settings-theme-btns
-  // groups. Pick one file format, then Copy/Download act on it.
-  let selectedFormat = 'json';
+  // Segmented .settings-theme-btns groups: pick one file format, then Copy/Download
+  // act on it. Defaults to CSS — the most universally usable format (see exportColorFmt,
+  // which defaults to hex) so the out-of-the-box export is CSS + hex.
+  let selectedFormat = 'css';
   const mkGroup = () => { const d = document.createElement('div'); d.className = 'settings-theme-btns'; return d; };
 
-  // OKLCH/HEX/RGB color-format toggle, shared with the Preferences export (a single
-  // delegated click handler drives every .export-colorfmt-btn on the page).
+  // OKLCH/HEX/RGB color-format toggle (the .export-colorfmt-btn delegated click handler
+  // drives it and persists exportColorFmt).
   const colorGroup = mkGroup();
   for (const cf of ['oklch', 'hex', 'rgb']) {
     const b = document.createElement('button');
@@ -3629,7 +3562,7 @@ function downloadExport(format) {
 
   host.append(tabs, actions);
 
-  selectFormat('json');
+  selectFormat('css');
   // Reflect the persisted color format on every toggle button now that they all exist.
   syncExportColorFmtButtons();
 }
