@@ -392,8 +392,8 @@ function apcaY(r, g, b) {
   return 0.2126729 * c(r) + 0.7151522 * c(g) + 0.0721750 * c(b);
 }
 
-/** APCA-W3 Lc from raw screen luminances (Ys). Shared by the RGB path and the
-    anchor-luminance path (display invariance under hue/sat — see apcaAnchorLc). */
+/** APCA-W3 Lc from raw screen luminances (Ys). Shared by the RGB path (apcaLc) and the
+    contrast lock's gray-space solve/metric. */
 function apcaLcYs(YtRaw, YbRaw) {
   const soft = Y => (Y <= 0.022 ? Y + Math.pow(0.022 - Y, 1.414) : Y);
   const Yt = soft(YtRaw);
@@ -419,29 +419,6 @@ function bgLumAnchor() {
   if (customMode === 'lum') return cuLum;
   if (_bgHeldRgb === cR + ',' + cG + ',' + cB) return _bgHeldLum;
   return wheelLum(cR, cG, cB);
-}
-
-/** Anchor-based Lc for a tile in APCA mode. The 8-bit RGB quantization makes
-    the per-hex Lc wobble ~±0.7 as hue/sat sweep even though the CONTINUOUS
-    luminances are held exactly — enough to flick the usage tier and required
-    text size near their thresholds. The APCA readouts therefore judge the
-    continuous anchor pair (targetLum is the wheel's Ys anchor in APCA mode;
-    white/black are exact), which is hue/sat-invariant by construction and
-    moves only when a luminance actually changes (Lum/RGB edits, lock repins). */
-function apcaAnchorLc(tile) {
-  if (contrastLockMode !== 'apca') return undefined;
-  const uY = apcaY(...underlayRgb);
-  // Composite the held Ys anchors (gray-space) so alpha lowers |Lc| without the
-  // hue-dependence of RGB compositing. Opaque → compositeYs is a no-op.
-  if (tile === 'pvw') return apcaLcYs(compositeYs(targetLum, selAlpha, 1), 1);
-  if (tile === 'pvb') return apcaLcYs(compositeYs(targetLum, selAlpha, 0), 0);
-  if (tile === 'pa') { // text = wheel on bg = custom
-    const bY = compositeYs(bgLumAnchor(), cAlpha, uY);
-    return apcaLcYs(compositeYs(targetLum, selAlpha, bY), bY);
-  }
-  // 'pb' — text = custom on bg = wheel
-  const bY = compositeYs(targetLum, selAlpha, uY);
-  return apcaLcYs(compositeYs(bgLumAnchor(), cAlpha, bY), bY);
 }
 
 
@@ -995,22 +972,17 @@ function buildPreviewWcag(el) {
 // the number a user reads and the verdict beside it can never disagree, even
 // mid-drag. The frame enforces the lock BEFORE drawing and the status reads
 // hue-invariant anchors, so there are no transient wrong-side frames to hide.
-function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedPair) {
+function renderPreviewWcag(el, bgLum, txtRgb, bgRgb) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
-  const ratio   = contrastRatio(l1, l2);
-  // Locked pair: the WCAG lock pins this ratio to exactly its target, but the numeric
-  // solve (gray-composite anchor) can land a hair under while it still ROUNDS UP to the
-  // target in the label — which then read as "achieved" while the AA/AAA chip judged the
-  // raw value as a miss. Snap a within-rounding locked ratio up to the target so the
-  // label, the chips and the lock's own "met" state never disagree. Unreachable
-  // best-effort pins sit far below the target, so they don't snap (chip fails + message).
-  const ratioJudged = (lockedPair && _contrastLockMet && contrastLockMode === 'wcag2' && contrastLockTarget &&
-                       ratio >= contrastLockTarget - 0.005)
-    ? Math.max(ratio, contrastLockTarget) : ratio;
-  // Judge the AA/AAA chips from the EXACT value shown (2-dp rounded), so the ratio
-  // label and its chips can never disagree at a threshold (e.g. 4.4999 → shows "4.50"
-  // → AA passes, not the raw-value miss the label contradicts).
-  const ratioShown = Number(ratioJudged.toFixed(2));
+  // Both the label AND the AA/AAA badges read the HONEST measured contrast of the actual
+  // rendered colours. The Lum picker biases every wheel/slider colour away from the other side
+  // (findLightnessBiased), so for any hue/sat the fg:bg contrast stays at-or-above the
+  // continuous target the last Lum/Opacity edit set — the achievement can only widen, never
+  // regress — so measuring the real RGB needs no anchor idealisation or lock snap. Judge the
+  // chips from the 2-dp value shown so the number and its chip can never disagree at a boundary.
+  const ratio = (txtRgb && bgRgb)
+    ? contrastRatio(relativeLuminance(...txtRgb), relativeLuminance(...bgRgb)) : 1;
+  const ratioShown = Number(ratio.toFixed(2));
   const isLight = bgLum > 0.179;
   const dim     = isLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
 
@@ -1018,12 +990,16 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
     dom.ratioEl.textContent = ratioShown.toFixed(2) + ':1';
     dom.ratioEl.style.color = cvdTransformRgba(dim);
   }
-  // Discrete verdict state for this frame (applied per-frame, in lockstep with labels).
+  // Discrete verdict state for this frame (applied per-frame, in lockstep with the badges).
   const disc = { passes: dom.badges.map(({ threshold }) => ratioShown >= threshold), tier: '', tierTitle: '', font: null };
 
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
-      const lc = (lcOverride !== undefined) ? lcOverride : apcaLc(txtRgb, bgRgb);
+      // The measured |Lc| of the actual rendered colours drives BOTH the "Lc N" label and the
+      // usage tier / font verdict. As with the WCAG ratio, the picker's directional bias keeps
+      // a locked pair's |Lc| at-or-above the target across a hue/sat sweep, so the honest value
+      // is stable without an anchor or a target snap.
+      const lc = apcaLc(txtRgb, bgRgb);
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // APCA is size/weight-dependent — judge the chosen font against the
       // official lookup (apcaFontVerdict, shared with the chip editor so both
@@ -1034,23 +1010,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
       // desktop re-fits the app's zoom); it's just hidden via visibility in
       // non-APCA modes (see .preview-verdict-apca).
       {
-        // Judge the discrete APCA verdicts from the SAME |Lc| the label shows (the
-        // anchor lcOverride when provided). When the APCA lock pins this pair, the anchor
-        // sits within display-rounding of the target — snap it up so the tier/font
-        // verdict, the "Lc" label and the lock's "met" state always agree. The old
-        // condition tested the RENDERED composite pair instead, which in translucent mode
-        // can read below the target while the anchor (what the lock actually holds and
-        // the label shows) is exactly on it — so the label read "met" while the chip
-        // showed a miss. Unreachable best-effort pins sit well below, so they don't snap.
-        let lcAbs = Math.abs(lc);
-        // Snap to the target only while the lock actually MEETS it (not a best-effort
-        // pin) AND this tile's |Lc| is within display-rounding of it — so an unreachable
-        // pin reads as a miss (matching the "can't reach" message), and a tile sitting
-        // well ABOVE the target (e.g. the reverse-polarity tile) keeps its own verdict
-        // instead of being clamped down to the target.
-        if (lockedPair && _contrastLockMet && apcaLockTarget && Math.abs(lcAbs - apcaLockTarget) <= 0.5) {
-          lcAbs = apcaLockTarget;
-        }
+        const lcAbs = Math.abs(lc);
         // Label uses floor(|Lc|+0.3): the usage ladder steps 0.3 before each integer
         // (…44.7, 59.7…), so this shows the SAME integer the tier switches on — the "Lc N"
         // number and its usage tier can never straddle a boundary (no "Lc 15 / INVISIBLE").
@@ -1160,13 +1120,9 @@ function updatePreviewFixed(selectedHex, selectedLum) {
     /** @type {HTMLElement} */ (document.getElementById(id)).style.color = textCss;
   }
   const onW = compositeRgb(selRgb, a, [255, 255, 255]);
-  // Text is luminance-locked, so judge from the gray-composited anchor (hue-
-  // invariant) in the anchor regime; live composite otherwise.
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
-    (contrastLockMode !== 'apca' || a < 0.9995) ? compositeRelLum(targetLum, a, 1) : relativeLuminance(...onW), 1, 1,
-    onW, [255, 255, 255],
-    apcaAnchorLc('pvw'),
+    1, onW, [255, 255, 255],
   );
 
   // vs Black (bg lum = 0, isLight = false)
@@ -1182,9 +1138,7 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   const onB = compositeRgb(selRgb, a, [0, 0, 0]);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
-    (contrastLockMode !== 'apca' || a < 0.9995) ? compositeRelLum(targetLum, a, 0) : relativeLuminance(...onB), 0, 0,
-    onB, [0, 0, 0],
-    apcaAnchorLc('pvb'),
+    0, onB, [0, 0, 0],
   );
 }
 
@@ -1223,22 +1177,13 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   paTxt.style.borderColor  = cvdTransformRgba(dotBorderA);
   paBg.style.background    = cusBgCss;
   paBg.style.borderColor   = cvdTransformRgba(dotBorderA);
-  // Anchor regime: the WCAG ratio/badges judge the HELD anchor luminances (targetLum for
-  // the wheel text, bgLumAnchor() for the custom BG — cuLum in Lum mode, the lock's solved
-  // value when locked, or the live luminance in Color/HSL mode), NOT the rendered 8-bit RGB.
-  // So a Lum-picker hue/sat sweep can't shift the verdict via quantization — matching what
-  // the (anchor-based) contrast lock pins. Used whenever the WCAG rows are shown (non-APCA)
-  // or anything is translucent; in Color/HSL mode bgLumAnchor() tracks the live luminance,
-  // so the status still changes there — as intended.
-  const useAnchor = contrastLockMode !== 'apca' || selAlpha < 0.9995 || cAlpha < 0.9995;
-  const uRel = relativeLuminance(...underlayRgb);
+  // The tiles read the HONEST measured contrast of the actual composited RGB (see
+  // renderPreviewWcag). The Lum picker's directional bias keeps the main pair's contrast
+  // at-or-above the target across any hue/sat sweep, so the achievement never regresses.
   const effTextA = compositeRgb(selRgb, selAlpha, effBgCustom);
-  const effBgRelA = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, uRel) : relativeLuminance(...effBgCustom);
-  const effTextRelA = useAnchor ? compositeRelLum(targetLum, selAlpha, effBgRelA) : relativeLuminance(...effTextA);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
-    effTextRelA, effBgRelA, relativeLuminance(...effBgCustom),
-    effTextA, effBgCustom, apcaAnchorLc('pa'), true,
+    relativeLuminance(...effBgCustom), effTextA, effBgCustom,
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
@@ -1259,14 +1204,9 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   pbBg.style.background    = selBgCss;
   pbBg.style.borderColor   = cvdTransformRgba(dotBorderB);
   const effTextB = compositeRgb(cusRgb, cAlpha, effBgSel);
-  // Tile B: sel (wheel) is the BG here — always luminance-locked → held; custom is
-  // the TEXT — held only in Lum mode.
-  const effBgRelB  = useAnchor ? compositeRelLum(targetLum, selAlpha, uRel) : relativeLuminance(...effBgSel);
-  const effTextRelB = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, effBgRelB) : relativeLuminance(...effTextB);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
-    effTextRelB, effBgRelB, relativeLuminance(...effBgSel),
-    effTextB, effBgSel, apcaAnchorLc('pb'), true,
+    relativeLuminance(...effBgSel), effTextB, effBgSel,
   );
 }
 
@@ -6636,10 +6576,14 @@ function capPaletteRoles(list) {
 try {
   const stored = JSON.parse(localStorage.getItem('palette-colors') || '[]');
   if (Array.isArray(stored)) {
+    // Accept 6- AND 8-digit hex (the 8-digit #RRGGBBAA carries opacity), any case — matching
+    // what addToPalette stores. The old 6-digit-lowercase-only test dropped every translucent
+    // saved color on reload, silently corrupting the palette. Normalize to lowercase on the way in.
+    const HEX = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i;
     palette = capPaletteRoles(stored.map(item => {
-      if (typeof item === 'string' && /^#[0-9a-f]{6}$/.test(item)) return { hex: item, role: 'bg' };
-      if (item && typeof item === 'object' && typeof item.hex === 'string' && /^#[0-9a-f]{6}$/.test(item.hex))
-        return { hex: item.hex, role: item.role === 'fg' ? 'fg' : 'bg' };
+      if (typeof item === 'string' && HEX.test(item)) return { hex: item.toLowerCase(), role: 'bg' };
+      if (item && typeof item === 'object' && typeof item.hex === 'string' && HEX.test(item.hex))
+        return { hex: item.hex.toLowerCase(), role: item.role === 'fg' ? 'fg' : 'bg' };
       return null;
     }).filter(Boolean));
   }

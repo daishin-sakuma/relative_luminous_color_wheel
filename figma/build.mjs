@@ -45,10 +45,14 @@ for (const f of assets.filter(a => /\.(woff2?|ttf)$/.test(a))) {
 //    inject the init placeholder + the plugin shim BEFORE the app module (a plain <script>
 //    runs before the deferred module, so the shim's localStorage polyfill is in place).
 const shim = readFileSync(join(here, 'ui-shim.js'), 'utf8');
+// Use FUNCTION replacements: a string replacement interprets `$&`, `$\``, `$'`, `$1`… — and
+// minified JS/CSS routinely contains such sequences, which would corrupt the inlined output
+// (e.g. re-inject the matched <script> tag and prematurely close the inline script). A function
+// return value is inserted verbatim.
 html = html
-  .replace(/<link[^>]+rel="stylesheet"[^>]*>/i, `<style>${css}</style>`)
-  .replace(/<script[^>]+type="module"[^>]*><\/script>/i, `<script type="module">\n${js}\n</script>`)
-  .replace(/<head>/i, `<head>\n<!--__RLCW_INIT__-->\n<script>\n${shim}\n</script>`);
+  .replace(/<link[^>]+rel="stylesheet"[^>]*>/i, () => `<style>${css}</style>`)
+  .replace(/<script[^>]+type="module"[^>]*><\/script>/i, () => `<script type="module">\n${js}\n</script>`)
+  .replace(/<head>/i, () => `<head>\n<!--__RLCW_INIT__-->\n<script>\n${shim}\n</script>`);
 
 // 4b. Stamp the plugin's own version (the web app's version stays in index.html untouched):
 //     the visible "ver. …" line and the JSON-LD softwareVersion.
