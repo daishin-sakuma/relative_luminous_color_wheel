@@ -52,8 +52,8 @@ the plugin files.
 
 ## Publish to the Figma Community
 
-1. Replace the placeholder `id` in `manifest.json` — Figma assigns the real one when you
-   first choose **Publish** from the plugin's dev menu.
+1. `manifest.json` carries the plugin `id` Figma assigned on the first publish attempt
+   (`"1660676837802224111"`) — keep it; regenerating it would create a *different* plugin.
 2. Prepare community assets: 128×128 icon, cover art, description, tags.
 3. Publish; Figma reviews it. The plugin is fully self-contained (`networkAccess: none`),
    which keeps review straightforward.
