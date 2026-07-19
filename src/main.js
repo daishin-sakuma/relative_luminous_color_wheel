@@ -155,13 +155,31 @@ function findLightness(h, s, target) {
  * while sweeping hue/sat. Biasing the rounding away from the compared side
  * keeps the achieved contrast at-or-above the continuous target instead.
  */
-function findLightnessBiased(h, s, target, dir) {
-  let l = findLightness(h, s, target);
+function findLightnessBiased(h, s, target, dir, alpha, overRgb) {
+  const translucent = alpha != null && alpha < 0.9995 && overRgb;
+  // lumAt(l): the mode-aware luminance (WCAG relLum / APCA Ys) of the rendered — and, when
+  // translucent, sRGB-composited over overRgb — 8-bit color, i.e. the actual on-screen pixel.
+  // tgt: the target in that same (composited) space. The RGB composite drifts with hue (unlike
+  // the hue-invariant gray-space anchor the lock holds), so biasing the OPAQUE luminance alone
+  // let the composited contrast dip below the floor on a hue/sat sweep — biasing on the
+  // composite closes that gap. Opaque colors take the plain luminance path.
+  const lumAt = translucent
+    ? l => wheelLum(...compositeRgb(hslToRgb(h, s, l), alpha, overRgb))
+    : l => wheelLum(...hslToRgb(h, s, l));
+  const tgt = translucent
+    ? (contrastLockMode === 'apca' ? compositeYs : compositeRelLum)(target, alpha, wheelLum(...overRgb))
+    : target;
+  // Bisect the lightness whose (composited) luminance ≈ tgt; endpoints (black/white) are exact.
+  let l;
+  if (tgt >= lumAt(1)) l = 1;
+  else if (tgt <= lumAt(0)) l = 0;
+  else { let lo = 0, hi = 1; for (let i = 0; i < 22; i++) { const m = (lo + hi) * 0.5; if (lumAt(m) < tgt) lo = m; else hi = m; } l = (lo + hi) * 0.5; }
   if (!dir) return l;
-  const STEP = 1 / 512; // ~half an 8-bit channel step in lightness
+  // Nudge so the QUANTIZED (composited) luminance is on the dir side of the target — 8-bit
+  // rounding otherwise scatters it with a hue-dependent sign, dipping the contrast.
+  const STEP = 1 / 512;
   for (let i = 0; i < 12; i++) {
-    const lum = wheelLum(...hslToRgb(h, s, l));
-    if (dir > 0 ? lum >= target : lum <= target) break;
+    if (dir > 0 ? lumAt(l) >= tgt : lumAt(l) <= tgt) break;
     const next = Math.max(0, Math.min(1, l + dir * STEP));
     if (next === l) break; // hit black/white — can't go further
     l = next;
@@ -169,12 +187,15 @@ function findLightnessBiased(h, s, target, dir) {
   return l;
 }
 
-/** The rendered selected (wheel) color: quantization biased away from the
-    custom background's luminance so the fg:bg contrast never dips below what
-    the continuous target luminance promises, for any hue/sat. */
+/** The rendered selected (wheel) color: quantization biased away from the custom background's
+    luminance so the fg:bg contrast never dips below what the continuous target promises, for
+    any hue/sat. When the wheel color is translucent it's biased on its sRGB composite over the
+    effective background (bg over the page underlay), so the COMPOSITED contrast holds too. */
 function selectedRgbBiased() {
-  const dir = Math.sign(targetLum - wheelLum(cR, cG, cB));
-  return hslToRgb(selHue, selSat, findLightnessBiased(selHue, selSat, targetLum, dir));
+  const effBg = effBgRgb([cR, cG, cB], cAlpha);        // what the text actually composites over
+  const dir = Math.sign(targetLum - wheelLum(...effBg));
+  const over = selAlpha < 0.9995 ? effBg : null;
+  return hslToRgb(selHue, selSat, findLightnessBiased(selHue, selSat, targetLum, dir, selAlpha, over));
 }
 
 function toHex(r, g, b) {
@@ -2181,10 +2202,12 @@ function setCustomFromLumHueSat(lum, hue, sat) {
   cuLum = Math.max(0, Math.min(1, lum));
   cuHue = ((hue % 360) + 360) % 360;
   cuSat = Math.max(0, Math.min(1, sat));
-  // Quantization biased away from the wheel side's target luminance — the
-  // mirror of selectedRgbBiased(), so hue/sat sweeps in Lum mode can't
-  // flicker across a contrast boundary either
-  const l = findLightnessBiased(cuHue, cuSat, cuLum, Math.sign(cuLum - targetLum));
+  // Quantization biased away from the wheel side's target luminance — the mirror of
+  // selectedRgbBiased(), so hue/sat sweeps in Lum mode can't dip the contrast. Translucent →
+  // bias on the bg's sRGB composite over the page underlay (its actual on-screen pixel), so the
+  // composited contrast holds across the sweep too.
+  const over = cAlpha < 0.9995 ? underlayRgb : null;
+  const l = findLightnessBiased(cuHue, cuSat, cuLum, Math.sign(cuLum - targetLum), cAlpha, over);
   const [r, g, b] = hslToRgb(cuHue, cuSat, l);
   setCustomFromRgb(r, g, b);
 }
