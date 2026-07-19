@@ -262,6 +262,11 @@ function compositeRelLum(fgL, a, bgL) { // composited relative luminance (gray-s
   return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
 }
 function grayForYs(ys) { return Math.pow(Math.max(0, Math.min(1, ys)), 1 / 2.4) * 255; } // APCA Ys is a plain 2.4 power
+// Convert a continuous target luminance between the WCAG-relLum and APCA-Ys metrics via its
+// gray equivalent — invertible, so a WCAG↔APCA round-trip maps a level back to itself. Used as
+// the search start when re-solving the target on a mode switch so the contrast floor stays put.
+function relLumToYs(L) { const g = grayForRelLum(L) / 255; return Math.pow(Math.max(0, Math.min(1, g)), 2.4); }
+function ysToRelLum(ys) { const n = grayForYs(ys) / 255; return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); }
 function compositeYs(fgYs, a, bgYs) { // composited APCA screen luminance (gray-space)
   if (a >= 0.9995) return fgYs;
   const g = grayForYs(fgYs) * a + grayForYs(bgYs) * (1 - a);
@@ -440,6 +445,29 @@ function bgLumAnchor() {
   if (customMode === 'lum') return cuLum;
   if (_bgHeldRgb === cR + ',' + cG + ',' + cB) return _bgHeldLum;
   return wheelLum(cR, cG, cB);
+}
+
+/** Anchor-based Lc for a tile in APCA mode. The 8-bit RGB quantization makes
+    the per-hex Lc wobble ~±0.7 as hue/sat sweep even though the CONTINUOUS
+    luminances are held exactly — enough to flick the usage tier and required
+    text size near their thresholds. The APCA readouts therefore judge the
+    continuous anchor pair (targetLum is the wheel's Ys anchor in APCA mode;
+    white/black are exact), which is hue/sat-invariant by construction and
+    moves only when a luminance actually changes (Lum/RGB edits, lock repins). */
+function apcaAnchorLc(tile) {
+  if (contrastLockMode !== 'apca') return undefined;
+  const uY = apcaY(...underlayRgb);
+  // Composite the held Ys anchors (gray-space) so alpha lowers |Lc| without the
+  // hue-dependence of RGB compositing. Opaque → compositeYs is a no-op.
+  if (tile === 'pvw') return apcaLcYs(compositeYs(targetLum, selAlpha, 1), 1);
+  if (tile === 'pvb') return apcaLcYs(compositeYs(targetLum, selAlpha, 0), 0);
+  if (tile === 'pa') { // text = wheel on bg = custom
+    const bY = compositeYs(bgLumAnchor(), cAlpha, uY);
+    return apcaLcYs(compositeYs(targetLum, selAlpha, bY), bY);
+  }
+  // 'pb' — text = custom on bg = wheel
+  const bY = compositeYs(targetLum, selAlpha, uY);
+  return apcaLcYs(compositeYs(bgLumAnchor(), cAlpha, bY), bY);
 }
 
 
@@ -993,34 +1021,48 @@ function buildPreviewWcag(el) {
 // the number a user reads and the verdict beside it can never disagree, even
 // mid-drag. The frame enforces the lock BEFORE drawing and the status reads
 // hue-invariant anchors, so there are no transient wrong-side frames to hide.
-function renderPreviewWcag(el, bgLum, txtRgb, bgRgb) {
+function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedPair) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
-  // Both the label AND the AA/AAA badges read the HONEST measured contrast of the actual
-  // rendered colours. The Lum picker biases every wheel/slider colour away from the other side
-  // (findLightnessBiased), so for any hue/sat the fg:bg contrast stays at-or-above the
-  // continuous target the last Lum/Opacity edit set — the achievement can only widen, never
-  // regress — so measuring the real RGB needs no anchor idealisation or lock snap. Judge the
-  // chips from the 2-dp value shown so the number and its chip can never disagree at a boundary.
-  const ratio = (txtRgb && bgRgb)
-    ? contrastRatio(relativeLuminance(...txtRgb), relativeLuminance(...bgRgb)) : 1;
-  const ratioShown = Number(ratio.toFixed(2));
+  const ratio   = contrastRatio(l1, l2);
+  // Locked pair: the WCAG lock pins this ratio to exactly its target, but the numeric
+  // solve (gray-composite anchor) can land a hair under while it still ROUNDS UP to the
+  // target in the label — which then read as "achieved" while the AA/AAA chip judged the
+  // raw value as a miss. Snap a within-rounding locked ratio up to the target so the
+  // label, the chips and the lock's own "met" state never disagree. Unreachable
+  // best-effort pins sit far below the target, so they don't snap (chip fails + message).
+  const ratioJudged = (lockedPair && _contrastLockMet && contrastLockMode === 'wcag2' && contrastLockTarget &&
+                       ratio >= contrastLockTarget - 0.005)
+    ? Math.max(ratio, contrastLockTarget) : ratio;
+  // Judge the AA/AAA chips from the EXACT value shown (2-dp rounded), so the ratio
+  // label and its chips can never disagree at a threshold (e.g. 4.4999 → shows "4.50"
+  // → AA passes, not the raw-value miss the label contradicts).
+  const ratioShown = Number(ratioJudged.toFixed(2));
   const isLight = bgLum > 0.179;
   const dim     = isLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
 
+  const apcaMode = contrastLockMode === 'apca';
+  // The ACTUAL measured WCAG ratio of the rendered (composited) colours — always ≥ the floor.
+  const wcagActual = (txtRgb && bgRgb)
+    ? contrastRatio(relativeLuminance(...txtRgb), relativeLuminance(...bgRgb)) : ratioShown;
   if (dom.ratioEl) {
-    dom.ratioEl.textContent = ratioShown.toFixed(2) + ':1';
+    if (apcaMode) {
+      // WCAG is the non-active metric in APCA mode — just show the measured ratio.
+      dom.ratioEl.textContent = wcagActual.toFixed(2) + ':1';
+      dom.ratioEl.title = 'WCAG 2.2 contrast ratio (measured)';
+    } else {
+      // WCAG active: main = the guaranteed floor the badges judge (hue-invariant: a function of
+      // Lum & Opacity only), parenthetical = the current measured ratio (always ≥ the floor).
+      dom.ratioEl.textContent = ratioShown.toFixed(2) + ':1 (' + wcagActual.toFixed(2) + ')';
+      dom.ratioEl.title = 'Guaranteed ≥ ' + ratioShown.toFixed(2) + ':1 at this luminance & opacity for any hue/sat (the badges judge this floor); (' + wcagActual.toFixed(2) + ') is the current measured ratio';
+    }
     dom.ratioEl.style.color = cvdTransformRgba(dim);
   }
-  // Discrete verdict state for this frame (applied per-frame, in lockstep with the badges).
+  // Discrete verdict state for this frame (applied per-frame, in lockstep with labels).
   const disc = { passes: dom.badges.map(({ threshold }) => ratioShown >= threshold), tier: '', tierTitle: '', font: null };
 
   if (dom.apcaEl) {
     if (txtRgb && bgRgb) {
-      // The measured |Lc| of the actual rendered colours drives BOTH the "Lc N" label and the
-      // usage tier / font verdict. As with the WCAG ratio, the picker's directional bias keeps
-      // a locked pair's |Lc| at-or-above the target across a hue/sat sweep, so the honest value
-      // is stable without an anchor or a target snap.
-      const lc = apcaLc(txtRgb, bgRgb);
+      const lc = (lcOverride !== undefined) ? lcOverride : apcaLc(txtRgb, bgRgb);
       dom.apcaEl.style.color = cvdTransformRgba(dim);
       // APCA is size/weight-dependent — judge the chosen font against the
       // official lookup (apcaFontVerdict, shared with the chip editor so both
@@ -1031,14 +1073,40 @@ function renderPreviewWcag(el, bgLum, txtRgb, bgRgb) {
       // desktop re-fits the app's zoom); it's just hidden via visibility in
       // non-APCA modes (see .preview-verdict-apca).
       {
-        const lcAbs = Math.abs(lc);
+        // Judge the discrete APCA verdicts from the SAME |Lc| the label shows (the
+        // anchor lcOverride when provided). When the APCA lock pins this pair, the anchor
+        // sits within display-rounding of the target — snap it up so the tier/font
+        // verdict, the "Lc" label and the lock's "met" state always agree. The old
+        // condition tested the RENDERED composite pair instead, which in translucent mode
+        // can read below the target while the anchor (what the lock actually holds and
+        // the label shows) is exactly on it — so the label read "met" while the chip
+        // showed a miss. Unreachable best-effort pins sit well below, so they don't snap.
+        let lcAbs = Math.abs(lc);
+        // Snap to the target only while the lock actually MEETS it (not a best-effort
+        // pin) AND this tile's |Lc| is within display-rounding of it — so an unreachable
+        // pin reads as a miss (matching the "can't reach" message), and a tile sitting
+        // well ABOVE the target (e.g. the reverse-polarity tile) keeps its own verdict
+        // instead of being clamped down to the target.
+        if (lockedPair && _contrastLockMet && apcaLockTarget && Math.abs(lcAbs - apcaLockTarget) <= 0.5) {
+          lcAbs = apcaLockTarget;
+        }
         // Label uses floor(|Lc|+0.3): the usage ladder steps 0.3 before each integer
         // (…44.7, 59.7…), so this shows the SAME integer the tier switches on — the "Lc N"
         // number and its usage tier can never straddle a boundary (no "Lc 15 / INVISIBLE").
         // Tier/font judge the EXACT fractional |Lc| so a fractional Type-lock target (e.g.
         // 43.2) still verdicts precisely — rounding it would drop the font below threshold.
         const lcLabel = Math.floor(lcAbs + 0.3);
-        dom.apcaEl.textContent = 'Lc ' + (lcLabel === 0 ? '0' : (lc < 0 ? -lcLabel : lcLabel));
+        const signed = mag => (mag === 0 ? '0' : (lc < 0 ? -mag : mag));
+        if (apcaMode) {
+          // APCA active: main = the guaranteed floor |Lc| the verdict judges (hue-invariant),
+          // parenthetical = the current measured |Lc| (always ≥ the floor). Same polarity.
+          const actualMag = Math.floor(Math.abs(apcaLc(txtRgb, bgRgb)) + 0.3);
+          dom.apcaEl.textContent = 'Lc ' + signed(lcLabel) + ' (' + signed(actualMag) + ')';
+          dom.apcaEl.title = 'Guaranteed |Lc| ≥ ' + lcLabel + ' at this luminance & opacity for any hue/sat (the verdict judges this floor); (' + signed(actualMag) + ') is the current measured Lc';
+        } else {
+          // APCA is the non-active metric in WCAG mode — lc is already the measured value.
+          dom.apcaEl.textContent = 'Lc ' + signed(lcLabel);
+        }
         disc.tier = apcaUsageTier(lcAbs);
         disc.tierTitle = 'APCA usage level for |Lc| ' + lcLabel + ' (reference-tool ladder)';
         disc.font = apcaFontVerdict(lcAbs);
@@ -1141,9 +1209,13 @@ function updatePreviewFixed(selectedHex, selectedLum) {
     /** @type {HTMLElement} */ (document.getElementById(id)).style.color = textCss;
   }
   const onW = compositeRgb(selRgb, a, [255, 255, 255]);
+  // Text is luminance-locked, so judge from the gray-composited anchor (hue-
+  // invariant) in the anchor regime; live composite otherwise.
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvw-wcag')),
-    1, onW, [255, 255, 255],
+    (contrastLockMode !== 'apca' || a < 0.9995) ? compositeRelLum(targetLum, a, 1) : relativeLuminance(...onW), 1, 1,
+    onW, [255, 255, 255],
+    apcaAnchorLc('pvw'),
   );
 
   // vs Black (bg lum = 0, isLight = false)
@@ -1159,7 +1231,9 @@ function updatePreviewFixed(selectedHex, selectedLum) {
   const onB = compositeRgb(selRgb, a, [0, 0, 0]);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pvb-wcag')),
-    0, onB, [0, 0, 0],
+    (contrastLockMode !== 'apca' || a < 0.9995) ? compositeRelLum(targetLum, a, 0) : relativeLuminance(...onB), 0, 0,
+    onB, [0, 0, 0],
+    apcaAnchorLc('pvb'),
   );
 }
 
@@ -1198,13 +1272,22 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   paTxt.style.borderColor  = cvdTransformRgba(dotBorderA);
   paBg.style.background    = cusBgCss;
   paBg.style.borderColor   = cvdTransformRgba(dotBorderA);
-  // The tiles read the HONEST measured contrast of the actual composited RGB (see
-  // renderPreviewWcag). The Lum picker's directional bias keeps the main pair's contrast
-  // at-or-above the target across any hue/sat sweep, so the achievement never regresses.
+  // Anchor regime: the WCAG ratio/badges judge the HELD anchor luminances (targetLum for
+  // the wheel text, bgLumAnchor() for the custom BG — cuLum in Lum mode, the lock's solved
+  // value when locked, or the live luminance in Color/HSL mode), NOT the rendered 8-bit RGB.
+  // So a Lum-picker hue/sat sweep can't shift the verdict via quantization — matching what
+  // the (anchor-based) contrast lock pins. Used whenever the WCAG rows are shown (non-APCA)
+  // or anything is translucent; in Color/HSL mode bgLumAnchor() tracks the live luminance,
+  // so the status still changes there — as intended.
+  const useAnchor = contrastLockMode !== 'apca' || selAlpha < 0.9995 || cAlpha < 0.9995;
+  const uRel = relativeLuminance(...underlayRgb);
   const effTextA = compositeRgb(selRgb, selAlpha, effBgCustom);
+  const effBgRelA = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, uRel) : relativeLuminance(...effBgCustom);
+  const effTextRelA = useAnchor ? compositeRelLum(targetLum, selAlpha, effBgRelA) : relativeLuminance(...effTextA);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pa-wcag')),
-    relativeLuminance(...effBgCustom), effTextA, effBgCustom,
+    effTextRelA, effBgRelA, relativeLuminance(...effBgCustom),
+    effTextA, effBgCustom, apcaAnchorLc('pa'), true,
   );
 
   // ── Tile B: custom color as TEXT on selected BACKGROUND ──
@@ -1225,9 +1308,14 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
   pbBg.style.background    = selBgCss;
   pbBg.style.borderColor   = cvdTransformRgba(dotBorderB);
   const effTextB = compositeRgb(cusRgb, cAlpha, effBgSel);
+  // Tile B: sel (wheel) is the BG here — always luminance-locked → held; custom is
+  // the TEXT — held only in Lum mode.
+  const effBgRelB  = useAnchor ? compositeRelLum(targetLum, selAlpha, uRel) : relativeLuminance(...effBgSel);
+  const effTextRelB = useAnchor ? compositeRelLum(bgLumAnchor(), cAlpha, effBgRelB) : relativeLuminance(...effTextB);
   renderPreviewWcag(
     /** @type {HTMLElement} */ (document.getElementById('pb-wcag')),
-    relativeLuminance(...effBgSel), effTextB, effBgSel,
+    effTextRelB, effBgRelB, relativeLuminance(...effBgSel),
+    effTextB, effBgSel, apcaAnchorLc('pb'), true,
   );
 }
 
@@ -2740,33 +2828,41 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
   modeBtns.forEach(btn => btn.addEventListener('click', () => {
     const m = btn.dataset.lockmode;
     const next = m === 'apca' ? 'apca' : 'wcag2';
-    // Entering/leaving APCA changes the luminance definition the wheels equalize
-    // on (WCAG relative luminance ↔ APCA Ys). Keep every currently-chosen colour
-    // IDENTICAL across the switch by re-expressing its number under the new
-    // definition, then rebuild everything solved from luminance.
+    // Entering/leaving APCA changes the luminance definition the wheels equalize on (WCAG
+    // relative luminance ↔ APCA Ys). Switching the contrast METRIC must NOT repaint the
+    // colours: preserve the exact selected hex of both pickers (the lock may still move the
+    // untouched side afterward), and re-express the target luminances so the floor is stable.
     const defChanged = (next === 'apca') !== (contrastLockMode === 'apca');
     if (defChanged) {
-      const selRgb = selectedRgbBiased(); // rendered under the old definition
-      contrastLockMode = next;
-      // Re-express the wheel colour's number under the new definition, then pin
-      // the EXACT same quantized RGB: the re-derived target sits on a
-      // quantization-plateau boundary, where the solver's rounding/bias can
-      // land one 8-bit step away — walk the target a hair into the plateau
-      // until the rendered colour reproduces.
+      const toApca = next === 'apca';
+      const oldTarget = targetLum;         // continuous level in the OLD metric
+      const selRgb = selectedRgbBiased();  // exact wheel hex under the OLD definition
       const want = selRgb.join(',');
-      const t = Math.max(0, Math.min(1, wheelLum(...selRgb)));
-      targetLum = t;
+      contrastLockMode = next;
+      // BG (custom) hex is preserved automatically (cR,cG,cB are not recomputed here); express
+      // its luminance in the new metric so the floor tracks the same colour (round-trip-stable
+      // because the hex — and thus its luminance in each metric — never changes).
+      if (customMode === 'lum') cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
+      // Preserve the wheel hex AND the contrast floor: start from the same luminance LEVEL in the
+      // new metric (gray-equivalent of the old target — invertible, so a round-trip returns to
+      // it), then nudge minimally only if 8-bit rounding lands a different colour, until the exact
+      // pre-switch hex is reproduced. Staying near the gray-equivalent keeps targetLum (and thus
+      // the floor) from snapping across the switch.
+      const start = Math.max(0, Math.min(1, toApca ? relLumToYs(oldTarget) : ysToRelLum(oldTarget)));
+      targetLum = start;
       if (selectedRgbBiased().join(',') !== want) {
-        for (const eps of [1e-4, -1e-4, 3e-4, -3e-4, 6e-4, -6e-4, 1e-3, -1e-3]) {
-          targetLum = Math.max(0, Math.min(1, t + eps));
-          if (selectedRgbBiased().join(',') === want) break;
+        let found = false;
+        for (let i = 1; i <= 320 && !found; i++) {
+          for (const d of [-i / 4000, i / 4000]) {
+            targetLum = Math.max(0, Math.min(1, start + d));
+            if (selectedRgbBiased().join(',') === want) { found = true; break; }
+          }
         }
-        if (selectedRgbBiased().join(',') !== want) targetLum = t; // give up gracefully
+        if (!found) targetLum = start; // give up gracefully (hex may move ~1 step; rare)
       }
       lumSlider.value = String(Math.round(targetLum * 1000));
       if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
       saveToStorage('sel-lum', String(targetLum));
-      if (customMode === 'lum') cuLum = Math.max(0.001, wheelLum(cR, cG, cB));
       // Everything below is cached against the old definition
       _cwLumCache = null;
       _lumTrackKey = '';
