@@ -3807,7 +3807,7 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   // (not `=== 'mouse'`): the FIRST pointer event after load can report an empty
   // pointerType, which `=== 'mouse'` dropped — so hover revealed the panel via
   // CSS but onOpen never ran and the popper showed empty on the first open.
-  wrap.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') refresh(); });
+  wrap.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch') refresh(); });
   window.addEventListener('resize', syncPanelHeight);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
   syncPanelHeight();
@@ -3825,8 +3825,20 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   backdrop.setAttribute('aria-hidden', 'true');
   wrap.appendChild(backdrop);
   backdrop.addEventListener('pointerdown', () => closeIt());
-  btn.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') openIt(); });
-  wrap.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') reset(); });
+  // Hover model — fine pointers only (coarse/touch opens by tap, closes by tapping the
+  // backdrop). Hovering the trigger opens; moving the cursor OUT of the popover closes it.
+  // In the narrow-width MODAL layout the panel is also revealed by the CSS `:hover`, and a
+  // full-screen backdrop (child of the wrap) keeps the wrap hovered everywhere — so
+  // wrap.pointerleave never fires and only .settings-dismissed (closeIt) can hide it. There,
+  // hovering the backdrop (i.e. leaving the panel) closes it, matching the wide-width behaviour;
+  // a short delay lets the pointer cross the small trigger→panel gap without closing.
+  let _closeT = null;
+  const cancelClose = () => { if (_closeT) { clearTimeout(_closeT); _closeT = null; } };
+  const armClose = () => { cancelClose(); _closeT = setTimeout(() => { _closeT = null; closeIt(); }, 140); };
+  btn.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch') { cancelClose(); openIt(); } });
+  panel.addEventListener('pointerenter', () => cancelClose());
+  backdrop.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch' && sOpen) armClose(); });
+  wrap.addEventListener('pointerleave', e => { if (!IS_COARSE && e.pointerType !== 'touch') { cancelClose(); reset(); } });
   btn.addEventListener('click', e => {
     // A POINTER press (mouse or touch) only ever OPENS: pressing the trigger of an
     // already-open popper keeps it open — never a close→reopen flicker (on desktop the
@@ -4866,7 +4878,8 @@ if (window.visualViewport) {
 // hover-then-click out of habit doesn't immediately close the drawer.
 let _paletteHoverOpened = false;
 paletteToggle.addEventListener('pointerenter', e => {
-  if (e.pointerType === 'mouse' && !paletteOpen) {
+  // Fine pointers only — on a coarse pointer (mobile/tablet) the sidebar opens by tap.
+  if (!IS_COARSE && e.pointerType === 'mouse' && !paletteOpen) {
     setPaletteOpen(true);
     _paletteHoverOpened = true;
   }
