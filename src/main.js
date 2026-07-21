@@ -3829,16 +3829,22 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   // backdrop). Hovering the trigger opens; moving the cursor OUT of the popover closes it.
   // In the narrow-width MODAL layout the panel is also revealed by the CSS `:hover`, and a
   // full-screen backdrop (child of the wrap) keeps the wrap hovered everywhere — so
-  // wrap.pointerleave never fires and only .settings-dismissed (closeIt) can hide it. There,
-  // hovering the backdrop (i.e. leaving the panel) closes it, matching the wide-width behaviour;
-  // a short delay lets the pointer cross the small trigger→panel gap without closing.
-  let _closeT = null;
-  const cancelClose = () => { if (_closeT) { clearTimeout(_closeT); _closeT = null; } };
-  const armClose = () => { cancelClose(); _closeT = setTimeout(() => { _closeT = null; closeIt(); }, 140); };
-  btn.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch') { cancelClose(); openIt(); } });
-  panel.addEventListener('pointerenter', () => cancelClose());
-  backdrop.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch' && sOpen) armClose(); });
-  wrap.addEventListener('pointerleave', e => { if (!IS_COARSE && e.pointerType !== 'touch') { cancelClose(); reset(); } });
+  // wrap.pointerleave never fires and only .settings-dismissed (closeIt) can hide it. The
+  // backdrop, by z-order, receives pointer moves only when the cursor is OFF both the trigger
+  // and the panel. There, keep open only while the cursor is in the corridor directly between
+  // the trigger and the panel (i.e. aimed at the panel); a move up or sideways closes at once.
+  btn.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch') openIt(); });
+  backdrop.addEventListener('pointermove', e => {
+    if (IS_COARSE || e.pointerType === 'touch' || !sOpen) return;
+    const tr = btn.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+    // The panel sits just below the trigger; the only "toward the panel" path across the
+    // backdrop is the thin gap directly beneath the trigger. Anywhere else on the backdrop
+    // (above, or off to the side) is a move away → close immediately.
+    const towardPanel = e.clientY >= tr.bottom - 1 && e.clientY <= pr.top + 1 &&
+                        e.clientX >= tr.left - 2 && e.clientX <= tr.right + 2;
+    if (!towardPanel) closeIt();
+  });
+  wrap.addEventListener('pointerleave', e => { if (!IS_COARSE && e.pointerType !== 'touch') reset(); });
   btn.addEventListener('click', e => {
     // A POINTER press (mouse or touch) only ever OPENS: pressing the trigger of an
     // already-open popper keeps it open — never a close→reopen flicker (on desktop the
