@@ -927,7 +927,9 @@ input.settings-row-val:focus {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 1rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px) + var(--palette-vv-gap, 0px));
+  /* --rlcw-fit-reserve: bottom strip taken by the Figma plugin's fixed action bar (0 on the
+     web) — folded into the bottom padding so the rail's content clears the bar. */
+  padding: 1rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px) + var(--palette-vv-gap, 0px) + var(--rlcw-fit-reserve, 0px));
   border-left: 1px solid var(--border);
   background: var(--ground);
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.3);
