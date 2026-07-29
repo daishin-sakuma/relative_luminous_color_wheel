@@ -2241,6 +2241,47 @@ satSlider.addEventListener('input', () => {
   saveToStorage('sel-sat', String(selSat));
 });
 
+// A native <input type=range> tracks its thumb through the browser's implicit pointer capture.
+// In web Figma the plugin runs in a sandboxed iframe that DROPS that capture on a quick mouse
+// drag, so the thumb stalls and stops following (native Figma is unaffected). The colour wheel
+// stays smooth there because it drags off DOCUMENT-level pointer events, which web Figma always
+// delivers — so drive the sliders the same way: while a range is pressed, follow the document's
+// pointermove and set the value from the cursor's X. The mapping matches the browser's exactly
+// (usable track = width minus one thumb, split as an inset each side), so on the normal path
+// where native tracking works this computes the identical value and is a harmless no-op; where
+// native stalls, it keeps the drag going. Delegated so it also covers the chip editor's
+// dynamically-built sliders, and it never preventDefaults so click-to-set and keyboard still work.
+let _sliderDrag = null;
+function sliderValueAtX(el, clientX) {
+  const r = el.getBoundingClientRect();
+  const inset = (IS_COARSE ? 24 : 13) / 2; // half the thumb (matches the CSS thumb size)
+  const usable = Math.max(1, r.width - inset * 2);
+  const frac = Math.max(0, Math.min(1, (clientX - (r.left + inset)) / usable));
+  const min = el.min === '' ? 0 : +el.min;
+  const max = el.max === '' ? 100 : +el.max;
+  const step = +el.step || 1;
+  const v = min + Math.round((frac * (max - min)) / step) * step;
+  return Math.max(min, Math.min(max, v));
+}
+document.addEventListener('pointerdown', e => {
+  const el = /** @type {HTMLElement} */ (e.target);
+  if (el instanceof HTMLInputElement && el.type === 'range' && !el.disabled) {
+    _sliderDrag = { el, id: e.pointerId };
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* best effort */ }
+  }
+}, true);
+document.addEventListener('pointermove', e => {
+  if (!_sliderDrag || e.pointerId !== _sliderDrag.id) return;
+  const el = _sliderDrag.el;
+  const v = String(sliderValueAtX(el, e.clientX));
+  if (el.value !== v) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }
+});
+function _endSliderDrag(e) {
+  if (_sliderDrag && (e.pointerId === undefined || e.pointerId === _sliderDrag.id)) _sliderDrag = null;
+}
+document.addEventListener('pointerup', _endSliderDrag);
+document.addEventListener('pointercancel', _endSliderDrag);
+
 // ─── Custom color panel event listeners ──────────────────────────────────────
 
 document.getElementById('c-r-slider').addEventListener('input', e => {
@@ -3789,24 +3830,30 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
     const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     const gap = parseFloat(getComputedStyle(document.getElementById('app-wrapper') || document.body).paddingLeft) || 16; // match side margins
     const top = wrap.getBoundingClientRect().bottom + 4; // panel sits 4px below the wrap (real px)
+    // Bottom strip occupied by the Figma plugin's fixed action bar (0 on the web) — keep the
+    // panel above it so its lower edge isn't hidden behind the bar.
+    const reserve = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rlcw-fit-reserve')) || 0;
     // The panel lives inside the fit-to-viewport zoomed wrapper, so a CSS px set
     // here renders zoom× larger — divide the real-px budget back out.
     const zoom = parseFloat((document.getElementById('app-wrapper') || {}).style?.zoom) || 1;
-    panel.style.maxHeight = Math.max(140, (vh - top - gap) / zoom) + 'px';
+    panel.style.maxHeight = Math.max(140, (vh - top - gap - reserve) / zoom) + 'px';
     // Mobile modal (CSS): drop the sheet from just below the trigger so the header
     // stays visible and its icon can toggle it closed (zoom is off there → raw px).
     panel.style.setProperty('--pop-top', top + 'px');
   };
-  const refresh = () => { syncPanelHeight(); if (onOpen) onOpen(); };
-  // Re-render on ACTUAL hover only. On touch, pointerenter fires on every tap
-  // that lands inside the wrap — including taps on the panel's own tabs. Since
-  // onOpen rebuilds the panel (Layout/Scales wipe innerHTML), that destroyed the
-  // just-tapped control before its click could dispatch, so tabs silently did
-  // nothing on iOS/iPadOS. Touch opens via the click handler (openIt → refresh),
-  // which still renders; taps inside must NOT re-render. Gate on `!== 'touch'`
-  // (not `=== 'mouse'`): the FIRST pointer event after load can report an empty
-  // pointerType, which `=== 'mouse'` dropped — so hover revealed the panel via
-  // CSS but onOpen never ran and the popper showed empty on the first open.
+  // onOpen (Layout/Scales) WIPES the panel's innerHTML to rebuild it. Run it ONLY on the
+  // closed→open transition — never again while the popper stays open. Otherwise a second
+  // pointerenter (web Figma's sandboxed iframe fires one when the panel reveals / the pointer
+  // moves onto freshly-inserted content) rebuilds the panel mid-interaction, detaching the tab
+  // the user is about to click — so in web Figma the Palette/Scales tabs did nothing. A repeated
+  // pointerenter still syncs the height (cheap, safe), just never rebuilds. `_populated` resets
+  // on close so the next open re-renders with the current colours. Tab clicks rebuild explicitly.
+  let _populated = false;
+  const refresh = () => { syncPanelHeight(); if (onOpen && !_populated) { _populated = true; onOpen(); } };
+  // Hover reveal is fine-pointer only (touch opens via the click handler → openIt → refresh).
+  // Gate on `!== 'touch'` (not `=== 'mouse'`): the first pointer event after load can report an
+  // empty pointerType, which `=== 'mouse'` would drop — so hover revealed the panel via CSS but
+  // onOpen never ran and the popper showed empty on the first open.
   wrap.addEventListener('pointerenter', e => { if (!IS_COARSE && e.pointerType !== 'touch') refresh(); });
   window.addEventListener('resize', syncPanelHeight);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncPanelHeight);
@@ -3814,8 +3861,8 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   if (!btn) return;
   let sOpen = false;
   const openIt  = () => { sOpen = true;  wrap.classList.remove('settings-dismissed'); wrap.classList.add('settings-open'); refresh(); };
-  const closeIt = () => { sOpen = false; wrap.classList.remove('settings-open'); wrap.classList.add('settings-dismissed'); btn.blur(); };
-  const reset   = () => { sOpen = false; wrap.classList.remove('settings-open', 'settings-dismissed'); };
+  const closeIt = () => { sOpen = false; _populated = false; wrap.classList.remove('settings-open'); wrap.classList.add('settings-dismissed'); btn.blur(); };
+  const reset   = () => { sOpen = false; _populated = false; wrap.classList.remove('settings-open', 'settings-dismissed'); };
   // Mobile: a dim backdrop behind the modal sheet. It lives inside the wrap (so
   // the outside-close below, which treats anything in the wrap as "not outside",
   // ignores it) but carries its own tap-to-close — the standard modal dismissal.
@@ -3863,12 +3910,17 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
   document.addEventListener('pointerdown', e => {
     if (sOpen && !wrap.contains(/** @type {Node} */ (e.target))) closeIt();
   }, true);
+  return { close: () => { if (sOpen) closeIt(); } };
 }
+// Closer for the Layout-preview popper — used to hand off to the sidebar after saving a theme
+// to the palette on narrow (modal) widths, where the popper covers the screen.
+let _closeLayoutPopper = null;
 {
   const sBtn = document.getElementById('settings-btn');
   setupHoverPopper(sBtn && sBtn.closest('.settings-wrap'), sBtn, document.getElementById('settings-panel'));
   const lBtn = document.getElementById('layout-btn');
-  setupHoverPopper(lBtn && lBtn.closest('.layout-wrap'), lBtn, document.getElementById('layout-panel'), renderLayoutPreview);
+  const lp = setupHoverPopper(lBtn && lBtn.closest('.layout-wrap'), lBtn, document.getElementById('layout-panel'), renderLayoutPreview);
+  _closeLayoutPopper = lp && lp.close;
 }
 
 // ─── Scale & theme generator (v2 beta) ────────────────────────────────────────
@@ -4601,6 +4653,12 @@ function themedScreen(name, th) {
     ]);
     saveBtn.textContent = n ? 'Saved ' + n : 'Nothing new';
     setTimeout(() => { saveBtn.textContent = '+ Palette'; }, 1400);
+    // On narrow (modal) widths the Layout popper covers the screen, so hand off to the sidebar:
+    // close the popper and slide the palette in so the just-saved colours are visible.
+    if (n && window.matchMedia('(max-width: 640px)').matches) {
+      if (_closeLayoutPopper) _closeLayoutPopper();
+      setPaletteOpen(true);
+    }
   });
   head.appendChild(saveBtn);
   block.appendChild(head);
