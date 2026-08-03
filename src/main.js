@@ -1466,6 +1466,11 @@ let contrastLockTarget = 0;
 // gone, so the "no lock" state is each mode's own Off target.
 let contrastLockMode = 'wcag2'; // 'wcag2' | 'apca' ('off' kept as a defensive internal value)
 let apcaLockTarget = 0;
+// A locked pair can usually meet the target with the auto-adjusted (free) color on EITHER the
+// lighter or the darker side of the two colors' crossover — both are valid. This preference
+// picks which; the solver falls back to whichever side is reachable when only one is.
+let lockSide = 'darker'; // 'lighter' | 'darker'
+try { const _ls = localStorage.getItem('contrast-lock-side'); if (_ls === 'lighter' || _ls === 'darker') lockSide = _ls; } catch (e) {}
 function apcaLockActive() { return contrastLockMode === 'apca'; }
 /** The target the current mode enforces (0 when the lock is off). */
 function activeContrastTarget() {
@@ -1707,10 +1712,15 @@ function solveLockAlpha(changed, metric, target) {
   const f = lum => m(lum) - target;
   const N = 256;
   const bounds = [];
-  let prevL = 0, prevF = f(0), bestL = 0, bestM = m(0);
+  // bestL/M: coarse argmax (for the unreachable best-effort pin). worstL/M: coarse argmin —
+  // the CROSSOVER where the two colors' contrast is minimal; the target's two solutions sit one
+  // on each side of it, so it partitions "lighter" (> worstL) from "darker" (< worstL) correctly
+  // even when alpha compositing shifts that point away from equal underlying luminance.
+  let prevL = 0, prevF = f(0), bestL = 0, bestM = m(0), worstL = 0, worstM = m(0);
   for (let i = 1; i <= N; i++) {
     const l = i / N, fl = f(l), ml = fl + target;
     if (ml > bestM) { bestM = ml; bestL = l; }
+    if (ml < worstM) { worstM = ml; worstL = l; }
     if ((prevF < 0) !== (fl < 0)) { // sign change ⇒ a target-boundary between prevL and l
       let lo = prevL, hi = l;
       for (let k = 0; k < 28; k++) { const mid = (lo + hi) / 2; if ((f(mid) < 0) === (prevF < 0)) lo = mid; else hi = mid; }
@@ -1719,8 +1729,16 @@ function solveLockAlpha(changed, metric, target) {
     prevL = l; prevF = fl;
   }
   if (bounds.length) {
-    bounds.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
-    return { lum: bounds[0], reached: true };
+    if (bounds.length === 1) return { lum: bounds[0], reached: true };
+    // Split by the crossover, then take the user's preferred side (falling back to the other
+    // when only one side reaches the target). Within a side, the nearest solution to the current
+    // luminance wins, so the pick stays as stable/least-disruptive as before.
+    const lighter = bounds.filter(b => b > worstL);
+    const darker  = bounds.filter(b => b <= worstL);
+    let pool = lockSide === 'lighter' ? lighter : darker;
+    if (!pool.length) pool = lockSide === 'lighter' ? darker : lighter;
+    pool.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
+    return { lum: pool[0], reached: true };
   }
   if (f(0) >= 0 || f(1) >= 0) return { lum: cur, reached: true }; // meets everywhere → keep
   // Unreachable: refine the coarse argmax (the max sits at/near an endpoint since a
@@ -2794,6 +2812,13 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
   const lockBtns = /** @type {HTMLButtonElement[]} */ ([...wcagWrap.querySelectorAll('.contrast-lock-btn')]);
   const apcaWrap = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-btns-apca'));
   const apcaBtns = /** @type {HTMLButtonElement[]} */ ([...apcaWrap.querySelectorAll('.contrast-lock-btn')]);
+  const sideWrap = /** @type {HTMLElement} */ (document.getElementById('contrast-lock-side'));
+  const sideBtns = /** @type {HTMLButtonElement[]} */ ([...sideWrap.querySelectorAll('.contrast-lock-btn')]);
+  // Show the lighter/darker toggle only while a lock is engaged (it's meaningless with no target).
+  const refreshSideUI = () => {
+    sideWrap.hidden = !(activeContrastTarget() > 0);
+    sideBtns.forEach(b => b.classList.toggle('active', b.dataset.lockside === lockSide));
+  };
 
   // "Type" lock (reverse lookup): lock to the |Lc| the chosen font needs
   // (apcaLcForFont). The font size/weight comes from the tiles' existing APCA
@@ -2823,6 +2848,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     typeReadout.textContent = font + ' → Lc ' + shownLc;
     typeReadout.title = font + ' needs |Lc| ' + shownLc + ' (APCA font lookup) — set the size/weight in a tile’s Font selector';
     setContrastLockError('');
+    refreshSideUI();
     reenforceContrastLock(_lastTouchedSide); // Type target changed; force a re-pin
   }
 
@@ -2837,6 +2863,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     wcagWrap.hidden = contrastLockMode !== 'wcag2';
     apcaWrap.hidden = contrastLockMode !== 'apca';
     typeControls.hidden = !(contrastLockMode === 'apca' && apcaTypeLock);
+    refreshSideUI();
   }
 
   function setLockTarget(target, persist) {
@@ -2844,6 +2871,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     lockBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.target) === target));
     setContrastLockError('');
     if (persist) { try { localStorage.setItem('contrast-lock-target', String(target)); } catch(e) {} }
+    refreshSideUI();
     // The side the user touched last stays put; the other one gets adjusted (force-repin:
     // the target changed but the luminances didn't, so the normal guard would skip it).
     if (target > 0) reenforceContrastLock(_lastTouchedSide);
@@ -2854,6 +2882,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     apcaBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.apcaTarget) === target));
     setContrastLockError('');
     if (persist) { try { localStorage.setItem('contrast-lock-apca-target', String(target)); } catch(e) {} }
+    refreshSideUI();
     if (target > 0) reenforceContrastLock(_lastTouchedSide);
   }
 
@@ -2947,6 +2976,16 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
       typeControls.hidden = true;
       setApcaTarget(parseFloat(/** @type {HTMLElement} */ (btn).dataset.apcaTarget), true);
     }
+  }));
+
+  sideBtns.forEach(btn => btn.addEventListener('click', () => {
+    const side = btn.dataset.lockside; // 'lighter' | 'darker'
+    if (side !== 'lighter' && side !== 'darker' || side === lockSide) return;
+    lockSide = side;
+    try { localStorage.setItem('contrast-lock-side', lockSide); } catch (e) {}
+    sideBtns.forEach(b => b.classList.toggle('active', b.dataset.lockside === lockSide));
+    // Same held luminances, different solution branch — force a re-pin of the free side.
+    if (activeContrastTarget() > 0) reenforceContrastLock(_lastTouchedSide);
   }));
 
 }

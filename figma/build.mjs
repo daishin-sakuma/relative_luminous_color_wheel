@@ -15,7 +15,7 @@ const out = join(here, 'dist');
 
 // The plugin is versioned independently of the web app (which lives at 2.x). This is the
 // version shown in the plugin UI; bump it on each published plugin release.
-const PLUGIN_VERSION = '1.0.4';
+const PLUGIN_VERSION = '1.1.0';
 
 // 1. Build the web app (single JS chunk, single CSS). Force the font to inline as a data
 //    URI by raising the asset inline limit for this build (it's ~95 KB).
