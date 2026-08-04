@@ -383,6 +383,29 @@ function rgbToOklch(r, g, b) {
   return [L, C, C < 1e-4 ? 0 : H]; // achromatic → hue undefined, normalize to 0
 }
 
+/**
+ * OKLCH [L 0–1, C ≥ 0, H° 0–360] → 8-bit sRGB [r,g,b], the inverse of rgbToOklch
+ * (Ottosson OKLab → linear-sRGB → gamma). Out-of-gamut results are clamped per
+ * channel; callers that must hit a target luminance search L against the clamped
+ * relativeLuminance, so the pin still holds. Used by the scale/tone generator.
+ */
+function oklchToRgb(L, C, H) {
+  const hr = H * Math.PI / 180;
+  const a = C * Math.cos(hr), bb = C * Math.sin(hr);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * bb;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * bb;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * bb;
+  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  const lr =  4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  const lg = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  const lb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  const g = v => {
+    v = Math.max(0, Math.min(1, v));
+    return Math.round((v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255);
+  };
+  return [g(lr), g(lg), g(lb)];
+}
+
 /** OKLCH as a CSS oklch() string, e.g. 'oklch(62.79% 0.2577 29.23)'. An 8-digit
     hex adds an alpha: 'oklch(… / 0.5)'. */
 function oklchCss(hex) {
@@ -1468,9 +1491,10 @@ let contrastLockMode = 'wcag2'; // 'wcag2' | 'apca' ('off' kept as a defensive i
 let apcaLockTarget = 0;
 // A locked pair can usually meet the target with the auto-adjusted (free) color on EITHER the
 // lighter or the darker side of the two colors' crossover — both are valid. This preference
-// picks which; the solver falls back to whichever side is reachable when only one is.
-let lockSide = 'darker'; // 'lighter' | 'darker'
-try { const _ls = localStorage.getItem('contrast-lock-side'); if (_ls === 'lighter' || _ls === 'darker') lockSide = _ls; } catch (e) {}
+// picks which; 'mid' takes whichever of the two is nearer a mid-tone gray. The solver falls
+// back to whichever solution is reachable when only one is.
+let lockSide = 'mid'; // 'lighter' | 'mid' | 'darker'
+try { const _ls = localStorage.getItem('contrast-lock-side'); if (_ls === 'lighter' || _ls === 'darker' || _ls === 'mid') lockSide = _ls; } catch (e) {}
 function apcaLockActive() { return contrastLockMode === 'apca'; }
 /** The target the current mode enforces (0 when the lock is off). */
 function activeContrastTarget() {
@@ -1730,6 +1754,14 @@ function solveLockAlpha(changed, metric, target) {
   }
   if (bounds.length) {
     if (bounds.length === 1) return { lum: bounds[0], reached: true };
+    if (lockSide === 'mid') {
+      // "Mid" mode: of the (still target-meeting) solutions, take the one whose luminance is
+      // closest to 0.5 in the active metric (relative luminance in WCAG mode, APCA Ys in APCA
+      // mode) — the most moderate of the two. Ties → nearer the current luminance.
+      const byMid = bounds.slice().sort((a, b) =>
+        (Math.abs(a - 0.5) - Math.abs(b - 0.5)) || (Math.abs(a - cur) - Math.abs(b - cur)));
+      return { lum: byMid[0], reached: true };
+    }
     // Split by the crossover, then take the user's preferred side (falling back to the other
     // when only one side reaches the target). Within a side, the nearest solution to the current
     // luminance wins, so the pick stays as stable/least-disruptive as before.
@@ -2616,6 +2648,30 @@ swatchHexCopy.addEventListener('click', () => {
   setTimeout(() => swatchHexCopy.classList.remove('hex-copied'), 1500);
 });
 
+// ─── Eyedropper (EyeDropper API) — pick a color from anywhere on screen ─────────
+// Reveal the buttons only where the API exists (Chromium desktop); elsewhere they stay
+// hidden, so the UI never shows a control that can't work. `open()` returns an opaque
+// #rrggbb; feed it through the same apply path as typing a hex (opacity left untouched).
+if (typeof window !== 'undefined' && 'EyeDropper' in window) {
+  const wire = (btnId, apply) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.hidden = false;
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('picking')) return; // ignore re-entry while a pick is open
+      btn.classList.add('picking');
+      try {
+        const res = await new window.EyeDropper().open();
+        const full = normalizeHexInput(res.sRGBHex);
+        if (full) { const [r, g, b] = hexToRgba(full); apply(r, g, b); } // keep current alpha
+      } catch (_) { /* user pressed Esc / cancelled — no-op */ }
+      finally { btn.classList.remove('picking'); }
+    });
+  };
+  wire('swatch-eyedropper', (r, g, b) => applyMainHex(r, g, b, selAlpha));
+  wire('custom-eyedropper', (r, g, b) => applyCustomHex(r, g, b, cAlpha));
+}
+
 // ─── Clipboard copy ───────────────────────────────────────────────────────────
 
 function copyToClipboard(text) {
@@ -2979,8 +3035,8 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
   }));
 
   sideBtns.forEach(btn => btn.addEventListener('click', () => {
-    const side = btn.dataset.lockside; // 'lighter' | 'darker'
-    if (side !== 'lighter' && side !== 'darker' || side === lockSide) return;
+    const side = btn.dataset.lockside; // 'lighter' | 'mid' | 'darker'
+    if (side !== 'lighter' && side !== 'darker' && side !== 'mid' || side === lockSide) return;
     lockSide = side;
     try { localStorage.setItem('contrast-lock-side', lockSide); } catch (e) {}
     sideBtns.forEach(b => b.classList.toggle('active', b.dataset.lockside === lockSide));
@@ -3483,16 +3539,31 @@ function buildExport(format) {
   const wheelHex  = toHexA(...selectedRgbBiased(), selAlpha).toLowerCase();
   const customHex = toHexA(cR, cG, cB, cAlpha).toLowerCase();
   const roleColors = (role, liveHex) => {
-    const hexes = palette.filter(e => e.role === role).map(e => e.hex);
-    if (hexes.length === 0) {
-      hexes.push(liveHex);
-    }
-    return hexes.map(hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) }));
+    const entries = palette.filter(e => e.role === role);
+    if (entries.length === 0) return [{ hex: liveHex, lum: relativeLuminance(...hexToRgb(liveHex)) }];
+    return entries.map(e => ({ hex: e.hex, name: e.name, lum: relativeLuminance(...hexToRgb(e.hex)) }));
   };
   const text = roleColors('fg', wheelHex);
   const bg   = roleColors('bg', customHex);
   const RANKS = ['primary', 'secondary', 'tertiary', 'quaternary', 'quinary', 'senary', 'septenary', 'octonary', 'nonary', 'denary'];
   const key = pos => RANKS[pos] || String(pos + 1);
+  // Token/variable name per colour: its user-set name (sanitized to a valid identifier) when
+  // present, else the positional rank. De-duplicated within a role group so two same-named
+  // colours don't collide (…-2, …-3). The role prefix (text/bg or content/surface) is added
+  // by each format below.
+  const sanitizeName = s => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const resolveKeys = list => {
+    const used = new Set();
+    return list.map((c, i) => {
+      let base = (c.name && sanitizeName(c.name)) || key(i);
+      let name = base, n = 2;
+      while (used.has(name)) name = base + '-' + (n++);
+      used.add(name);
+      return name;
+    });
+  };
+  const textKeys = resolveKeys(text);
+  const bgKeys   = resolveKeys(bg);
   const ratio = contrastRatio(text[0].lum, bg[0].lum); // text-primary vs bg-primary
 
   // Color value in the chosen format (hex string or oklch()); the alternate
@@ -3503,8 +3574,8 @@ function buildExport(format) {
   if (format === 'css') {
     const cssLine = (name, c) => `  ${name}: ${cssVal(c)};  /* ${altComment(c)} — luminance ${c.lum.toFixed(4)} */`;
     const lines = [
-      ...text.map((c, i) => cssLine(`--color-text-${key(i)}`, c)),
-      ...bg.map((c, i)   => cssLine(`--color-bg-${key(i)}`, c)),
+      ...text.map((c, i) => cssLine(`--color-text-${textKeys[i]}`, c)),
+      ...bg.map((c, i)   => cssLine(`--color-bg-${bgKeys[i]}`, c)),
     ];
     return `:root {
   /* text-primary vs bg-primary contrast ${ratio.toFixed(2)}:1 — relative-luminous-color-wheel.vercel.app */
@@ -3522,8 +3593,8 @@ ${lines.join('\n')}
     // CSS and JSON exports keep the plain text/bg roles (no utility-prefix collision there).
     const twLine = (name, c) => `  ${name}: ${cssVal(c)};  /* ${altComment(c)} */`;
     const lines = [
-      ...text.map((c, i) => twLine(`--color-content-${key(i)}`, c)),
-      ...bg.map((c, i)   => twLine(`--color-surface-${key(i)}`, c)),
+      ...text.map((c, i) => twLine(`--color-content-${textKeys[i]}`, c)),
+      ...bg.map((c, i)   => twLine(`--color-surface-${bgKeys[i]}`, c)),
     ];
     return `@theme {
   /* content-* = text-role colours (use as text-content-*), surface-* = background-role
@@ -3548,7 +3619,7 @@ ${lines.join('\n')}
     return meta;
   };
   const colorToken = c => ({ $value: c.hex.toLowerCase(), $extensions: { [NS]: colorMeta(c) } });
-  const groupTokens = list => Object.fromEntries(list.map((c, i) => [key(i), colorToken(c)]));
+  const groupTokens = (list, keys) => Object.fromEntries(list.map((c, i) => [keys[i], colorToken(c)]));
   const fmtNote = exportColorFmt === 'oklch'
     ? 'Each $value is a CSS hex string; the OKLCH components, alpha, and the colour’s relative luminance are under $extensions.'
     : 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and relative luminance are under $extensions.';
@@ -3556,8 +3627,8 @@ ${lines.join('\n')}
     $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
     color: {
       $type: 'color',
-      text: groupTokens(text),
-      bg:   groupTokens(bg),
+      text: groupTokens(text, textKeys),
+      bg:   groupTokens(bg, bgKeys),
     },
     $extensions: {
       [NS]: {
@@ -3976,13 +4047,16 @@ const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 // uses only the light half (50/200/600/700/800), so it's unaffected.
 const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.028, 0.008];
 
-// HSL lightness whose sRGB has WCAG relative luminance ≈ target. (Mode-independent,
-// unlike findLightness, which follows wheelLum into APCA Ys in APCA mode.)
-function lightnessForLum(h, s, targetLum) {
+// OKLab lightness L whose OKLCH(L, C, H) renders (gamut-clamped) to WCAG relative luminance
+// ≈ target. Same fix-the-luminance-by-bisection scheme as before, but the color is built in
+// OKLCH so the scale's chroma/hue come from OKLab; searching against the CLAMPED sRGB's
+// relativeLuminance keeps the luminance pinned even when a step is out of gamut. Mode-independent
+// (always WCAG relative luminance), matching the tonal scale's fixed SCALE_LUM ladder.
+function oklabLForLum(C, H, targetLum) {
   let lo = 0, hi = 1;
   for (let i = 0; i < 22; i++) {
     const mid = (lo + hi) / 2;
-    const [r, g, b] = hslToRgb(h, s, mid);
+    const [r, g, b] = oklchToRgb(mid, C, H);
     if (relativeLuminance(r, g, b) < targetLum) lo = mid; else hi = mid;
   }
   return (lo + hi) / 2;
@@ -3998,34 +4072,49 @@ function lerpHue(a, b, t) {
   return (((a + d * t) % 360) + 360) % 360;
 }
 
-// Build the 11-step luminance-keyed scale; hueSatAt(p) gives the [hue, sat] at
-// position p (0 = light 50 → 1 = dark 950), so a constant function yields a
-// single-hue ramp and an interpolating one yields a two-colour gradient.
-function buildScaleFrom(hueSatAt) {
+// Build the 11-step luminance-keyed scale in OKLCH. chromaHueAt(p) gives the [chroma, hue°] at
+// position p (0 = light 50 → 1 = dark 950), so a constant function yields a single-hue ramp and
+// an interpolating one a two-colour gradient. Each step keeps its target relative luminance
+// (SCALE_LUM) by solving the OKLab L; only chroma & hue come from the seed(s).
+function buildScaleFrom(chromaHueAt) {
   return SCALE_STEPS.map((step, i) => {
     const p = i / (SCALE_STEPS.length - 1);
-    const [hue, satRaw] = hueSatAt(p);
-    const sf = 1 - 0.45 * Math.pow(Math.abs(2 * p - 1), 1.4); // taper chroma at the ends
-    const s = Math.max(0, Math.min(1, satRaw * sf));
-    const [r, g, b] = hslToRgb(hue, s, lightnessForLum(hue, s, SCALE_LUM[i]));
+    const [chromaRaw, hue] = chromaHueAt(p);
+    const cf = 1 - 0.45 * Math.pow(Math.abs(2 * p - 1), 1.4); // taper chroma at the ends
+    const target = SCALE_LUM[i];
+    // Solve OKLab L for the target luminance. If full chroma can't reach it in the sRGB gamut
+    // (a saturated hue near a very light/dark step saturates before the luminance is met),
+    // reduce chroma to the most it can keep while still hitting the exact target — so the
+    // luminance ladder stays pinned, chroma tapering naturally at the extremes (as the old
+    // HSL scale did toward white/black).
+    const under = c => relativeLuminance(...oklchToRgb(oklabLForLum(c, hue, target), c, hue)) < target - 0.0005;
+    let C = Math.max(0, chromaRaw * cf);
+    if (under(C)) {
+      let lo = 0, hi = C;
+      for (let k = 0; k < 22; k++) { const mid = (lo + hi) / 2; if (under(mid)) hi = mid; else lo = mid; }
+      C = lo;
+    }
+    const [r, g, b] = oklchToRgb(oklabLForLum(C, hue, target), C, hue);
     return { step, hex: toHex(r, g, b).toLowerCase(), lum: relativeLuminance(r, g, b) };
   });
 }
 
-// The scale for the current source setting and the current main text/bg colours.
+// The scale for the current source setting and the current main text/bg colours. The two seed
+// colours are blended in OKLCH — chroma linearly, hue along the shortest circular arc — so the
+// gradient is perceptually even (CSS Color 4's OKLCH), while luminance stays fixed per step.
 function currentScale() {
   const textRgb = selectedRgbBiased();
   const bgRgb = [cR, cG, cB];
-  const [hT, sT] = rgbToHsl(...textRgb);
-  const [hB, sB] = rgbToHsl(...bgRgb);
-  if (_scaleSource === 'text') return buildScaleFrom(() => [hT, sT]);
-  if (_scaleSource === 'bg')   return buildScaleFrom(() => [hB, sB]);
+  const [, cT, hT] = rgbToOklch(...textRgb); // OKLab L is discarded; each step re-solves it
+  const [, cB2, hB2] = rgbToOklch(...bgRgb);
+  if (_scaleSource === 'text') return buildScaleFrom(() => [cT, hT]);
+  if (_scaleSource === 'bg')   return buildScaleFrom(() => [cB2, hB2]);
   // gradient: the lighter seed anchors the light end, the darker the dark end, so
   // the ramp stays light→dark while blending both hues.
   const lightFirst = relativeLuminance(...textRgb) >= relativeLuminance(...bgRgb);
-  const lo = lightFirst ? [hT, sT] : [hB, sB];
-  const hi = lightFirst ? [hB, sB] : [hT, sT];
-  return buildScaleFrom(p => [lerpHue(lo[0], hi[0], p), lo[1] + (hi[1] - lo[1]) * p]);
+  const lo = lightFirst ? [cT, hT] : [cB2, hB2];
+  const hi = lightFirst ? [cB2, hB2] : [cT, hT];
+  return buildScaleFrom(p => [lo[0] + (hi[0] - lo[0]) * p, lerpHue(lo[1], hi[1], p)]);
 }
 
 // Segmented Text→BG / Text / BG source selector (shared by the scale popper and
@@ -5241,6 +5330,56 @@ const _paletteSwipeEnd = e => {
   }
 };
 paletteSection.addEventListener('pointerup', _paletteSwipeEnd, true);
+
+// Trackpad two-finger horizontal swipe to dismiss (desktop) — the same drag-to-close feel as
+// touch, driven by wheel deltaX. A rightward swipe (toward the screen edge the panel sits on)
+// pushes the panel out; releasing past the distance/velocity threshold closes it, otherwise it
+// springs back. No wheel "end" event exists, so a short idle timer finalizes the gesture. macOS
+// natural scrolling reports a rightward two-finger move as NEGATIVE deltaX, so accumulate -deltaX.
+let _paletteWheel = null;
+let _paletteWheelIdle = null;
+function _endPaletteWheel() {
+  const s = _paletteWheel;
+  _paletteWheel = null;
+  clearTimeout(_paletteWheelIdle);
+  _paletteWheelIdle = null;
+  if (!s || !s.dragging) return;
+  const w = Math.max(1, paletteSection.getBoundingClientRect().width);
+  // Distance-only threshold (no velocity term): wheel events fire far denser than pointer moves,
+  // so a per-event velocity is noisy and over-triggers. A trackpad flick still travels far enough
+  // in distance to clear the ratio, so distance alone gives a reliable, predictable close.
+  const shouldClose = s.dx > w * _PALETTE_SWIPE_CLOSE_RATIO;
+  if (shouldClose) {
+    if (_ceIdx !== null) closeChipEditor(true);
+    finishPaletteSwipeClose(s.dx);
+  } else {
+    finishPaletteSwipeCancel();
+  }
+}
+paletteSection.addEventListener('wheel', e => {
+  if (!paletteOpen || _paletteSwipe) return; // pointer-drag in progress takes precedence
+  const railScrolls = paletteRail.scrollHeight > paletteRail.clientHeight + 1 && paletteRail.contains(/** @type {Node} */ (e.target));
+  if (!_paletteWheel) {
+    // Only start on a clearly-horizontal, rightward gesture; a vertical scroll (esp. over the
+    // scrollable rail) is left alone so the list still scrolls normally.
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || -e.deltaX <= 0) return;
+    if (railScrolls && Math.abs(e.deltaY) > 0.5) return;
+    _paletteWheel = { dx: 0, dragging: false };
+  }
+  const nextDx = Math.max(0, _paletteWheel.dx + (-e.deltaX));
+  if (!_paletteWheel.dragging) {
+    if (nextDx < _PALETTE_SWIPE_START) { _paletteWheel.dx = nextDx; return; }
+    _paletteWheel.dragging = true;
+    _paletteInteracted = true;
+    paletteSection.classList.add('palette-section--swiping');
+    paletteSection.style.transition = 'none';
+  }
+  e.preventDefault(); // we own the gesture now — don't let the page/rail scroll
+  _paletteWheel.dx = nextDx;
+  paletteSection.style.transform = `translate3d(${nextDx}px, 0, 0)`;
+  clearTimeout(_paletteWheelIdle);
+  _paletteWheelIdle = setTimeout(_endPaletteWheel, 110); // momentum settled → finalize
+}, { passive: false });
 paletteSection.addEventListener('pointercancel', e => {
   if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id) return;
   const wasDragging = _paletteSwipe.dragging;
@@ -5804,6 +5943,16 @@ let _ceEl = null;      // the single cloned editor element (reused across chips)
 let _ceRefs = null;    // cached inner element references
 let _ceIdx = null;     // flat palette index being edited, or null
 let _ceOrigHex = null; // original hex color before editing
+let _ceOrigName;       // original name before editing (undefined = was unnamed); restored on cancel
+
+// Position of a palette entry within its role group (0 = primary, 1 = secondary…). Drives the
+// default label a color falls back to when it has no user-set name.
+function paletteRankPosOf(idx) {
+  const role = palette[idx] && palette[idx].role;
+  let pos = 0;
+  for (let i = 0; i < idx; i++) if (palette[i] && palette[i].role === role) pos++;
+  return pos;
+}
 let _ce = null;        // working state { role, r, g, b, mode, hsl, lum, gray }
 let _cePartner = 0;    // partner-color cycle index
 let _ceRaf = 0;        // rAF gate for wheel + preview repaint
@@ -5828,6 +5977,8 @@ function buildChipEditor() {
     wheel:  q('.chip-editor-wheel'),
     hex:    q('.chip-editor-hex'),
     hexCopy: q('.chip-editor-hex-copy'),
+    name:   q('.chip-editor-name'),
+    nameReset: q('.chip-editor-name-reset'),
     tile:   q('.chip-editor-tile'),
     ag:     q('.chip-editor-ag'),
     agSize: q('.chip-editor-ag-size'),
@@ -5909,13 +6060,43 @@ function buildChipEditor() {
   _ceRefs.hex.addEventListener('blur', () => { _ceHexReturnPending = true; });
   _ceRefs.hexCopy.addEventListener('click', () => {
     copyToClipboard(formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)));
-    _ceRefs.hex.classList.add('hex-copied');
+    // Flash the copy icon only (✓) — not the whole field — matching the main picker's hex copy.
     _ceRefs.hexCopy.classList.add('hex-copied');
-    setTimeout(() => {
-      _ceRefs.hex.classList.remove('hex-copied');
-      _ceRefs.hexCopy.classList.remove('hex-copied');
-    }, 1500);
+    setTimeout(() => _ceRefs.hexCopy.classList.remove('hex-copied'), 1500);
   });
+  // Optional semantic name. The field ALWAYS shows the color's current effective name — the
+  // user-set name, or (unnamed) the default position label (Primary / Secondary…). Typing sets
+  // the name; clearing it, or matching the position label, falls back to the default (no name
+  // stored). The ↺ reset restores the default; Cancel reverts to the pre-edit name. Stored
+  // straight on the entry and persisted; the rail isn't re-rendered mid-edit (that would detach
+  // the open editor), so the chip's shown name refreshes on close.
+  if (_ceRefs.name) {
+    const defaultLabel = () => paletteRankLabel(paletteRankPosOf(_ceIdx));
+    const commitName = () => {
+      if (_ceIdx === null || !palette[_ceIdx]) return;
+      const v = _ceRefs.name.value.trim().slice(0, 40);
+      if (!v || v.toLowerCase() === defaultLabel().toLowerCase()) delete palette[_ceIdx].name;
+      else palette[_ceIdx].name = v;
+      savePalette();
+    };
+    _ceRefs.name.addEventListener('input', commitName);
+    _ceRefs.name.addEventListener('focus', () => { _ceRefs.name.select(); scrollChipHexIntoView(); });
+    _ceRefs.name.addEventListener('keydown', e => { if (e.key === 'Enter') _ceRefs.name.blur(); });
+    // Leaving the field empty reverts the display to the default label (name already cleared).
+    _ceRefs.name.addEventListener('blur', () => { if (!_ceRefs.name.value.trim()) _ceRefs.name.value = defaultLabel(); });
+    if (_ceRefs.nameReset) {
+      // Reset to the default label WITHOUT focusing the field — mirrors the hex copy icon, which
+      // doesn't move focus to the hex input. (Pressing the button then focusing would fire the
+      // field's focus→select, selecting all the text, which felt like an accidental edit.)
+      _ceRefs.nameReset.addEventListener('mousedown', e => e.preventDefault()); // don't focus on press
+      _ceRefs.nameReset.addEventListener('click', () => {
+        if (_ceIdx === null || !palette[_ceIdx]) return;
+        delete palette[_ceIdx].name;
+        savePalette();
+        _ceRefs.name.value = defaultLabel();
+      });
+    }
+  }
   // The compare-color dropdown opens on CLICK/TAP only (the whole label+caret
   // button toggles it); clicking again or outside closes it. No hover-open, so
   // it behaves the same on mouse and touch and never appears unintentionally.
@@ -6441,9 +6622,12 @@ function openChipEditor(idx) {
   // keeps each side's setting (mirroring the main BG picker).
   _ce = { role: entry.role, r, g, b, alpha: a, mode: 'lum', hsl: [0, 0, 0], lum: [0, 0, 0], gray: 0,
           savedColor: { r, g, b }, savedGray: Math.round((r + g + b) / 3) };
+  _ceOrigName = entry.name; // undefined when unnamed — restored on cancel
   reseedSubstates();
   applyChipEditorMode('lum');
   syncChipEditorControls();
+  // Always show the effective name: the user-set name, or the default position label.
+  if (_ceRefs && _ceRefs.name) _ceRefs.name.value = entry.name || paletteRankLabel(paletteRankPosOf(idx));
   chipEditorRenderPreview();
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) { chipEl.classList.add('editing'); chipEl.after(_ceEl); }
@@ -6520,6 +6704,7 @@ function closeChipEditor(skipRender, afterClose) {
   _ceIdx = null;
   _ce = null;
   _ceOrigHex = null;
+  _ceOrigName = undefined;
   savePalette();
   const chipEl = paletteRail.querySelector(`.palette-chip[data-idx="${idx}"]`);
   if (chipEl) chipEl.classList.remove('editing');
@@ -6543,11 +6728,16 @@ function closeChipEditor(skipRender, afterClose) {
 
 function cancelChipEditor() {
   if (_ceIdx === null) return;
+  if (palette[_ceIdx]) {
+    // Revert the name edit too: restore the pre-edit name (or clear it if it was unnamed).
+    if (_ceOrigName !== undefined) palette[_ceIdx].name = _ceOrigName;
+    else delete palette[_ceIdx].name;
+  }
   if (_ceOrigHex !== null && palette[_ceIdx]) {
     palette[_ceIdx].hex = _ceOrigHex;
     updateChipVisual(_ceIdx, _ceOrigHex);
-    savePalette();
   }
+  savePalette();
   closeChipEditor();
 }
 
@@ -6641,8 +6831,12 @@ function renderPalette() {
 
     const rank = document.createElement('span');
     rank.className = 'palette-chip-rank';
-    rank.textContent = paletteRankLabel(pos);
-    rank.title = `${label} ${paletteRankLabel(pos).toLowerCase()} — used in export`;
+    const customName = palette[flatIdx] && palette[flatIdx].name;
+    rank.textContent = customName || paletteRankLabel(pos);
+    rank.classList.toggle('palette-chip-rank--named', !!customName);
+    rank.title = customName
+      ? `“${customName}” — used as the token name on export (edit in the color editor)`
+      : `${label} ${paletteRankLabel(pos).toLowerCase()} — used in export`;
 
     const hexLabel = document.createElement('span');
     hexLabel.className = 'palette-chip-hex';
@@ -6815,10 +7009,14 @@ try {
     // what addToPalette stores. The old 6-digit-lowercase-only test dropped every translucent
     // saved color on reload, silently corrupting the palette. Normalize to lowercase on the way in.
     const HEX = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i;
+    const withName = (o, item) => {
+      if (item && typeof item.name === 'string' && item.name.trim()) o.name = item.name.trim().slice(0, 40);
+      return o;
+    };
     palette = capPaletteRoles(stored.map(item => {
       if (typeof item === 'string' && HEX.test(item)) return { hex: item.toLowerCase(), role: 'bg' };
       if (item && typeof item === 'object' && typeof item.hex === 'string' && HEX.test(item.hex))
-        return { hex: item.hex.toLowerCase(), role: item.role === 'fg' ? 'fg' : 'bg' };
+        return withName({ hex: item.hex.toLowerCase(), role: item.role === 'fg' ? 'fg' : 'bg' }, item);
       return null;
     }).filter(Boolean));
   }
