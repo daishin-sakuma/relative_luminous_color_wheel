@@ -4041,25 +4041,38 @@ let _closeLayoutPopper = null;
 // wheel's core idea — a colour at a target relative luminance — plus contrastRatio.
 // (Surfaced inside the Layout preview's "Scales" mode; no separate popper.)
 const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
-// The dark end goes near-black (900/950 darker than a plain tonal ramp) so the
-// dark theme's bg (950) and surface (900) read as a realistic dark UI — a 0.022
-// "950" looked like ~#292929, too bright to pass as dark mode. The light theme
-// uses only the light half (50/200/600/700/800), so it's unaffected.
-const SCALE_LUM   = [0.95, 0.86, 0.74, 0.60, 0.45, 0.32, 0.22, 0.145, 0.088, 0.028, 0.008];
+// A perceptually-even OKLab LIGHTNESS ramp for the 11 steps: light (near-white, step 50) →
+// dark (near-black, step 950). Linear in OKLab L, which is perceptually uniform, so the lightness
+// progression is as smooth as it can be. These are OKLab L values, NOT WCAG relative luminance:
+// the generated scale/gradient is a design tool whose intermediate steps needn't meet a contrast
+// target — the derived light/dark THEMES still choose roles by MEASURED contrast (.lum below).
+const SCALE_L_LIGHT = 0.97;
+const SCALE_L_DARK  = 0.13;
+const SCALE_L = SCALE_STEPS.map((_, i) => SCALE_L_LIGHT + (SCALE_L_DARK - SCALE_L_LIGHT) * (i / (SCALE_STEPS.length - 1)));
 
-// OKLab lightness L whose OKLCH(L, C, H) renders (gamut-clamped) to WCAG relative luminance
-// ≈ target. Same fix-the-luminance-by-bisection scheme as before, but the color is built in
-// OKLCH so the scale's chroma/hue come from OKLab; searching against the CLAMPED sRGB's
-// relativeLuminance keeps the luminance pinned even when a step is out of gamut. Mode-independent
-// (always WCAG relative luminance), matching the tonal scale's fixed SCALE_LUM ladder.
-function oklabLForLum(C, H, targetLum) {
-  let lo = 0, hi = 1;
-  for (let i = 0; i < 22; i++) {
-    const mid = (lo + hi) / 2;
-    const [r, g, b] = oklchToRgb(mid, C, H);
-    if (relativeLuminance(r, g, b) < targetLum) lo = mid; else hi = mid;
-  }
-  return (lo + hi) / 2;
+// OKLCh → linear-sRGB, UNCLAMPED (for gamut testing; the display path clamps in oklchToRgb).
+function oklchToLinear(L, C, H) {
+  const hr = H * Math.PI / 180;
+  const a = C * Math.cos(hr), bb = C * Math.sin(hr);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * bb;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * bb;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * bb;
+  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  return [
+     4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  ];
+}
+// Largest chroma keeping OKLCh(L, ·, H) inside the sRGB gamut — the CSS Color 4 gamut-map step
+// (hold L and H, reduce chroma to the boundary). The boundary is continuous in L and H, so along
+// a smooth L-ramp / hue path this ceiling — and hence the scale's chroma — varies smoothly.
+function maxChromaInGamut(L, H) {
+  const inG = C => oklchToLinear(L, C, H).every(v => v >= -1e-4 && v <= 1 + 1e-4);
+  if (inG(0.5)) return 0.5; // 0.5 exceeds sRGB's OKLCh chroma max, so it always brackets
+  let lo = 0, hi = 0.5;
+  for (let k = 0; k < 24; k++) { const m = (lo + hi) / 2; if (inG(m)) lo = m; else hi = m; }
+  return lo;
 }
 
 // Which main colours seed the scale: 'gradient' blends the main TEXT and BG
@@ -4072,49 +4085,39 @@ function lerpHue(a, b, t) {
   return (((a + d * t) % 360) + 360) % 360;
 }
 
-// Build the 11-step luminance-keyed scale in OKLCH. chromaHueAt(p) gives the [chroma, hue°] at
-// position p (0 = light 50 → 1 = dark 950), so a constant function yields a single-hue ramp and
-// an interpolating one a two-colour gradient. Each step keeps its target relative luminance
-// (SCALE_LUM) by solving the OKLab L; only chroma & hue come from the seed(s).
+// Build the 11-step scale as a smooth path in OKLab: L follows the perceptually-even ramp,
+// chromaHueAt(t) gives the [target chroma, hue°] at position t (0 = light 50 → 1 = dark 950), and
+// the realised chroma is that target reduced to the sRGB gamut boundary (chroma-only, holding L
+// and H). Every input varies smoothly in t and the gamut ceiling is continuous, so the ramp is
+// smooth BY CONSTRUCTION — no per-step luminance solve, no hard clamp, no dull outlier steps.
 function buildScaleFrom(chromaHueAt) {
   return SCALE_STEPS.map((step, i) => {
-    const p = i / (SCALE_STEPS.length - 1);
-    const [chromaRaw, hue] = chromaHueAt(p);
-    const cf = 1 - 0.45 * Math.pow(Math.abs(2 * p - 1), 1.4); // taper chroma at the ends
-    const target = SCALE_LUM[i];
-    // Solve OKLab L for the target luminance. If full chroma can't reach it in the sRGB gamut
-    // (a saturated hue near a very light/dark step saturates before the luminance is met),
-    // reduce chroma to the most it can keep while still hitting the exact target — so the
-    // luminance ladder stays pinned, chroma tapering naturally at the extremes (as the old
-    // HSL scale did toward white/black).
-    const under = c => relativeLuminance(...oklchToRgb(oklabLForLum(c, hue, target), c, hue)) < target - 0.0005;
-    let C = Math.max(0, chromaRaw * cf);
-    if (under(C)) {
-      let lo = 0, hi = C;
-      for (let k = 0; k < 22; k++) { const mid = (lo + hi) / 2; if (under(mid)) hi = mid; else lo = mid; }
-      C = lo;
-    }
-    const [r, g, b] = oklchToRgb(oklabLForLum(C, hue, target), C, hue);
+    const t = i / (SCALE_STEPS.length - 1);
+    const L = SCALE_L[i];
+    const [chromaTarget, hue] = chromaHueAt(t);
+    const C = Math.min(Math.max(0, chromaTarget), maxChromaInGamut(L, hue));
+    const [r, g, b] = oklchToRgb(L, C, hue);
     return { step, hex: toHex(r, g, b).toLowerCase(), lum: relativeLuminance(r, g, b) };
   });
 }
 
-// The scale for the current source setting and the current main text/bg colours. The two seed
-// colours are blended in OKLCH — chroma linearly, hue along the shortest circular arc — so the
-// gradient is perceptually even (CSS Color 4's OKLCH), while luminance stays fixed per step.
+// The scale for the current source setting and the current main text/bg colours, built entirely
+// in OKLab/OKLCh: a smooth lightness ramp carries the seed hue (single source) or a shortest-arc
+// hue blend between the two seeds (gradient), with a chroma target interpolated from the seeds'
+// own chroma and gamut-clamped per step. Perceptually uniform and smooth by construction.
 function currentScale() {
   const textRgb = selectedRgbBiased();
   const bgRgb = [cR, cG, cB];
-  const [, cT, hT] = rgbToOklch(...textRgb); // OKLab L is discarded; each step re-solves it
+  const [, cT, hT]  = rgbToOklch(...textRgb);
   const [, cB2, hB2] = rgbToOklch(...bgRgb);
   if (_scaleSource === 'text') return buildScaleFrom(() => [cT, hT]);
   if (_scaleSource === 'bg')   return buildScaleFrom(() => [cB2, hB2]);
-  // gradient: the lighter seed anchors the light end, the darker the dark end, so
-  // the ramp stays light→dark while blending both hues.
+  // gradient: the lighter seed anchors the light end, the darker the dark end, so the ramp stays
+  // light→dark while blending both hues (and chroma) across it.
   const lightFirst = relativeLuminance(...textRgb) >= relativeLuminance(...bgRgb);
   const lo = lightFirst ? [cT, hT] : [cB2, hB2];
   const hi = lightFirst ? [cB2, hB2] : [cT, hT];
-  return buildScaleFrom(p => [lo[0] + (hi[0] - lo[0]) * p, lerpHue(lo[1], hi[1], p)]);
+  return buildScaleFrom(t => [lo[0] + (hi[0] - lo[0]) * t, lerpHue(lo[1], hi[1], t)]);
 }
 
 // Segmented Text→BG / Text / BG source selector (shared by the scale popper and
