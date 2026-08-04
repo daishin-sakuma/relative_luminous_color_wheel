@@ -487,6 +487,32 @@ input[type="range"]::-moz-range-thumb {
 .custom-hex-copy-icon.hex-copied { opacity: 1; color: var(--pass); }
 .custom-hex-copy-icon.hex-copied::after { content: '✓'; }
 
+/* Eyedropper (screen color picker) — mirror image of the copy icon, pinned to the LEFT so it
+   doesn't shift the value's centering (the field's side padding is symmetric). Shown by JS
+   only where the EyeDropper API exists. */
+.hex-eyedropper {
+  position: absolute;
+  left: 0.5em;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  opacity: 0.4;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: opacity 0.15s, color 0.15s;
+}
+.hex-eyedropper[hidden] { display: none; }
+.hex-eyedropper svg { display: block; }
+@media (hover: hover) { .hex-eyedropper:hover { opacity: 0.8; } }
+.hex-eyedropper.picking { opacity: 1; color: var(--accent); }
+
 .custom-gray-slider {
   background-image: linear-gradient(to right, #000, #fff) !important;
 }
@@ -1181,13 +1207,53 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
    otherwise it butts up with no gap and looks tighter than the other sliders. */
 .chip-editor-sliders { display: flex; flex-direction: column; gap: 0.4rem; }
 .chip-editor-hexwrap { position: relative; } /* anchors the absolute copy icon */
+/* Optional semantic-name field below the hex. Shown as typed (the hex field is upper-cased,
+   but a name isn't) and slightly spaced from the hex above it. The reset button sits INSIDE
+   the field like the hex copy icon: absolutely pinned to the right, so the input's symmetric
+   padding keeps the name centered independent of it. The button is a real element on top with
+   a defined hit area, so clicks in that right-end zone hit the button, not the input. */
+.chip-editor-namewrap { margin-top: 0.3rem; position: relative; } /* anchors the absolute reset btn */
+/* Same field box as .chip-editor-hex (height, padding, font-size) so the two inputs read as a
+   matched pair; only the content treatment differs — a name isn't upper-cased or letter-spaced. */
+.chip-editor-name {
+  text-transform: none;
+  letter-spacing: normal;
+  height: var(--custom-field-h, 22px);
+  padding: 0.15rem 1.9rem;
+  font-size: 0.75rem;
+}
+/* Reset button mirrors the hex copy icon (same glyph size, opacity, right offset) but keeps a
+   full-height hit target so its click zone is distinct from the input's. justify/padding place
+   the glyph at the copy icon's x (right: 0.6em). */
+.chip-editor-name-reset {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 1.9em;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.6em 0 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  opacity: 0.4;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: opacity 0.15s, color 0.15s;
+}
+@media (hover: hover) { .chip-editor-name-reset:hover { opacity: 0.8; color: var(--accent); } }
 .chip-editor-hex {
   width: 100%;
-  text-align: left;
-  /* Drop the fixed 22px field height and give the text more vertical breathing
-     room top and bottom. */
-  height: auto;
-  padding: 0.4rem 1.9rem 0.4rem 0.4rem; /* right: room for the copy icon */
+  /* Match the main picker's hex field: value centered on the field, with symmetric side
+     padding so the absolutely-positioned copy icon (right) doesn't shift the centering. */
+  text-align: center;
+  /* Same field height as the main picker's hex input (--custom-field-h, 22px); only the side
+     padding differs (room for the copy icon / reset button on the right). */
+  height: var(--custom-field-h, 22px);
+  padding: 0.15rem 1.9rem;
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
 }
@@ -1587,6 +1653,13 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   flex-shrink: 0;
   white-space: nowrap;
   user-select: none;
+}
+/* A user-set semantic name replaces the rank label but is shown IDENTICALLY to a default
+   rank label (same size, uppercase, letter-spacing, opacity from .palette-chip-rank) — only
+   ellipsized when too long, so it never pushes the hex out of the fixed-width column. */
+.palette-chip-rank--named {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Plain label — loading a color back into a picker happens via the dedicated
    eyedropper button, and the rest of the chip surface (label included) is the
