@@ -92,7 +92,7 @@
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "2.5.0",
+    "softwareVersion": "2.6.0",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -231,7 +231,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 2.5.0</span>
+    <span class="app-version">ver. 2.6.0</span>
     <div class="settings-wrap layout-wrap">
       <button class="theme-toggle" id="layout-btn" title="Layout Preview" aria-label="Preview the palette in a real layout, and generate an accessible tonal scale and light/dark theme">
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
@@ -410,6 +410,9 @@
         </div>
         <div class="custom-hex-wrap swatch-hex-wrap">
           <input type="text" class="custom-hex-input swatch-hex" id="swatch-hex" value="#808080" maxlength="9" spellcheck="false" autocomplete="off" aria-label="Text color hex">
+          <button type="button" class="hex-eyedropper" id="swatch-eyedropper" title="Pick a color from the screen" aria-label="Pick a color from the screen" hidden>
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="m15 5 4 4M8.5 15.5 15 9l-1.5-1.5-6.5 6.5v1.5H8.5ZM15 9l1.9-1.9a1.5 1.5 0 0 0 0-2.1l0 0a1.5 1.5 0 0 0-2.1 0L13 6.9"/></svg>
+          </button>
           <span class="custom-hex-copy-icon swatch-hex-copy" id="swatch-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
         </div>
       </div>
@@ -562,7 +565,8 @@
           <span class="apca-type-readout" id="apca-type-readout"></span>
         </div>
         <div class="contrast-lock-btns contrast-lock-side" id="contrast-lock-side" role="group" aria-label="Auto-adjusted side" hidden>
-          <button class="contrast-lock-btn active" data-lockside="darker" title="When two colors meet the target, make the auto-adjusted color the darker of the two">Darker</button>
+          <button class="contrast-lock-btn" data-lockside="darker" title="When two colors meet the target, make the auto-adjusted color the darker of the two">Darker</button>
+          <button class="contrast-lock-btn active" data-lockside="mid" title="When two colors meet the target, make the auto-adjusted color whichever of the two is nearer a mid-tone gray">Mid</button>
           <button class="contrast-lock-btn" data-lockside="lighter" title="When two colors meet the target, make the auto-adjusted color the lighter of the two">Lighter</button>
         </div>
         <span class="contrast-lock-error" id="contrast-lock-error" role="alert"></span>
@@ -670,6 +674,9 @@
         </div>
         <div class="custom-hex-wrap">
           <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="9" spellcheck="false" placeholder="#000000">
+          <button type="button" class="hex-eyedropper" id="custom-eyedropper" title="Pick a color from the screen" aria-label="Pick a color from the screen" hidden>
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="m15 5 4 4M8.5 15.5 15 9l-1.5-1.5-6.5 6.5v1.5H8.5ZM15 9l1.9-1.9a1.5 1.5 0 0 0 0-2.1l0 0a1.5 1.5 0 0 0-2.1 0L13 6.9"/></svg>
+          </button>
           <span class="custom-hex-copy-icon" id="custom-hex-copy-icon" title="Copy hex"></span>
         </div>
       </div>
@@ -878,6 +885,13 @@
       <p><strong>Is it free and private?</strong><br>
         Yes. It is completely free with no account and no sign-up, and it is private by design —
         everything runs locally in your browser with nothing uploaded.</p>
+      <h3>Disclaimer</h3>
+      <p>This tool is provided “as is”, without warranty of any kind, express or implied. No
+        guarantee is made as to the accuracy, reliability, or completeness of any contrast value,
+        verdict, generated color, or other output; results may contain errors and are not a
+        substitute for professional accessibility auditing or independent verification. To the
+        maximum extent permitted by law, the author accepts no liability for any loss or damage of
+        any kind arising from the use of, or reliance on, this tool. Use it at your own risk.</p>
     </div>
   </details>
 </section>
@@ -959,6 +973,10 @@
     <div class="custom-hex-wrap chip-editor-hexwrap">
       <input type="text" class="custom-hex-input chip-editor-hex" maxlength="9" spellcheck="false" placeholder="#000000">
       <span class="custom-hex-copy-icon chip-editor-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
+    </div>
+    <div class="custom-hex-wrap chip-editor-namewrap">
+      <input type="text" class="custom-hex-input chip-editor-name" maxlength="40" spellcheck="false" autocomplete="off" title="Semantic name used as the token/variable name on export (e.g. accent, brand). Reset to fall back to Primary / Secondary… by list position." aria-label="Color name for export">
+      <button type="button" class="chip-editor-name-reset" title="Reset to the default position-based name (Primary / Secondary…)" aria-label="Reset name to default">↺</button>
     </div>
     <div class="chip-editor-preview">
       <div class="chip-editor-tile">
