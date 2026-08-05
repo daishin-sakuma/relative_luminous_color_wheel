@@ -4401,6 +4401,45 @@ ${darkLines}
 `;
   }
 
+  if (format === 'shadcn') {
+    // shadcn/ui theme: the app's roles mapped to shadcn's fixed token names, emitted as the
+    // :root (light) + .dark blocks shadcn expects in globals.css. Values honour the colour-format
+    // toggle (hex or oklch — modern shadcn uses oklch). Drop-in: paste over the generated
+    // :root/.dark in a shadcn project (the @theme inline mapping there consumes these).
+    const on = hex => { const l = relativeLuminance(...hexToRgb(hex)); return contrastRatio(l, 1) >= contrastRatio(l, 0) ? '#ffffff' : '#000000'; };
+    const vars = t => [
+      ['background', t.bg.hex], ['foreground', t.text.hex],
+      ['card', t.surface.hex], ['card-foreground', t.text.hex],
+      ['popover', t.surface2.hex], ['popover-foreground', t.text.hex],
+      ['primary', t.accent.hex], ['primary-foreground', t.accentText.hex],
+      ['secondary', t.surface2.hex], ['secondary-foreground', t.text.hex],
+      ['muted', t.surface2.hex], ['muted-foreground', t.muted.hex],
+      ['accent', t.accentContainer.hex], ['accent-foreground', t.accentContainerText.hex],
+      ['destructive', t.danger.hex], ['destructive-foreground', on(t.danger.hex)],
+      ['border', t.border.hex], ['input', t.border.hex], ['ring', t.accent.hex],
+      // Five chart hues: the accent plus the four status colours.
+      ['chart-1', t.accent.hex], ['chart-2', t.info.hex], ['chart-3', t.success.hex],
+      ['chart-4', t.warning.hex], ['chart-5', t.danger.hex],
+      // Sidebar surface set (shadcn ≥ 0.9).
+      ['sidebar', t.surface.hex], ['sidebar-foreground', t.text.hex],
+      ['sidebar-primary', t.accent.hex], ['sidebar-primary-foreground', t.accentText.hex],
+      ['sidebar-accent', t.accentContainer.hex], ['sidebar-accent-foreground', t.accentContainerText.hex],
+      ['sidebar-border', t.border.hex], ['sidebar-ring', t.accent.hex],
+    ];
+    const lines = t => vars(t).map(([n, hex]) => `  --${n}: ${cval(hex)};`).join('\n');
+    return `/* shadcn/ui theme — from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app).
+   Paste over the :root / .dark blocks in your globals.css. */
+:root {
+  --radius: 0.625rem;
+${lines(light)}
+}
+
+.dark {
+${lines(dark)}
+}
+`;
+  }
+
   // JSON — W3C Design Tokens (DTCG), Format Module 2025.10 (first stable release). A color
   // $value is the spec's OBJECT form { colorSpace, components, hex }: spec-aware tools (Style
   // Dictionary, Tokens Studio, Terrazzo) read the components, while `hex` is the spec's own
@@ -4472,6 +4511,7 @@ ${darkLines}
 const SCALE_EXPORT_FILE = {
   css:      { name: 'scale.tokens.css',   mime: 'text/css' },
   tailwind: { name: 'scale.tailwind.css', mime: 'text/css' },
+  shadcn:   { name: 'shadcn-theme.css',   mime: 'text/css' },
   json:     { name: 'scale.tokens.json',  mime: 'application/design-tokens+json' },
 };
 function downloadScaleExport(format, colorFmt, scale, light, dark) {
@@ -4521,6 +4561,27 @@ function renderLayoutPreview() {
   layoutPreviewEl.appendChild(lpModeToggle());
   if (_lpMode === 'theme') renderThemeLayout();
   else renderPaletteLayout();
+}
+
+// Which face of the theme each preview shows: a marketing 'page', or a systematic
+// 'components' gallery (buttons / inputs / badges / table across default·hover·active·disabled).
+let _lpThemeView = 'page';
+
+function themeViewToggle() {
+  const wrap = lpEl('div', 'lp-modes lp-view-modes');
+  for (const [v, label] of [['page', 'Page'], ['components', 'Components']]) {
+    const btn = lpEl('button', 'lp-mode-btn' + (_lpThemeView === v ? ' active' : ''), label);
+    btn.type = 'button';
+    btn.addEventListener('click', () => { if (_lpThemeView !== v) { _lpThemeView = v; renderLayoutPreview(); } });
+    wrap.appendChild(btn);
+  }
+  return wrap;
+}
+
+// Dispatch to the current theme view. Both faces are driven entirely by `th`'s role colours, so
+// they stay consistent with the tokens the app exports.
+function buildThemeView(th, footerNote) {
+  return _lpThemeView === 'components' ? buildComponentGallery(th, footerNote) : buildThemeMock(th, footerNote);
 }
 
 // ── Contrast audit (shared by both Layout preview modes) ──────────────────────
@@ -4692,7 +4753,8 @@ function renderPaletteLayout() {
       'Showing the current picker pair. Pin colours — or save a theme from Scales — to preview your palette used by role here.'));
   }
 
-  layoutPreviewEl.appendChild(buildThemeMock(th, saved ? '© 2026 Aurora — your palette' : '© 2026 Aurora — live pair'));
+  layoutPreviewEl.appendChild(themeViewToggle());
+  layoutPreviewEl.appendChild(buildThemeView(th, saved ? '© 2026 Aurora — your palette' : '© 2026 Aurora — live pair'));
 
   // Coverage bar — EVERY saved colour, labelled by its NAME (or rank) + hex, so nothing the
   // palette holds is hidden even when it isn't one of the semantic roles the mock consumes.
@@ -4747,8 +4809,8 @@ function renderThemeLayout() {
     strip.appendChild(sw);
   });
   layoutPreviewEl.appendChild(strip);
-  // The full mock website dressed in each theme is the preview (supersedes the
-  // old compact theme cards).
+  // Page ⇄ Components view toggle, then each theme dressed in the chosen face.
+  layoutPreviewEl.appendChild(themeViewToggle());
   layoutPreviewEl.appendChild(themedScreen('Light', light));
   layoutPreviewEl.appendChild(themedScreen('Dark',  dark));
   // Full export as GLOBAL tokens, laid out like the sidebar palette export: a
@@ -4770,7 +4832,7 @@ function renderThemeLayout() {
   };
   const tabs = lpEl('div', 'palette-export-tabs'); // file-format group first, then colour group
   tabs.append(
-    seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']], _scaleExportFmt,
+    seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['shadcn', 'shadcn'], ['json', 'JSON']], _scaleExportFmt,
       v => { _scaleExportFmt = v; renderLayoutPreview(); }),
     seg([['oklch', 'OKLCH'], ['hex', 'HEX']], _scaleExportColorFmt,
       v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
@@ -4903,6 +4965,146 @@ function buildThemeMock(th, footerNote) {
   return screen;
 }
 
+// Component gallery — the same theme roles, but shown as a systematic set of real UI components
+// across default / hover / active / disabled, so the M3 roles (surfaces, accent + interaction
+// states, containers, status) are all demonstrated at a glance. Every colour is inline from `th`,
+// so it works for both the generated themes and a saved palette. Hover/active shades for fills
+// that carry no explicit token are derived with the SAME OKLab nudge the generator uses.
+function buildComponentGallery(th, footerNote) {
+  const C = hex => cvdTransformHex(hex);
+  const bg = th.bg.hex, surface = th.surface.hex, border = th.border.hex,
+        text = th.text.hex, muted = th.muted.hex, accent = th.accent.hex, accentFg = th.accentText.hex;
+  const surface2 = th.surface2 ? th.surface2.hex : surface;
+  const isDark = th.bg.lum < 0.5;
+  const shade = (hex, dL) => shiftLightness(hex, dL, isDark).hex; // pressed-ward OKLab nudge
+  const bestOn = hex => { const l = relativeLuminance(...hexToRgb(hex)); return contrastRatio(l, 1) >= contrastRatio(l, 0) ? '#ffffff' : '#000000'; };
+  const accHover  = th.accentHover  ? th.accentHover.hex  : shade(accent, 0.05);
+  const accActive = th.accentActive ? th.accentActive.hex : shade(accent, 0.10);
+  const accCont   = th.accentContainer ? th.accentContainer.hex : surface2;
+
+  const screen = lpEl('div', 'lp-screen lp-gallery');
+  screen.style.background = C(bg); screen.style.borderColor = C(border); screen.style.color = C(text);
+
+  const section = title => { const s = lpEl('div', 'lp-cg-sec'); s.appendChild(lpEl('div', 'lp-cg-h', title)); return s; };
+  // A filled/outlined "control" chip. o = {bg, fg, bd} (any omitted → not set).
+  const chip = (label, o, cls) => {
+    const n = lpEl('span', 'lp-cg-btn' + (cls ? ' ' + cls : ''), label);
+    if (o.bg) n.style.background = C(o.bg);
+    if (o.fg) n.style.color = C(o.fg);
+    if (o.bd) { n.style.borderColor = C(o.bd); n.style.borderStyle = 'solid'; }
+    return n;
+  };
+  const STATES = ['Default', 'Hover', 'Active', 'Disabled'];
+  // One variant row: four state cells built from a base fill.
+  const variantRow = (name, states) => {
+    const row = lpEl('div', 'lp-cg-row');
+    row.appendChild(lpEl('span', 'lp-cg-rowlabel', name));
+    STATES.forEach(st => {
+      const cell = lpEl('div', 'lp-cg-cell');
+      cell.appendChild(chip(st, states[st] || states.Default, st === 'Disabled' ? 'lp-cg-disabled' : ''));
+      row.appendChild(cell);
+    });
+    return row;
+  };
+
+  // ── Buttons ───────────────────────────────────────────────────────────────
+  const btns = section('Buttons');
+  const head = lpEl('div', 'lp-cg-row lp-cg-head');
+  head.appendChild(lpEl('span', 'lp-cg-rowlabel', ''));
+  STATES.forEach(s => { const h = lpEl('span', 'lp-cg-state', s); h.style.color = C(muted); head.appendChild(h); });
+  btns.appendChild(head);
+  const disabledCell = { bg: surface2, fg: muted, bd: border };
+  btns.appendChild(variantRow('Primary', {
+    Default: { bg: accent,    fg: accentFg },
+    Hover:   { bg: accHover,  fg: accentFg },
+    Active:  { bg: accActive, fg: accentFg },
+    Disabled: disabledCell,
+  }));
+  btns.appendChild(variantRow('Secondary', {
+    Default: { bg: surface2,          fg: text, bd: border },
+    Hover:   { bg: border,            fg: text, bd: border },
+    Active:  { bg: shade(border, 0.04), fg: text, bd: border },
+    Disabled: disabledCell,
+  }));
+  if (th.danger) {
+    const dng = th.danger.hex;
+    btns.appendChild(variantRow('Destructive', {
+      Default: { bg: dng,            fg: bestOn(dng) },
+      Hover:   { bg: shade(dng, 0.05), fg: bestOn(dng) },
+      Active:  { bg: shade(dng, 0.10), fg: bestOn(dng) },
+      Disabled: disabledCell,
+    }));
+  }
+  btns.appendChild(variantRow('Ghost', {
+    Default: { fg: themeLink(th).hex },
+    Hover:   { bg: accCont, fg: themeLink(th).hex },
+    Active:  { bg: shade(accCont, 0.04), fg: themeLink(th).hex },
+    Disabled: { fg: muted },
+  }));
+  screen.appendChild(btns);
+
+  // ── Inputs ────────────────────────────────────────────────────────────────
+  const inputs = section('Inputs');
+  const inRow = lpEl('div', 'lp-cg-inputs');
+  const field = (label, o) => {
+    const wrap = lpEl('div', 'lp-cg-field');
+    const lab = lpEl('div', 'lp-cg-flabel', label); lab.style.color = C(muted);
+    const box = lpEl('div', 'lp-cg-input');
+    box.style.background = C(o.bg); box.style.borderColor = C(o.bd); box.style.color = C(o.fg);
+    if (o.ring) box.style.boxShadow = '0 0 0 2px ' + C(o.ring);
+    box.textContent = o.text;
+    wrap.append(lab, box);
+    return wrap;
+  };
+  inRow.append(
+    field('Default', { bg: bg,       bd: border, fg: muted, text: 'you@example.com' }),
+    field('Focus',   { bg: bg,       bd: accent, fg: text,  text: 'you@example.com', ring: accent }),
+    field('Disabled',{ bg: surface2, bd: border, fg: muted, text: 'Disabled' }),
+  );
+  inputs.appendChild(inRow);
+  screen.appendChild(inputs);
+
+  // ── Badges (status containers + accent) ──────────────────────────────────
+  const badges = section('Badges');
+  const bwrap = lpEl('div', 'lp-cg-badges');
+  const badge = (label, o) => { const n = lpEl('span', 'lp-cg-badge', label); n.style.background = C(o.bg); n.style.color = C(o.fg); if (o.bd) n.style.borderColor = C(o.bd); return n; };
+  bwrap.appendChild(badge('Accent', { bg: accent, fg: accentFg }));
+  bwrap.appendChild(badge('Neutral', { bg: surface2, fg: muted, bd: border }));
+  [['success', 'Success'], ['warning', 'Warning'], ['danger', 'Danger'], ['info', 'Info']].forEach(([k, lab]) => {
+    const cont = th[k + 'Container'], on = th[k + 'OnContainer'];
+    if (cont && on) bwrap.appendChild(badge(lab, { bg: cont.hex, fg: on.hex }));
+  });
+  badges.appendChild(bwrap);
+  screen.appendChild(badges);
+
+  // ── Table ─────────────────────────────────────────────────────────────────
+  const tsec = section('Table');
+  const table = lpEl('div', 'lp-cg-table'); table.style.borderColor = C(border);
+  const thead = lpEl('div', 'lp-cg-tr lp-cg-thead'); thead.style.background = C(surface2); thead.style.borderColor = C(border);
+  ['Name', 'Role', 'Status'].forEach(h => { const c = lpEl('span', 'lp-cg-td', h); c.style.color = C(text); thead.appendChild(c); });
+  table.appendChild(thead);
+  const rows = [['Mira Chen', 'Owner', 'success', 'Active'], ['Sam Ito', 'Editor', 'warning', 'Pending'], ['Lee Park', 'Viewer', 'danger', 'Blocked']];
+  rows.forEach(([nm, role, k, stLab], i) => {
+    const tr = lpEl('div', 'lp-cg-tr'); tr.style.background = C(i % 2 ? surface : bg); tr.style.borderColor = C(border);
+    const c1 = lpEl('span', 'lp-cg-td', nm); c1.style.color = C(text);
+    const c2 = lpEl('span', 'lp-cg-td', role); c2.style.color = C(muted);
+    const c3 = lpEl('span', 'lp-cg-td');
+    const cont = th[k + 'Container'], on = th[k + 'OnContainer'];
+    if (cont && on) { const b = lpEl('span', 'lp-cg-badge', stLab); b.style.background = C(cont.hex); b.style.color = C(on.hex); c3.appendChild(b); }
+    else { c3.textContent = stLab; c3.style.color = C(th[k] ? th[k].hex : text); }
+    tr.append(c1, c2, c3);
+    table.appendChild(tr);
+  });
+  tsec.appendChild(table);
+  screen.appendChild(tsec);
+
+  const footer = lpEl('div', 'lp-footer'); footer.style.background = C(surface); footer.style.borderTop = '1px solid ' + C(border);
+  const ftag = lpEl('div', 'lp-footer-tag', footerNote || '© 2026 Aurora'); ftag.style.color = C(muted);
+  footer.appendChild(ftag);
+  screen.appendChild(footer);
+  return screen;
+}
+
 function themedScreen(name, th) {
   const block = lpEl('div', 'lp-theme-block');
   const head = lpEl('div', 'lp-theme-head');
@@ -4948,7 +5150,7 @@ function themedScreen(name, th) {
   head.appendChild(saveBtn);
   block.appendChild(head);
 
-  const screen = buildThemeMock(th, '© 2026 Aurora — ' + name.toLowerCase() + ' theme');
+  const screen = buildThemeView(th, '© 2026 Aurora — ' + name.toLowerCase() + ' theme');
   block.appendChild(screen);
   block.appendChild(buildThemeChecklist(th)); // contrast audit for this theme
   return block;

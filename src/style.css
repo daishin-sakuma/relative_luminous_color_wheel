@@ -2093,6 +2093,30 @@ body.about-modal-open { overflow: hidden; }
 .lp-states { display: flex; gap: 0.3rem; margin-top: 0.5rem; }
 .lp-state-chip { font-size: 0.56rem; font-weight: 600; padding: 0.22rem 0.5rem; border-radius: 4px; letter-spacing: 0.02em; }
 
+/* ── Component gallery (Layout preview → Components view) ────────────────────── */
+.lp-view-modes { margin: 0.5rem 0 0.2rem; }
+.lp-gallery { padding: 0.2rem 0 0; }
+.lp-cg-sec { padding: 0.7rem 0.85rem; border-top: 1px solid rgba(128,128,128,0.14); }
+.lp-cg-sec:first-child { border-top: 0; }
+.lp-cg-h { font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.6; margin-bottom: 0.5rem; }
+.lp-cg-row { display: grid; grid-template-columns: 4.6rem repeat(4, 1fr); gap: 0.3rem; align-items: center; margin-bottom: 0.32rem; }
+.lp-cg-head { margin-bottom: 0.4rem; }
+.lp-cg-rowlabel { font-size: 0.6rem; font-weight: 600; }
+.lp-cg-state { font-size: 0.5rem; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.75; text-align: center; }
+.lp-cg-cell { display: flex; justify-content: center; }
+.lp-cg-btn { display: inline-block; border: 1px solid transparent; border-radius: 5px; padding: 0.26rem 0.5rem; font-size: 0.6rem; font-weight: 600; white-space: nowrap; }
+.lp-cg-disabled { opacity: 0.6; }
+.lp-cg-inputs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+.lp-cg-flabel { font-size: 0.52rem; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.22rem; }
+.lp-cg-input { border: 1px solid; border-radius: 5px; padding: 0.34rem 0.45rem; font-size: 0.6rem; }
+.lp-cg-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.lp-cg-badge { border: 1px solid transparent; border-radius: 999px; padding: 0.16rem 0.5rem; font-size: 0.56rem; font-weight: 600; }
+.lp-cg-table { border: 1px solid; border-radius: 6px; overflow: hidden; }
+.lp-cg-tr { display: grid; grid-template-columns: 1.4fr 1fr 1fr; border-top: 1px solid; }
+.lp-cg-tr:first-child { border-top: 0; }
+.lp-cg-thead { font-weight: 700; }
+.lp-cg-td { padding: 0.34rem 0.5rem; font-size: 0.6rem; display: flex; align-items: center; }
+
 /* ── Contrast audit panel (below each Layout preview) ─────────────────────────
    Verdict tokens carry the meaning (AA / AAA / 3:1 / ✗ / Lc n); colour only
    reinforces, so the audit reads under colour-vision deficiency too. */
