@@ -1654,10 +1654,12 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   white-space: nowrap;
   user-select: none;
 }
-/* A user-set semantic name replaces the rank label but is shown IDENTICALLY to a default
-   rank label (same size, uppercase, letter-spacing, opacity from .palette-chip-rank) — only
-   ellipsized when too long, so it never pushes the hex out of the fixed-width column. */
+/* A user-set semantic name replaces the rank label. Unlike the default rank (which is
+   force-uppercased), a custom name is shown in its ORIGINAL case — so 'on-accent' stays
+   lowercase and 'MyBrand' keeps its capitals — because case can be meaningful in a token
+   name. It's only ellipsized when too long, so it never pushes the hex out of the column. */
 .palette-chip-rank--named {
+  text-transform: none;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -2081,6 +2083,15 @@ body.about-modal-open { overflow: hidden; }
 .lp-theme-card-body { font-size: 0.6rem; line-height: 1.35; }
 .lp-theme-card-link { font-size: 0.6rem; font-weight: 600; margin-top: auto; text-decoration: underline; text-underline-offset: 2px; }
 .lp-hint { font-size: 0.7rem; line-height: 1.45; color: var(--muted); }
+/* Status messages — success/warning/danger/info used as foreground on a surface panel. */
+.lp-alerts { margin: 0 0.85rem 0.2rem; border: 1px solid; border-radius: 6px; padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.lp-alert { display: flex; align-items: flex-start; gap: 0.4rem; font-size: 0.64rem; line-height: 1.35; }
+.lp-alert-filled { padding: 0.35rem 0.5rem; border-radius: 5px; }
+.lp-alert-icon { flex: 0 0 auto; font-weight: 700; }
+.lp-alert-text { flex: 1 1 auto; }
+/* Interaction-state swatch trio (accent default / hover / active). */
+.lp-states { display: flex; gap: 0.3rem; margin-top: 0.5rem; }
+.lp-state-chip { font-size: 0.56rem; font-weight: 600; padding: 0.22rem 0.5rem; border-radius: 4px; letter-spacing: 0.02em; }
 
 /* ── Contrast audit panel (below each Layout preview) ─────────────────────────
    Verdict tokens carry the meaning (AA / AAA / 3:1 / ✗ / Lc n); colour only
@@ -2191,6 +2202,9 @@ body.about-modal-open { overflow: hidden; }
 
 /* Brand palette (coverage guarantee), styled as a footer palette bar */
 .lp-palette { display: flex; gap: 0.9rem; padding-top: 0.7rem; border-top: 1px solid rgba(128,128,128,0.15); }
+/* Coverage bar shown standalone below the palette mock (not inside the mock footer). */
+.lp-palette-standalone { margin-top: 0.7rem; padding: 0.7rem 0.2rem 0; }
+.lp-palette-standalone .lp-pal-label { color: var(--muted); }
 .lp-pal-group { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .lp-pal-label { font-size: 0.55rem; letter-spacing: 0.09em; text-transform: uppercase; }
 .lp-pal-swatches { display: flex; flex-wrap: wrap; gap: 0.25rem; }
