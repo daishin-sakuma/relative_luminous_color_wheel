@@ -143,7 +143,11 @@ function findLightness(h, s, target) {
     const [r, g, b] = hslToRgb(h, s, mid);
     if (wheelLum(r, g, b) < target) lo = mid; else hi = mid;
   }
-  return (lo + hi) * 0.5;
+  // Return hi, not the (lo,hi] midpoint: the loop keeps lumAt(lo) < target ≤ lumAt(hi), so hi is
+  // the smallest lightness whose QUANTIZED colour reaches the target — for a colour fed back as
+  // (H, S, its own luminance) that lands exactly on its own step. The midpoint straddles the step
+  // boundary and quantizes to either side unpredictably, shifting ~50% of inputs by one 8-bit step.
+  return hi;
 }
 
 /**
@@ -173,7 +177,7 @@ function findLightnessBiased(h, s, target, dir, alpha, overRgb) {
   let l;
   if (tgt >= lumAt(1)) l = 1;
   else if (tgt <= lumAt(0)) l = 0;
-  else { let lo = 0, hi = 1; for (let i = 0; i < 22; i++) { const m = (lo + hi) * 0.5; if (lumAt(m) < tgt) lo = m; else hi = m; } l = (lo + hi) * 0.5; }
+  else { let lo = 0, hi = 1; for (let i = 0; i < 22; i++) { const m = (lo + hi) * 0.5; if (lumAt(m) < tgt) lo = m; else hi = m; } l = hi; } // hi is the ≥tgt side (not the step-straddling midpoint) — see findLightness
   if (!dir) return l;
   // Nudge so the QUANTIZED (composited) luminance is on the dir side of the target — 8-bit
   // rounding otherwise scatters it with a hue-dependent sign, dipping the contrast.
@@ -267,6 +271,11 @@ function grayForYs(ys) { return Math.pow(Math.max(0, Math.min(1, ys)), 1 / 2.4) 
 // the search start when re-solving the target on a mode switch so the contrast floor stays put.
 function relLumToYs(L) { const g = grayForRelLum(L) / 255; return Math.pow(Math.max(0, Math.min(1, g)), 2.4); }
 function ysToRelLum(ys) { const n = grayForYs(ys) / 255; return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); }
+// A held anchor (targetLum / cuLum) is stored in the ACTIVE metric — APCA Ys in APCA mode, else
+// relative luminance. Persistence and share URLs carry no metric tag and always restore in WCAG
+// mode, so normalise to relative luminance on write; otherwise a value saved in APCA mode is
+// mis-read as relative luminance on reload and the restored colour drifts darker.
+function relLumOf(anchor) { return contrastLockMode === 'apca' ? ysToRelLum(anchor) : anchor; }
 function compositeYs(fgYs, a, bgYs) { // composited APCA screen luminance (gray-space)
   if (a >= 0.9995) return fgYs;
   const g = grayForYs(fgYs) * a + grayForYs(bgYs) * (1 - a);
@@ -682,7 +691,7 @@ void main() {
     if (lum(hsl(h, sat, mid)) < uLum) lo = mid; else hi = mid;
   }
 
-  vec3  color = hsl(h, sat, (lo + hi) * 0.5);
+  vec3  color = hsl(h, sat, hi); // hi = ≥uLum side; matches findLightness so the wheel pixel and the JS swatch agree (no 1-step split)
   
   // Apply CVD Simulation in linear space if active
   if (uCvdActive > 0.5) {
@@ -1141,8 +1150,11 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
     }
   }
 
-  // lum(#5dde8a) ≈ 0.586 (bright green),  lum(#1a7a42) ≈ 0.057 (dark green)
-  const LUM_BRIGHT = 0.586, LUM_DARK = 0.057;
+  // Derive the pass-badge greens' luminances straight from their hexes — single source of truth,
+  // so the AA (4.5:1) boundary below is exact. (Hard-coded values had drifted: the dark green's
+  // was 0.057 vs the true 0.145, over-crediting its contrast and letting it fail AA on mid-lum bg.)
+  const LUM_BRIGHT = relativeLuminance(...hexToRgb('#5dde8a')); // bright green ≈ 0.564
+  const LUM_DARK   = relativeLuminance(...hexToRgb('#1a7a42')); // dark green   ≈ 0.145
   const cr = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   const crBright = cr(bgLum, LUM_BRIGHT);
   const crDark   = cr(bgLum, LUM_DARK);
@@ -1667,7 +1679,7 @@ function applyLockAdjustment(changed, desired) {
     targetLum = desired;
     lumSlider.value = String(Math.round(targetLum * 1000));
     if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-    saveToStorage('sel-lum', String(targetLum));
+    saveToStorage('sel-lum', String(relLumOf(targetLum)));
     scheduleRender(true);
   }
 }
@@ -1811,7 +1823,7 @@ function applyLockAlpha(changed, desired) {
     targetLum = desired;
     lumSlider.value = String(Math.round(targetLum * 1000));
     if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-    saveToStorage('sel-lum', String(targetLum));
+    saveToStorage('sel-lum', String(relLumOf(targetLum)));
   }
 }
 
@@ -2093,7 +2105,7 @@ function syncCustomControls() {
     customColorSaved = { r: cR, g: cG, b: cB };
     saveToStorage('custom-color-rgb', JSON.stringify(customColorSaved));
     if (customMode === 'lum') {
-      customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
+      customLumSaved = { lum: relLumOf(cuLum), hue: cuHue, sat: cuSat };
       saveToStorage('custom-lum-v', JSON.stringify(customLumSaved));
     }
   }
@@ -2272,7 +2284,7 @@ lumSlider.addEventListener('input', () => {
   targetLum = lumSlider.value / 1000;
   if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
   scheduleRender(true);
-  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-lum', String(relLumOf(targetLum)));
 });
 
 hueSlider.addEventListener('input', () => {
@@ -2407,7 +2419,7 @@ wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
   targetLum = v;
   lumSlider.value = String(Math.round(v * 1000));
   scheduleRender(true);
-  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-lum', String(relLumOf(targetLum)));
 });
 
 wireValInput(hueValEl, 0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°', v => {
@@ -2603,7 +2615,7 @@ function applyMainHex(r, g, b, a = 1) {
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
   updateMarkerPosition();
   scheduleRender(true);
-  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-lum', String(relLumOf(targetLum)));
   saveToStorage('sel-hue', String(selHue));
   saveToStorage('sel-sat', String(selSat));
 }
@@ -2988,7 +3000,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
       }
       lumSlider.value = String(Math.round(targetLum * 1000));
       if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-      saveToStorage('sel-lum', String(targetLum));
+      saveToStorage('sel-lum', String(relLumOf(targetLum)));
       // Everything below is cached against the old definition
       _cwLumCache = null;
       _lumTrackKey = '';
@@ -3414,13 +3426,13 @@ function buildShareUrl() {
   if (shareState) {
     p.set('h', String(Math.round(selHue)));
     p.set('s', String(Math.round(selSat * 100)));
-    p.set('l', String(Math.round(targetLum * 1000)));
+    p.set('l', String(Math.round(relLumOf(targetLum) * 1000)));
     p.set('c', toHex(cR, cG, cB).slice(1).toLowerCase());
     p.set('m', customMode);
     if (selAlpha < 0.9995) p.set('a',  String(Math.round(selAlpha * 100)));
     if (cAlpha   < 0.9995) p.set('ca', String(Math.round(cAlpha * 100)));
     if (customMode === 'lum') {
-      p.set('cl', String(Math.round(cuLum * 1000)));
+      p.set('cl', String(Math.round(relLumOf(cuLum) * 1000)));
       p.set('ch', String(Math.round(cuHue)));
       p.set('cs', String(Math.round(cuSat * 100)));
     }
@@ -4947,8 +4959,10 @@ function themedScreen(name, th) {
 // governed by the "Color in share link" preference). The section is hidden
 // while empty so it never affects the height-fitted layouts.
 
-// Per role: all ten get Latin-ordinal names (primary … denary), which is also
-// the storage cap.
+// Max colours stored per role (fg / bg). Sized to hold a whole saved theme's role set
+// (surfaces + text + accent(+container) + the four status colours with containers) with room
+// to spare. The first ten positions get Latin-ordinal names (primary … denary, PALETTE_RANKS);
+// beyond that a plain ordinal (11, 12, …) is used, and any colour with a user name shows that.
 const PALETTE_ROLE_MAX = 24;
 /** @type {{hex: string, role: 'fg'|'bg'}[]} hex is lowercase '#rrggbb'; role
     records which picker the color was pinned from (fg = wheel, bg = custom)
@@ -5608,7 +5622,7 @@ function duplicateInPalette(index) {
     if (!src) return;
     if (palette.filter(e => e.role === src.role).length >= PALETTE_ROLE_MAX) return;
     recordPaletteHistory();
-    palette.splice(index + 1, 0, { hex: src.hex, role: src.role });
+    palette.splice(index + 1, 0, { ...src }); // carry the semantic name too (export dedups collisions)
     savePalette();
     renderPalette();
   };
@@ -7087,7 +7101,7 @@ updatePaletteHistoryButtons(); // start with both disabled (empty history)
 // Restore: localStorage first, then share-URL override.
 // Legacy entries (plain hex strings / unprefixed URL tokens) predate the
 // fg/bg distinction; they were always edited in the custom picker, so 'bg'.
-// Cap at four entries per role (legacy palettes could hold more).
+// Cap each role at PALETTE_ROLE_MAX entries (older palettes could hold a different count).
 function capPaletteRoles(list) {
   const kept = [], count = { fg: 0, bg: 0 };
   for (const e of list) {
