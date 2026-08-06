@@ -4177,7 +4177,8 @@ let _closeLayoutPopper = null;
 }
 
 // ─── Scale & theme generator (v2 beta) ────────────────────────────────────────
-// From the current colour, generate a luminance-keyed tonal scale (50–950) and
+// From the current colour, generate a tonal scale (50–950) stepped evenly in OKLab
+// perceptual lightness (not in WCAG relative luminance) and
 // derive light + dark semantic themes whose text/muted/accent contrasts are
 // guaranteed by construction: each step is solved to a target WCAG relative
 // luminance, so pair contrasts are KNOWN (not audited afterwards). Reuses the
@@ -4388,6 +4389,17 @@ function accentRoles(scale, accIdx, dark) {
 // through as an 8-digit hex / rgba / oklch(… / 0.333) and a DTCG $value with an `alpha` field.
 const SCRIM = { step: null, hex: '#00000055', lum: 0 };
 
+// Pick the accent's scale index: keep the preferred vivid mid step, but if it collides with the
+// text or muted step (so the accent fill would be the SAME colour as body / secondary text — a
+// WCAG 1.4.1 affordance failure and visually confusing), fall back to the nearest saturated step
+// that's distinct. muted is left at its contrast-optimal pick; only the (semantically flexible)
+// accent moves. `avoid` are the step numbers already taken by text/muted.
+function chooseAccentIdx(scale, preferred, candidates, avoid) {
+  for (const i of [preferred, ...candidates])
+    if (i >= 0 && i < scale.length && !avoid.includes(scale[i].step)) return i;
+  return preferred; // scale exhausted (won't happen for 11 steps) — keep preferred
+}
+
 function deriveTheme(scale, dark) {
   // Body & muted text are picked against SURFACE, not bg. Surface is always the
   // harder of the two backgrounds (one step in from bg toward the text), so
@@ -4396,25 +4408,29 @@ function deriveTheme(scale, dark) {
   if (!dark) {
     const bg = { step: null, hex: '#ffffff', lum: 1 };
     const surface = scale[0];                                // 50  — cards / panels
-    const acc = accentPair(scale, 6);                        // step 600 — distinct from muted/text
+    const text  = pickByContrast(scale, surface.lum, 7,   false); // lightest dark step ≥ AAA on surface & bg
+    const muted = pickByContrast(scale, surface.lum, 4.5, false); // …≥ AA on surface & bg
+    const accIdx = chooseAccentIdx(scale, 6, [7, 5, 8, 4], [text.step, muted.step]); // vivid mid, distinct from text/muted
+    const acc = accentPair(scale, accIdx);
     return {
       dark: false, bg, surface, surface2: scale[1], border: scale[2], scrim: SCRIM, // surface-2 (100): nested / elevated
-      text:  pickByContrast(scale, surface.lum, 7,   false), // lightest dark step ≥ AAA on surface & bg
-      muted: pickByContrast(scale, surface.lum, 4.5, false), // …≥ AA on surface & bg
+      text, muted,
       accent: acc.accent, accentText: acc.accentText,
-      ...accentRoles(scale, 6, false),
+      ...accentRoles(scale, accIdx, false),
       ...stateRoles(false),
     };
   }
   const bg = scale[scale.length - 1];                        // 950
   const surface = scale[scale.length - 2];                   // 900 — cards / panels
-  const acc = accentPair(scale, 3);                          // step 300 — a bright fill distinct from muted/text
+  const text  = scale[1];                                    // 100 — clears AAA on bg & surface
+  const muted = pickByContrast(scale, surface.lum, 4.5, true); // ≥ AA on surface (the harder bg)
+  const accIdx = chooseAccentIdx(scale, 3, [2, 4, 1, 5], [text.step, muted.step]); // bright, distinct from text/muted
+  const acc = accentPair(scale, accIdx);
   return {
     dark: true, bg, surface, surface2: scale[scale.length - 3], border: scale[scale.length - 4], scrim: SCRIM, // surface-2 (800), border (700)
-    text:  scale[1],                                         // 100 — clears AAA on bg & surface
-    muted: pickByContrast(scale, surface.lum, 4.5, true),    // ≥ AA on surface (the harder bg)
+    text, muted,
     accent: acc.accent, accentText: acc.accentText,
-    ...accentRoles(scale, 3, true),
+    ...accentRoles(scale, accIdx, true),
     ...stateRoles(true),
   };
 }
@@ -4453,7 +4469,7 @@ const SCALE_SEM_ROLES = [
   ['info', 'info'],       ['info-container', 'infoContainer'],       ['info-container-foreground', 'infoOnContainer'],
 ];
 
-/** Full Scale export as GLOBAL (primitive) tokens — the luminance-keyed tonal
+/** Full Scale export as GLOBAL (primitive) tokens — the OKLab-lightness tonal
  *  scale 50–950 — plus the light/dark semantic themes as tokens that REFERENCE
  *  those globals (var() in CSS/Tailwind, DTCG aliases in JSON). This is distinct
  *  from the palette export, which is purely semantic role tokens.
@@ -4546,9 +4562,9 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
     const baseGlobals = [...baseUsed.entries()].sort((a, b) => a[0] < b[0] ? 1 : -1) // white → black
       .map(([hex, name]) => `  --color-${name}: ${gval(hex)};  /* ${alt(hex)} */`).join('\n');
     const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
-    return `/* Global tokens — base white/black + the luminance-keyed tonal scale (50–950),
-   primitives. The semantic themes below reference ONLY these, so re-theming is swapping
-   aliases. From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
+    return `/* Global tokens — base white/black + a tonal scale (50–950) stepped evenly in OKLab
+   perceptual lightness (not in WCAG relative luminance), primitives. The light/dark semantic
+   themes below reference ONLY these. From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
 :root {
 ${baseGlobals ? baseGlobals + '\n' : ''}${globals}
 }
@@ -4679,20 +4695,21 @@ ${lines(dark)}
     $description: `Global primitive tokens (color.scale.* tonal ramp and color.base.* colour-descriptive primitives) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
-      $description: 'Primitive colors, described by colour only (no role, no theme): the luminance-keyed tonal scale (50–950) plus off-scale primitives named by colour family + tone (e.g. green-700, blue-300) and white/black. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      $description: 'Primitive colors, described by colour only (no role, no theme): a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end — plus off-scale primitives named by colour family + tone (e.g. green-700, blue-300) and white/black. With the Text/BG (gradient) source the ramp also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
       base:  baseGroup,
       scale: scaleGroup,
     },
     theme: {
       $type: 'color',
-      $description: 'Semantic role tokens; every value is an alias to a color.scale or color.base primitive, so re-theming means swapping references, never editing colors here.',
+      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role sets sharing the same primitives — select one at build time (or via the 2025.10 sets/resolutionOrder mechanism).',
       light: lightGroup,
       dark:  darkGroup,
     },
     $extensions: {
       [NS]: {
+        // Ordered list of the scale's step names (a convenience index; the per-token relative
+        // luminance lives on each color.scale.* token's own $extensions — not duplicated here).
         scaleSteps: scale.map(c => c.step),
-        scaleLuminances: scale.map(c => +c.lum.toFixed(4)),
       },
     },
   };
