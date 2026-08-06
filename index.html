@@ -92,7 +92,7 @@
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "2.3.0-beta.2",
+    "softwareVersion": "2.3.0-beta.3",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -224,6 +224,8 @@
 
 <div id="app-wrapper">
 
+<!-- Screen-reader live region: announces the main pair's contrast/verdict as colours change. -->
+<div id="a11y-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
 
 
@@ -231,7 +233,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 2.3.0-beta.2</span>
+    <span class="app-version">ver. 2.3.0-beta.3</span>
     <div class="settings-wrap layout-wrap">
       <button class="theme-toggle" id="layout-btn" title="Layout Preview" aria-label="Preview the palette in a real layout, and generate an accessible tonal scale and light/dark theme">
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
@@ -411,7 +413,7 @@
         <div class="custom-hex-wrap swatch-hex-wrap">
           <input type="text" class="custom-hex-input swatch-hex" id="swatch-hex" value="#808080" maxlength="9" spellcheck="false" autocomplete="off" aria-label="Text color hex">
           <button type="button" class="hex-eyedropper" id="swatch-eyedropper" title="Pick a color from the screen" aria-label="Pick a color from the screen" hidden>
-            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="m15 5 4 4M8.5 15.5 15 9l-1.5-1.5-6.5 6.5v1.5H8.5ZM15 9l1.9-1.9a1.5 1.5 0 0 0 0-2.1l0 0a1.5 1.5 0 0 0-2.1 0L13 6.9"/></svg>
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m15 5 4 4M8.5 15.5 15 9l-1.5-1.5-6.5 6.5v1.5H8.5ZM15 9l1.9-1.9a1.5 1.5 0 0 0 0-2.1l0 0a1.5 1.5 0 0 0-2.1 0L13 6.9"/></svg>
           </button>
           <span class="custom-hex-copy-icon swatch-hex-copy" id="swatch-hex-copy" title="Copy hex" aria-label="Copy hex" role="button"></span>
         </div>
@@ -419,19 +421,19 @@
       <div class="data-grid">
         <div class="data-cell">
           <div class="cell-label">Hex</div>
-          <div class="cell-value copyable" id="v-hex">#808080</div>
+          <div class="cell-value copyable" id="v-hex" role="button" tabindex="0" aria-label="Copy hex value">#808080</div>
         </div>
         <div class="data-cell">
           <div class="cell-label">Luminance</div>
-          <div class="cell-value copyable" id="v-lum">0.2158</div>
+          <div class="cell-value copyable" id="v-lum" role="button" tabindex="0" aria-label="Copy luminance value">0.2158</div>
         </div>
         <div class="data-cell full">
           <div class="cell-label">HSL</div>
-          <div class="cell-value copyable" id="v-hsl"><span class="cv cv-hue" id="vh-h">0°</span><span class="cv cv-pct" id="vh-s">0%</span><span class="cv cv-pct" id="vh-l">50%</span></div>
+          <div class="cell-value copyable" id="v-hsl" role="button" tabindex="0" aria-label="Copy HSL value"><span class="cv cv-hue" id="vh-h">0°</span><span class="cv cv-pct" id="vh-s">0%</span><span class="cv cv-pct" id="vh-l">50%</span></div>
         </div>
         <div class="data-cell full">
           <div class="cell-label">RGBA</div>
-          <div class="cell-value copyable" id="v-rgb"><span class="cv cv-byte" id="vr-r">128</span><span class="cv cv-byte" id="vr-g">128</span><span class="cv cv-byte" id="vr-b">128</span><span class="cv cv-pct" id="vr-a">100%</span></div>
+          <div class="cell-value copyable" id="v-rgb" role="button" tabindex="0" aria-label="Copy RGBA value"><span class="cv cv-byte" id="vr-r">128</span><span class="cv cv-byte" id="vr-g">128</span><span class="cv cv-byte" id="vr-b">128</span><span class="cv cv-pct" id="vr-a">100%</span></div>
         </div>
       </div>
     </div>
@@ -675,7 +677,7 @@
         <div class="custom-hex-wrap">
           <input type="text" id="custom-hex-input" class="custom-hex-input" value="#66001B" maxlength="9" spellcheck="false" placeholder="#000000">
           <button type="button" class="hex-eyedropper" id="custom-eyedropper" title="Pick a color from the screen" aria-label="Pick a color from the screen" hidden>
-            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="m15 5 4 4M8.5 15.5 15 9l-1.5-1.5-6.5 6.5v1.5H8.5ZM15 9l1.9-1.9a1.5 1.5 0 0 0 0-2.1l0 0a1.5 1.5 0 0 0-2.1 0L13 6.9"/></svg>
+            <svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m15 5 4 4M8.5 15.5 15 9l-1.5-1.5-6.5 6.5v1.5H8.5ZM15 9l1.9-1.9a1.5 1.5 0 0 0 0-2.1l0 0a1.5 1.5 0 0 0-2.1 0L13 6.9"/></svg>
           </button>
           <span class="custom-hex-copy-icon" id="custom-hex-copy-icon" title="Copy hex"></span>
         </div>
@@ -928,10 +930,10 @@
     <button class="palette-clear" id="palette-clear">Clear all</button>
     <div class="palette-history">
       <button type="button" class="theme-toggle palette-history-btn" id="palette-undo" title="Undo" aria-label="Undo palette change">
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3"/></svg>
       </button>
       <button type="button" class="theme-toggle palette-history-btn" id="palette-redo" title="Redo" aria-label="Redo palette change">
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 15 21 9m0 0-6-6M21 9H9a6 6 0 0 0 0 12h3"/></svg>
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 15 21 9m0 0-6-6M21 9H9a6 6 0 0 0 0 12h3"/></svg>
       </button>
     </div>
   </div>

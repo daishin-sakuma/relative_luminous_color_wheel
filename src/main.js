@@ -28,7 +28,13 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
   const constrain = cyclic
     ? v => ((Math.round(v) % (max + 1)) + (max + 1)) % (max + 1)
     : v => Math.max(min, Math.min(max, v));
-  const apply = v => { const c = constrain(v); input.value = format(c); applyState(c); };
+  // Canonicalize a TYPED / stepped value to the field's displayed resolution before it becomes
+  // state: store exactly what's shown (parse∘format), so the number you see is the number the app
+  // uses — no hidden sub-display precision that would make the slider snap on the next touch.
+  // Integer fields round-trip losslessly (unchanged); only fractional fields (e.g. luminance,
+  // toFixed(3)) are affected. This is the field-as-INPUT path only; the readout path (updateUI
+  // writing input.value from state set by the wheel/hex) keeps the state's full precision.
+  const apply = v => { const c = constrain(v); const shown = format(c); input.value = shown; applyState(parse(shown)); };
   const commit = () => { const v = parse(input.value); apply(isFinite(v) ? v : min); };
   input.addEventListener('focus', () => input.select());
   input.addEventListener('blur', commit);
@@ -39,6 +45,96 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
       apply((isFinite(cur) ? cur : 0) + (e.key === 'ArrowUp' ? step : -step));
     } else if (e.key === 'Enter') { commit(); input.blur(); }
   });
+}
+
+// ─── Keyboard: Shift+Arrow = 10× step on any range slider ─────────────────────
+// Native <input type=range> already scrubs on pointer drag and moves by `step` on a bare Arrow.
+// This adds the coarse increment: Shift+Arrow moves by 10× the minimum unit. Delegated at the
+// document (capture) so it also covers sliders created on demand — the chip editor — and so the
+// preventDefault beats the browser's native single-step. Arrow-without-Shift is left to the
+// browser (its native `step`), and pointer scrubbing is native, so all three interactions work
+// on every slider in the app: the wheel's Lum/Hue/Sat/Opacity, the custom-bg and chip-editor
+// RGB/HSL/Lum/Gray/alpha channels, and the Preferences appearance sliders.
+document.addEventListener('keydown', e => {
+  const el = /** @type {HTMLInputElement} */ (e.target);
+  if (!e.shiftKey || !(el instanceof HTMLInputElement) || el.type !== 'range') return;
+  const dir = (e.key === 'ArrowUp' || e.key === 'ArrowRight') ? 1
+            : (e.key === 'ArrowDown' || e.key === 'ArrowLeft') ? -1 : 0;
+  if (!dir) return;
+  e.preventDefault();
+  const step = parseFloat(el.step) || 1;
+  const lo = el.min === '' ? 0 : parseFloat(el.min);
+  const hi = el.max === '' ? 100 : parseFloat(el.max);
+  const cur = parseFloat(el.value) || 0;
+  const next = Math.max(lo, Math.min(hi, cur + dir * step * 10));
+  if (next !== cur) {
+    el.value = String(next);
+    el.dispatchEvent(new Event('input',  { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}, true);
+
+// ─── Screen-reader labels for sliders (aria-label + live aria-valuetext) ──────
+// A range input announces only a bare number by default. Give every slider a NAME and a
+// HUMAN value (luminance 0–1, degrees, %, 0–255, % opacity) that updates on each input, so a
+// screen reader speaks e.g. "Target relative luminance, 0.558" instead of "slider, 558". The
+// context (main colour / background / page underlay / chip-editor colour) comes from the id,
+// data-uch / data-ch attribute, or class; keyed off those so it also covers the sliders the
+// chip editor builds on demand (handled by the delegated input/focusin listeners below).
+function _sliderAria(el) {
+  const id = el.id || '', uch = el.dataset.uch, ch = el.dataset.ch, cls = el.className || '';
+  const v = +el.value;
+  const deg = v + '°', pct = v + '%', byte = String(v), lum = (v / 1000).toFixed(3), op = v + '% opacity';
+  if (/custom-alpha-slider/.test(cls)) return { label: 'Background opacity', vt: op };
+  if (/ce-alpha-range/.test(cls))      return { label: 'Color opacity', vt: op };
+  if (id === 'lum-slider')          return { label: 'Target relative luminance', vt: lum };
+  if (id === 'hue-slider')          return { label: 'Hue', vt: deg };
+  if (id === 'sat-slider')          return { label: 'Saturation', vt: pct };
+  if (id === 'alpha-slider')        return { label: 'Opacity', vt: op };
+  if (id === 'ui-hue-slider')        return { label: 'Interface hue', vt: null };
+  if (id === 'ui-sat-slider')        return { label: 'Interface saturation', vt: null };
+  if (id === 'ui-brightness-slider') return { label: 'Interface brightness', vt: null };
+  // Channel sliders: resolve a context prefix + the channel's name and formatter.
+  let ctx = '', key = '';
+  if (uch != null)      { ctx = 'Page underlay '; key = uch; }
+  else if (ch != null)  { ctx = 'Color ';         key = ch;  }
+  else if (/^cu?-/.test(id)) { ctx = 'Background '; key = id.replace(/^cu?-/, '').replace('-slider', ''); }
+  else return { label: el.getAttribute('aria-label') || 'Slider', vt: null };
+  const M = {
+    r: ['red', byte], g: ['green', byte], b: ['blue', byte], gray: ['gray', byte],
+    h: ['hue', deg], hue: ['hue', deg], uhue: ['hue', deg], chue: ['hue', deg],
+    s: ['saturation', pct], sat: ['saturation', pct], usat: ['saturation', pct], csat: ['saturation', pct],
+    l: ['lightness', pct],
+    lum: ['luminance', lum], ulum: ['luminance', lum], clum: ['luminance', lum],
+  };
+  const m = M[key];
+  return m ? { label: ctx + m[0], vt: m[1] } : { label: (ctx + 'value').trim(), vt: null };
+}
+function _labelSlider(el) {
+  const { label, vt } = _sliderAria(el);
+  if (label && el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
+  if (vt != null && el.getAttribute('aria-valuetext') !== vt) el.setAttribute('aria-valuetext', vt);
+}
+// Live-update valuetext on input; ensure label+valuetext on focus (covers on-demand sliders).
+document.addEventListener('input',   e => { const el = e.target; if (el instanceof HTMLInputElement && el.type === 'range') _labelSlider(el); }, true);
+document.addEventListener('focusin', e => { const el = e.target; if (el instanceof HTMLInputElement && el.type === 'range') _labelSlider(el); });
+document.querySelectorAll('input[type="range"]').forEach(_labelSlider); // initial pass (static sliders)
+
+// ─── Live region: announce the main pair's contrast to screen readers ─────────
+// A visually-hidden aria-live="polite" region speaks the primary result — selected TEXT on the
+// custom BACKGROUND — so a non-sighted user hears the ratio/verdict change as they adjust. It's
+// debounced (announce only the settled value) and de-duplicated so a drag doesn't flood output;
+// this reads the SAME rendered numbers the sighted tile shows, so they can never disagree.
+let _announceTimer = null, _lastAnnounce = '';
+function announceContrast(text) {
+  if (!text || text === _lastAnnounce) return;
+  clearTimeout(_announceTimer);
+  _announceTimer = setTimeout(() => {
+    const el = document.getElementById('a11y-live');
+    if (!el) return;
+    _lastAnnounce = text;
+    el.textContent = text;
+  }, 400);
 }
 
 // ─── Debounced localStorage writes ────────────────────────────────────────────
@@ -391,6 +487,14 @@ function rgbToOklch(r, g, b) {
   if (H < 0) H += 360;
   return [L, C, C < 1e-4 ? 0 : H]; // achromatic → hue undefined, normalize to 0
 }
+
+// Verdict-badge colours — FIXED (independent of the app theme) because they render on the preview
+// TILES (white / black / the user's colour), not the UI surface. Each has a bright and a dark
+// variant; the badge renderer picks whichever reads on that tile. These mirror the CSS
+// --pass / --error theme values — one source in JS so the (previously triplicated) literals and
+// their luminance derivations can't drift apart again.
+const PASS_GREEN = '#5dde8a', PASS_GREEN_DK = '#1a7a42';
+const FAIL_RED   = '#ff7076', FAIL_RED_DK   = '#b3261e';
 
 /**
  * OKLCH [L 0–1, C ≥ 0, H° 0–360] → 8-bit sRGB [r,g,b], the inverse of rgbToOklch
@@ -1153,16 +1257,16 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
   // Derive the pass-badge greens' luminances straight from their hexes — single source of truth,
   // so the AA (4.5:1) boundary below is exact. (Hard-coded values had drifted: the dark green's
   // was 0.057 vs the true 0.145, over-crediting its contrast and letting it fail AA on mid-lum bg.)
-  const LUM_BRIGHT = relativeLuminance(...hexToRgb('#5dde8a')); // bright green ≈ 0.564
-  const LUM_DARK   = relativeLuminance(...hexToRgb('#1a7a42')); // dark green   ≈ 0.145
+  const LUM_BRIGHT = relativeLuminance(...hexToRgb(PASS_GREEN));    // bright green ≈ 0.564
+  const LUM_DARK   = relativeLuminance(...hexToRgb(PASS_GREEN_DK)); // dark green   ≈ 0.145
   const cr = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   const crBright = cr(bgLum, LUM_BRIGHT);
   const crDark   = cr(bgLum, LUM_DARK);
 
   // Text: use green when it achieves ≥4.5:1; otherwise fall back to black/white
   // (isLight ≡ bgLum > 0.179 ≡ black gives more contrast than white)
-  const passColor = crBright >= 4.5 ? '#5dde8a'
-                  : crDark   >= 4.5 ? '#1a7a42'
+  const passColor = crBright >= 4.5 ? PASS_GREEN
+                  : crDark   >= 4.5 ? PASS_GREEN_DK
                   : isLight          ? '#000000'
                   :                    '#ffffff';
 
@@ -1197,8 +1301,8 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
       dom.apcaFontEl.textContent = shown.font.text;
       dom.apcaFontEl.title = shown.font.title;
       dom.apcaFontEl.style.color = cvdTransformHex(shown.font.pass
-        ? (isLight ? '#1a7a42' : '#5dde8a')
-        : (isLight ? '#b3261e' : '#ff7076'));
+        ? (isLight ? PASS_GREEN_DK : PASS_GREEN)
+        : (isLight ? FAIL_RED_DK : FAIL_RED));
     } else {
       dom.apcaFontEl.textContent = '';
     }
@@ -1352,6 +1456,20 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     effTextRelB, effBgRelB, relativeLuminance(...effBgSel),
     effTextB, effBgSel, apcaAnchorLc('pb'), true,
   );
+
+  // Announce the main pair (tile A: selected TEXT on custom BG) to the live region. In APCA mode
+  // read the rendered usage tier + font verdict (the source of truth the user sees); in WCAG mode
+  // state the ratio and the highest level it clears.
+  if (contrastLockMode === 'apca') {
+    const tier = (document.querySelector('#pa-wcag .preview-apca-tier')?.textContent || '').trim();
+    const font = (document.querySelector('#pa-wcag .preview-apca-font')?.textContent || '').trim();
+    announceContrast(['Text on background, APCA', tier, font].filter(Boolean).join(' — '));
+  } else {
+    const r = contrastRatio(effTextRelA, effBgRelA);
+    const verdict = r >= 7 ? 'passes AAA' : r >= 4.5 ? 'passes AA'
+                  : r >= 3 ? 'passes AA for large text only' : 'fails AA';
+    announceContrast(`Text on background contrast ${r.toFixed(2)} to 1, ${verdict}.`);
+  }
 }
 
 // ─── Preview sample text sizes ────────────────────────────────────────────────
@@ -2704,14 +2822,22 @@ function fallbackCopy(text) {
   document.body.removeChild(el);
 }
 
-document.addEventListener('click', e => {
-  const el = /** @type {HTMLElement | null} */ (
-    /** @type {HTMLElement} */ (e.target).closest('.copyable')
-  );
+// Click-to-copy value readouts (.copyable). Keyboard-operable too: the markup carries
+// role="button" + tabindex="0", and Enter/Space activate the same copy as a click.
+function _activateCopyable(target) {
+  const el = /** @type {HTMLElement | null} */ (target && target.closest && target.closest('.copyable'));
   if (!el || el.classList.contains('copied')) return;
   copyToClipboard(el.dataset.copy ?? el.textContent.trim());
   el.classList.add('copied');
   setTimeout(() => el.classList.remove('copied'), 1500);
+}
+document.addEventListener('click', e => _activateCopyable(e.target));
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+  const el = /** @type {HTMLElement} */ (e.target);
+  if (!el.closest || !el.closest('.copyable')) return;
+  e.preventDefault();
+  _activateCopyable(el);
 });
 
 // ─── Theme toggle (handled inside settings panel) ─────────────────────────────
@@ -4810,7 +4936,9 @@ function renderThemeLayout() {
     sw.style.background = cvdTransformHex(c.hex);
     sw.dataset.name = c.step + ' · ' + hexDisplay(c.hex) + ' ⧉'; // hover label: step + hex + copy cue
     sw.title = 'Click to copy ' + hexDisplay(c.hex) + ' (step ' + c.step + ')';
+    sw.tabIndex = 0; sw.setAttribute('role', 'button'); sw.setAttribute('aria-label', 'Copy ' + hexDisplay(c.hex) + ' (step ' + c.step + ')');
     sw.addEventListener('click', () => copyHexSwatch(c.hex, sw));
+    sw.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyHexSwatch(c.hex, sw); } });
     strip.appendChild(sw);
   });
   layoutPreviewEl.appendChild(strip);
@@ -6310,6 +6438,7 @@ function chipEditorActiveIdx() { return _ceIdx; }
 function buildChipEditor() {
   _ceEl = /** @type {HTMLElement} */ (_chipEditorTpl.content.firstElementChild.cloneNode(true));
   applyCvdChannelLetters(_ceEl); // fresh clone: simulate its R/G/B letters too
+  _ceEl.querySelectorAll('input[type="range"]').forEach(_labelSlider); // label the cloned sliders (they're off-DOM at page load)
   const q = sel => _ceEl.querySelector(sel);
   _ceRefs = {
     tabs:   [..._ceEl.querySelectorAll('[data-emode]')],
