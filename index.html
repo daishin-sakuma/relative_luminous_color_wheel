@@ -92,7 +92,7 @@
     "applicationCategory": "DesignApplication",
     "applicationSubCategory": "Accessibility Tool",
     "operatingSystem": "Web",
-    "softwareVersion": "2.12.0-beta.0",
+    "softwareVersion": "2.12.0-beta.1",
     "browserRequirements": "Requires JavaScript and WebGL",
     "inLanguage": "en",
     "isAccessibleForFree": true,
@@ -133,87 +133,6 @@
   }
   </script>
 
-  <!-- FAQ structured data (mirrors the "What is this?" FAQ below) -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "What contrast ratio do I need for accessibility?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "WCAG 2.2 — the basis for the ADA in the US and the European Accessibility Act — requires a contrast ratio of at least 4.5:1 for normal text and 3:1 for large text and UI components at level AA, rising to 7:1 for normal text at AAA. This tool locks any of these targets so your colors meet them by construction."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is APCA part of WCAG 3?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Not currently. APCA (Advanced Perceptual Contrast Algorithm) is a newer perceptual method that was explored for WCAG 3 but removed from the draft in 2023; WCAG 3's contrast method is still undecided. WCAG 2.2 remains the normative, legally-referenced standard, so this tool uses it by default and offers APCA Lc as an experimental, forward-looking option."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What font size does APCA require?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Unlike WCAG 2.x, APCA judges contrast together with font size and weight: each Lc value maps to a minimum font size per weight in the official APCA lookup table. In APCA mode this tool shows the official usage level (body text, fluent text, spot & non-text, and so on) and a pass/fail verdict for your chosen size and weight — including the minimum size required when it fails — for the main pair and for every color saved in the palette."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I check contrast for semi-transparent (opacity) colors?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. The main text color, the custom background, and every saved palette color each have an opacity control, and contrast is computed on the composited result: a translucent color is alpha-blended over whatever is behind it before its WCAG ratio and APCA Lc are measured. A see-through background composites over a page underlay color you can set in Preferences. The WCAG and APCA contrast locks both hold this visible, composited contrast and tell you when a target can't be reached at the chosen opacity. Opacity is preserved on export as 8-digit #RRGGBBAA hex, rgba() and oklch() with an alpha channel, and alpha-ready design tokens."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is relative luminance?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Relative luminance is the perceived brightness of a color, computed as L = 0.2126·R + 0.7152·G + 0.0722·B on linearized channels. WCAG contrast ratios depend only on the two colors' relative luminance, so every color on this wheel shares one luminance and keeps the same contrast against your background."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I pick accessible colors without trial and error?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Set a target contrast (or a target luminance) first, then move around the wheel. Because contrast is held as a constraint, every color you can reach already passes — there is no pick-then-check-then-adjust loop."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I export colors to CSS, Tailwind, or design tokens?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. Export your palette as CSS custom properties, a Tailwind v4 @theme block, or W3C Design Tokens (DTCG) JSON, and export a generated color system additionally as a ready-to-paste shadcn/ui theme (:root + .dark blocks mapped to shadcn's token names). In the token JSON each color $value is the DTCG Format Module 2025.10 (first stable release) object form — colorSpace, components, and a hex fallback — which standard tools like Style Dictionary, Tokens Studio and Cobalt parse directly, with relative luminance carried under reverse-DNS $extensions and theme colors as standard {alias} references. CSS, Tailwind and shadcn render OKLCH or hex per your choice, and token names preserve the case you type. Your colors and palette also travel in a shareable URL."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I generate an accessible color palette, light and dark theme?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Open Scales: from your current colors the tool builds a luminance-keyed tonal scale (50–950) and ready-made light and dark themes with Material-3-style semantic roles — surfaces (background, surface, surface-2, border), text and muted, an accent with hover/active states and a soft container pair, and success/warning/danger/info status colors each with a container fill and on-color. Because each step is solved to a target relative luminance, the contrasts are guaranteed by construction rather than audited afterwards (the container fills and their on-colors verify at AA). You can blend your text and background colors across the scale or use either alone, preview a theme as a page mock or as a component gallery (buttons, inputs, badges, tables across default/hover/active/disabled), save a theme to the palette, and export the scale and both themes as CSS custom properties, a Tailwind v4 @theme block, a shadcn/ui theme, or W3C design tokens (JSON) in OKLCH or hex, with the semantic theme layer referencing the scale by alias only."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is it free and private?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. It is completely free with no account and no sign-up, and it is private by design — everything runs locally in your browser with nothing uploaded."
-        }
-      }
-    ]
-  }
-  </script>
 </head>
 <body>
 
@@ -233,7 +152,7 @@
 <header>
   <h1 class="wordmark">Relative Luminous Color Wheel</h1>
   <div class="header-right">
-    <span class="app-version">ver. 2.12.0-beta.0</span>
+    <span class="app-version">ver. 2.12.0-beta.1</span>
     <div class="settings-wrap layout-wrap">
       <button class="theme-toggle" id="layout-btn" title="Layout Preview" aria-label="Preview the palette in a real layout, and generate an accessible tonal scale and light/dark theme">
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false">
@@ -780,128 +699,24 @@
     <summary><h2>What is this? — a color wheel with locked WCAG &amp; APCA contrast</h2></summary>
     <div class="about-body">
       <p>
-        The Relative Luminous Color Wheel is a free color picker and WCAG 2.2 contrast checker
-        built around one idea: <strong>every color on the wheel shares exactly the same relative
-        luminance</strong>. WCAG contrast ratios are computed from relative luminance alone, so any
-        color you pick from the wheel keeps the same contrast ratio against your chosen background —
-        change hue and saturation as much as you like, and an AA or AAA rating never breaks.
+        A free, private color picker and <strong>WCAG 2.2 / APCA contrast checker</strong>. Every
+        color on the wheel shares one relative luminance, so once you lock a contrast target the
+        pair can't fall below it — accessible color <strong>by construction</strong>, not by
+        trial and error.
       </p>
-      <h3>Why equal luminance matters</h3>
-      <p>
-        Traditional color pickers make you choose a color first and verify accessibility afterwards,
-        looping between the picker and a contrast checker until something passes. Here the order is
-        reversed: set the target relative luminance first, and the wheel redraws so that every
-        reachable color already satisfies it. Exploring accessible color stops being trial-and-error
-        and becomes a guarantee.
-      </p>
-      <h3>Lock a contrast target</h3>
-      <p>
-        Beyond checking, the picker can enforce. Choose a WCAG 2.2 threshold — 3:1 for large text
-        and UI components, 4.5:1 for normal text AA, 7:1 for AAA — or an experimental APCA
-        lightness-contrast target (Lc 45–90, a newer perceptual method), and whichever side you are
-        not touching adjusts itself automatically, pinning the pair precisely at the threshold while
-        you explore hue, saturation, and luminance on the other side.
-      </p>
-      <h3>What you can do here</h3>
       <ul>
-        <li>Pick accessible text and background colors for websites, apps, and design systems</li>
-        <li>Check contrast against white, black, or any custom color — WCAG 2.2 AA/AAA badges for normal text, large text, and UI components, with experimental APCA Lc readouts alongside; in APCA mode every tile shows the official APCA usage ladder and a font-size/weight verdict (with the required minimum size) judged against the official lookup table, with in-tile font selectors — or work it backwards with the APCA "Type" lock: pick a font size and weight and the pair is held at the exact Lc that font needs; saved palette swatches appear as a compact preview strip inside every contrast tile</li>
-        <li>Pin colors to the palette sidebar as text or background roles — re-edit any saved color in place with an inline RGB / HSL / Lum / Gray picker (defaults to Lum), a live contrast preview against a selectable opposite-role color labelled by role and rank (e.g. "Text Primary on BG Primary"), with 3:1 / 4.5:1 / 7:1 pass indicators so large-text, normal-text, and AAA thresholds can each be checked (in APCA mode the editor preview switches to the APCA verdicts instead — Lc value, official usage level, and the chosen font-size/weight verdict with the required minimum size); tap outside the editor to save like Done, use Cancel to revert edits, undo and redo any palette change (add, delete, re-edit, reorder, or clear), save the same color more than once and fine-tune each copy later, reorder saved colors by dragging each chip's grip handle (reliable on Android, iOS, and desktop, while the chip body still scrolls the list), drag the sidebar right and release to close it (with a smooth, iCloud Mail-style spring-back transition), copy hex values in one tap, and drag across groups to swap a color's role</li>
-        <li>Give any color an opacity — the main text, the custom background, and any saved palette color — and read contrast on the <strong>composited</strong> result: a translucent color is alpha-blended over whatever sits behind it before its WCAG ratio and APCA Lc are measured, and a see-through background composites over a page underlay color you set in Preferences (RGB / HSL / Lum / Gray, defaulting to white). The opacity slider sits with luminance in the Lum picker, since opacity — unlike hue and saturation — changes contrast; the WCAG and APCA contrast locks hold this visible contrast at any opacity, re-pinning the untouched side to the closest achievable pair and flagging when a target can't physically be reached. Opacity rides along everywhere it goes — 8-digit <code>#RRGGBBAA</code> hex, <code>rgba()</code> and <code>oklch()</code> with an alpha channel, and alpha-ready design tokens — and every hex field accepts 3/4/6/8-digit shorthand</li>
-        <li>Simulate protanopia, deuteranopia, and tritanopia across the whole app — the theme colors, color wheel, sliders, preferences, and palette sidebar included — with the Machado et&nbsp;al. 2009 matrices applied in linear-light space directly inside the app's own rendering, so the preview is identical on iOS/Safari, Android, and desktop browsers</li>
-        <li>Generate a whole accessible color system in one step — a luminance-keyed tonal scale (50&ndash;950) plus ready-made light and dark themes with Material-3-style semantic roles: surfaces (background, surface, an elevated surface-2, border), text and muted, an <strong>accent</strong> with hover/active interaction states and a soft <strong>container</strong> pair, and <strong>success / warning / danger / info</strong> status colors that each carry a container fill and an on-color. Every contrast is guaranteed by construction rather than checked afterwards (the status and accent containers verify at AA against their on-colors). Choose the scale's source — blend your text and background colors across the ramp (gradient), or use the text or background color alone — preview a theme two ways: a realistic <strong>page mock</strong>, or a <strong>component gallery</strong> (buttons, inputs, badges and tables across default / hover / active / disabled) that shows every role in the component it names — save a theme's full role set straight to the palette or import individual scale/theme colors into a role, and export the scale and both themes as CSS custom properties, a Tailwind v4 <code>@theme</code> block, a ready-to-paste <strong>shadcn/ui theme</strong>, or W3C design tokens (JSON) — in OKLCH or hex — with the semantic theme layer referencing the scale by alias only (so re-theming is swapping references)</li>
-        <li>Share your exact color state with a URL, or export everything — palette included — as CSS custom properties, a Tailwind v4 <code>@theme</code> block, a shadcn/ui theme, or W3C Design Tokens (DTCG) JSON whose color <code>$value</code> is the <strong>Format Module 2025.10</strong> (first stable release) object form — <code>colorSpace</code>, <code>components</code>, and a <code>hex</code> fallback that standard tools (Style Dictionary, Tokens Studio, Cobalt) read directly — with relative luminance under reverse-DNS <code>$extensions</code>, and theme colors as standard <code>{alias}</code> references (CSS, Tailwind and shadcn render OKLCH or hex per your choice, and token names keep the case you type). Exports prioritize saved swatches while active main picker values are backed up inside comments and JSON extensions</li>
+        <li>Lock a WCAG ratio (3:1 / 4.5:1 / 7:1) or an APCA Lc target; the untouched side re-pins itself as you move around the wheel.</li>
+        <li>Check any pair against white, black, or a custom color — AA/AAA badges plus APCA Lc and font-size verdicts. Opacity-aware: contrast is measured on the composited result.</li>
+        <li>Pin colors to a palette, then generate a tonal scale (50–950) and ready-made light &amp; dark themes with semantic roles (surfaces, accent, status colors).</li>
+        <li>Preview a theme as a page mock or a component gallery, and simulate protanopia / deuteranopia / tritanopia across the whole UI.</li>
+        <li>Export CSS, Tailwind v4, a shadcn/ui theme, or W3C design tokens (DTCG JSON); share your exact state via a URL.</li>
       </ul>
-      <h3>Who it's for</h3>
-      <p>
-        UI and visual designers choosing theme colors, front-end engineers implementing design
-        tokens, and accessibility specialists auditing color contrast. Everything runs locally in
-        your browser — no account, no upload, free to use.
+      <p class="about-fineprint">
+        WCAG 2.1/2.2 AA is the level referenced by the ADA and the European Accessibility Act; APCA
+        is an experimental, forward-looking option. Runs entirely in your browser — no account, no
+        upload. Provided “as is”, without warranty; verify independently — not a substitute for
+        professional accessibility auditing.
       </p>
-      <h3>Accessibility standards &amp; compliance</h3>
-      <p>
-        Color contrast is a legal requirement in a growing number of places. WCAG 2.2 (and 2.1)
-        level AA is the standard referenced by the Americans with Disabilities Act (ADA) and by the
-        European Accessibility Act, whose obligations began on 28 June 2025 (EN 301 549 points to
-        WCAG 2.1 AA). AA asks for a contrast ratio of at least 4.5:1 for normal text and 3:1 for
-        large text and non-text UI, and AAA raises normal text to 7:1. This tool targets those exact
-        thresholds, so the colors you ship meet the requirement <strong>by construction</strong>
-        rather than by after-the-fact auditing. APCA is provided as a forward-looking, experimental
-        option; WCAG 2.2 remains the normative basis.
-      </p>
-      <h3>Frequently asked questions</h3>
-      <p><strong>What contrast ratio do I need for accessibility?</strong><br>
-        WCAG 2.2 — the basis for the ADA and the European Accessibility Act — requires a contrast
-        ratio of at least 4.5:1 for normal text and 3:1 for large text and UI components at level
-        AA, rising to 7:1 for normal text at AAA. This tool locks any of these targets so your
-        colors meet them by construction.</p>
-      <p><strong>Is APCA part of WCAG 3?</strong><br>
-        Not currently. APCA (Advanced Perceptual Contrast Algorithm) is a newer perceptual method
-        that was explored for WCAG 3 but removed from the draft in 2023; WCAG 3's contrast method is
-        still undecided. WCAG 2.2 remains the normative, legally-referenced standard, so this tool
-        uses it by default and offers APCA Lc as an experimental, forward-looking option.</p>
-      <p><strong>What font size does APCA require?</strong><br>
-        Unlike WCAG 2.x, APCA judges contrast together with font size and weight: each Lc value
-        maps to a minimum font size per weight in the official APCA lookup table. In APCA mode this
-        tool shows the official usage level (body text, fluent text, spot &amp; non-text, and so on)
-        and a pass/fail verdict for your chosen size and weight — including the minimum size
-        required when it fails — for the main pair and for every color saved in the palette.</p>
-      <p><strong>Can I check contrast for semi-transparent (opacity) colors?</strong><br>
-        Yes. The main text color, the custom background, and every saved palette color each have an
-        opacity control, and contrast is computed on the composited result: a translucent color is
-        alpha-blended over whatever is behind it before its WCAG ratio and APCA Lc are measured. A
-        see-through background composites over a page underlay color you can set in Preferences. The
-        WCAG and APCA contrast locks both hold this visible, composited contrast and tell you when a
-        target can't be reached at the chosen opacity. Opacity is preserved on export as 8-digit
-        <code>#RRGGBBAA</code> hex, <code>rgba()</code> and <code>oklch()</code> with an alpha
-        channel, and alpha-ready design tokens.</p>
-      <p><strong>What is relative luminance?</strong><br>
-        Relative luminance is the perceived brightness of a color, computed as
-        L = 0.2126·R + 0.7152·G + 0.0722·B on linearized channels. WCAG contrast ratios depend only
-        on the two colors' relative luminance, so every color on this wheel shares one luminance and
-        keeps the same contrast against your background.</p>
-      <p><strong>How do I pick accessible colors without trial and error?</strong><br>
-        Set a target contrast (or a target luminance) first, then move around the wheel. Because
-        contrast is held as a constraint, every color you can reach already passes — there is no
-        pick-then-check-then-adjust loop.</p>
-      <p><strong>Can I export colors to CSS, Tailwind, shadcn/ui, or design tokens?</strong><br>
-        Yes. Export your palette as CSS custom properties, a Tailwind v4 <code>@theme</code> block,
-        or W3C Design Tokens (DTCG) JSON — and export a generated color system additionally as a
-        ready-to-paste <strong>shadcn/ui theme</strong> (<code>:root</code> + <code>.dark</code>
-        blocks mapped to shadcn's own token names: background, foreground, primary, secondary,
-        muted, accent, destructive, border, ring, chart and sidebar). In the token JSON each color
-        <code>$value</code> is the <strong>DTCG Format Module 2025.10</strong> (first stable
-        release) object form — <code>colorSpace</code>, <code>components</code>, and a
-        <code>hex</code> fallback that standard tools like Style Dictionary, Tokens Studio and
-        Cobalt read directly — with relative luminance under reverse-DNS <code>$extensions</code>,
-        and theme colors as standard <code>{alias}</code> references; CSS, Tailwind and shadcn
-        render OKLCH or hex per your choice, and token names keep the case you type. Pinned swatches
-        are prioritized on export, while the active main picker colors are safely backed up inside
-        comments and JSON extension properties. Your colors and palette also travel in a shareable
-        URL.</p>
-      <p><strong>How do I generate an accessible color palette, light and dark theme?</strong><br>
-        Open <em>Scales</em>: from your current colors the tool builds a luminance-keyed
-        tonal scale (50&ndash;950) and ready-made light and dark themes with Material-3-style
-        semantic roles — surfaces (background, surface, surface-2, border), text and muted, an
-        accent with hover/active states and a soft container pair, and success/warning/danger/info
-        status colors each with a container fill and on-color. Because each step is solved to a
-        target relative luminance, the contrasts are guaranteed <strong>by construction</strong>
-        rather than audited afterwards. Blend your text and background colors across the scale or
-        use either alone, preview a theme as a page mock or a component gallery (buttons, inputs,
-        badges, tables across default/hover/active/disabled), save a theme to the palette, and
-        export the scale and both themes as CSS custom properties, a Tailwind v4 <code>@theme</code>
-        block, a shadcn/ui theme, or W3C design tokens (JSON) in OKLCH or hex, with the semantic
-        theme layer referencing the scale by alias only.</p>
-      <p><strong>Is it free and private?</strong><br>
-        Yes. It is completely free with no account and no sign-up, and it is private by design —
-        everything runs locally in your browser with nothing uploaded.</p>
-      <h3>Disclaimer</h3>
-      <p>This tool is provided “as is”, without warranty of any kind, express or implied. No
-        guarantee is made as to the accuracy, reliability, or completeness of any contrast value,
-        verdict, generated color, or other output; results may contain errors and are not a
-        substitute for professional accessibility auditing or independent verification. To the
-        maximum extent permitted by law, the author accepts no liability for any loss or damage of
-        any kind arising from the use of, or reliance on, this tool. Use it at your own risk.</p>
     </div>
   </details>
 </section>
