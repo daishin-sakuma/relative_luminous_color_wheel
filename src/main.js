@@ -28,7 +28,13 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
   const constrain = cyclic
     ? v => ((Math.round(v) % (max + 1)) + (max + 1)) % (max + 1)
     : v => Math.max(min, Math.min(max, v));
-  const apply = v => { const c = constrain(v); input.value = format(c); applyState(c); };
+  // Canonicalize a TYPED / stepped value to the field's displayed resolution before it becomes
+  // state: store exactly what's shown (parse∘format), so the number you see is the number the app
+  // uses — no hidden sub-display precision that would make the slider snap on the next touch.
+  // Integer fields round-trip losslessly (unchanged); only fractional fields (e.g. luminance,
+  // toFixed(3)) are affected. This is the field-as-INPUT path only; the readout path (updateUI
+  // writing input.value from state set by the wheel/hex) keeps the state's full precision.
+  const apply = v => { const c = constrain(v); const shown = format(c); input.value = shown; applyState(parse(shown)); };
   const commit = () => { const v = parse(input.value); apply(isFinite(v) ? v : min); };
   input.addEventListener('focus', () => input.select());
   input.addEventListener('blur', commit);
@@ -39,6 +45,96 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
       apply((isFinite(cur) ? cur : 0) + (e.key === 'ArrowUp' ? step : -step));
     } else if (e.key === 'Enter') { commit(); input.blur(); }
   });
+}
+
+// ─── Keyboard: Shift+Arrow = 10× step on any range slider ─────────────────────
+// Native <input type=range> already scrubs on pointer drag and moves by `step` on a bare Arrow.
+// This adds the coarse increment: Shift+Arrow moves by 10× the minimum unit. Delegated at the
+// document (capture) so it also covers sliders created on demand — the chip editor — and so the
+// preventDefault beats the browser's native single-step. Arrow-without-Shift is left to the
+// browser (its native `step`), and pointer scrubbing is native, so all three interactions work
+// on every slider in the app: the wheel's Lum/Hue/Sat/Opacity, the custom-bg and chip-editor
+// RGB/HSL/Lum/Gray/alpha channels, and the Preferences appearance sliders.
+document.addEventListener('keydown', e => {
+  const el = /** @type {HTMLInputElement} */ (e.target);
+  if (!e.shiftKey || !(el instanceof HTMLInputElement) || el.type !== 'range') return;
+  const dir = (e.key === 'ArrowUp' || e.key === 'ArrowRight') ? 1
+            : (e.key === 'ArrowDown' || e.key === 'ArrowLeft') ? -1 : 0;
+  if (!dir) return;
+  e.preventDefault();
+  const step = parseFloat(el.step) || 1;
+  const lo = el.min === '' ? 0 : parseFloat(el.min);
+  const hi = el.max === '' ? 100 : parseFloat(el.max);
+  const cur = parseFloat(el.value) || 0;
+  const next = Math.max(lo, Math.min(hi, cur + dir * step * 10));
+  if (next !== cur) {
+    el.value = String(next);
+    el.dispatchEvent(new Event('input',  { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}, true);
+
+// ─── Screen-reader labels for sliders (aria-label + live aria-valuetext) ──────
+// A range input announces only a bare number by default. Give every slider a NAME and a
+// HUMAN value (luminance 0–1, degrees, %, 0–255, % opacity) that updates on each input, so a
+// screen reader speaks e.g. "Target relative luminance, 0.558" instead of "slider, 558". The
+// context (main colour / background / page underlay / chip-editor colour) comes from the id,
+// data-uch / data-ch attribute, or class; keyed off those so it also covers the sliders the
+// chip editor builds on demand (handled by the delegated input/focusin listeners below).
+function _sliderAria(el) {
+  const id = el.id || '', uch = el.dataset.uch, ch = el.dataset.ch, cls = el.className || '';
+  const v = +el.value;
+  const deg = v + '°', pct = v + '%', byte = String(v), lum = (v / 1000).toFixed(3), op = v + '% opacity';
+  if (/custom-alpha-slider/.test(cls)) return { label: 'Background opacity', vt: op };
+  if (/ce-alpha-range/.test(cls))      return { label: 'Color opacity', vt: op };
+  if (id === 'lum-slider')          return { label: 'Target relative luminance', vt: lum };
+  if (id === 'hue-slider')          return { label: 'Hue', vt: deg };
+  if (id === 'sat-slider')          return { label: 'Saturation', vt: pct };
+  if (id === 'alpha-slider')        return { label: 'Opacity', vt: op };
+  if (id === 'ui-hue-slider')        return { label: 'Interface hue', vt: null };
+  if (id === 'ui-sat-slider')        return { label: 'Interface saturation', vt: null };
+  if (id === 'ui-brightness-slider') return { label: 'Interface brightness', vt: null };
+  // Channel sliders: resolve a context prefix + the channel's name and formatter.
+  let ctx = '', key = '';
+  if (uch != null)      { ctx = 'Page underlay '; key = uch; }
+  else if (ch != null)  { ctx = 'Color ';         key = ch;  }
+  else if (/^cu?-/.test(id)) { ctx = 'Background '; key = id.replace(/^cu?-/, '').replace('-slider', ''); }
+  else return { label: el.getAttribute('aria-label') || 'Slider', vt: null };
+  const M = {
+    r: ['red', byte], g: ['green', byte], b: ['blue', byte], gray: ['gray', byte],
+    h: ['hue', deg], hue: ['hue', deg], uhue: ['hue', deg], chue: ['hue', deg],
+    s: ['saturation', pct], sat: ['saturation', pct], usat: ['saturation', pct], csat: ['saturation', pct],
+    l: ['lightness', pct],
+    lum: ['luminance', lum], ulum: ['luminance', lum], clum: ['luminance', lum],
+  };
+  const m = M[key];
+  return m ? { label: ctx + m[0], vt: m[1] } : { label: (ctx + 'value').trim(), vt: null };
+}
+function _labelSlider(el) {
+  const { label, vt } = _sliderAria(el);
+  if (label && el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
+  if (vt != null && el.getAttribute('aria-valuetext') !== vt) el.setAttribute('aria-valuetext', vt);
+}
+// Live-update valuetext on input; ensure label+valuetext on focus (covers on-demand sliders).
+document.addEventListener('input',   e => { const el = e.target; if (el instanceof HTMLInputElement && el.type === 'range') _labelSlider(el); }, true);
+document.addEventListener('focusin', e => { const el = e.target; if (el instanceof HTMLInputElement && el.type === 'range') _labelSlider(el); });
+document.querySelectorAll('input[type="range"]').forEach(_labelSlider); // initial pass (static sliders)
+
+// ─── Live region: announce the main pair's contrast to screen readers ─────────
+// A visually-hidden aria-live="polite" region speaks the primary result — selected TEXT on the
+// custom BACKGROUND — so a non-sighted user hears the ratio/verdict change as they adjust. It's
+// debounced (announce only the settled value) and de-duplicated so a drag doesn't flood output;
+// this reads the SAME rendered numbers the sighted tile shows, so they can never disagree.
+let _announceTimer = null, _lastAnnounce = '';
+function announceContrast(text) {
+  if (!text || text === _lastAnnounce) return;
+  clearTimeout(_announceTimer);
+  _announceTimer = setTimeout(() => {
+    const el = document.getElementById('a11y-live');
+    if (!el) return;
+    _lastAnnounce = text;
+    el.textContent = text;
+  }, 400);
 }
 
 // ─── Debounced localStorage writes ────────────────────────────────────────────
@@ -143,7 +239,11 @@ function findLightness(h, s, target) {
     const [r, g, b] = hslToRgb(h, s, mid);
     if (wheelLum(r, g, b) < target) lo = mid; else hi = mid;
   }
-  return (lo + hi) * 0.5;
+  // Return hi, not the (lo,hi] midpoint: the loop keeps lumAt(lo) < target ≤ lumAt(hi), so hi is
+  // the smallest lightness whose QUANTIZED colour reaches the target — for a colour fed back as
+  // (H, S, its own luminance) that lands exactly on its own step. The midpoint straddles the step
+  // boundary and quantizes to either side unpredictably, shifting ~50% of inputs by one 8-bit step.
+  return hi;
 }
 
 /**
@@ -173,7 +273,7 @@ function findLightnessBiased(h, s, target, dir, alpha, overRgb) {
   let l;
   if (tgt >= lumAt(1)) l = 1;
   else if (tgt <= lumAt(0)) l = 0;
-  else { let lo = 0, hi = 1; for (let i = 0; i < 22; i++) { const m = (lo + hi) * 0.5; if (lumAt(m) < tgt) lo = m; else hi = m; } l = (lo + hi) * 0.5; }
+  else { let lo = 0, hi = 1; for (let i = 0; i < 22; i++) { const m = (lo + hi) * 0.5; if (lumAt(m) < tgt) lo = m; else hi = m; } l = hi; } // hi is the ≥tgt side (not the step-straddling midpoint) — see findLightness
   if (!dir) return l;
   // Nudge so the QUANTIZED (composited) luminance is on the dir side of the target — 8-bit
   // rounding otherwise scatters it with a hue-dependent sign, dipping the contrast.
@@ -267,6 +367,11 @@ function grayForYs(ys) { return Math.pow(Math.max(0, Math.min(1, ys)), 1 / 2.4) 
 // the search start when re-solving the target on a mode switch so the contrast floor stays put.
 function relLumToYs(L) { const g = grayForRelLum(L) / 255; return Math.pow(Math.max(0, Math.min(1, g)), 2.4); }
 function ysToRelLum(ys) { const n = grayForYs(ys) / 255; return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); }
+// A held anchor (targetLum / cuLum) is stored in the ACTIVE metric — APCA Ys in APCA mode, else
+// relative luminance. Persistence and share URLs carry no metric tag and always restore in WCAG
+// mode, so normalise to relative luminance on write; otherwise a value saved in APCA mode is
+// mis-read as relative luminance on reload and the restored colour drifts darker.
+function relLumOf(anchor) { return contrastLockMode === 'apca' ? ysToRelLum(anchor) : anchor; }
 function compositeYs(fgYs, a, bgYs) { // composited APCA screen luminance (gray-space)
   if (a >= 0.9995) return fgYs;
   const g = grayForYs(fgYs) * a + grayForYs(bgYs) * (1 - a);
@@ -382,6 +487,14 @@ function rgbToOklch(r, g, b) {
   if (H < 0) H += 360;
   return [L, C, C < 1e-4 ? 0 : H]; // achromatic → hue undefined, normalize to 0
 }
+
+// Verdict-badge colours — FIXED (independent of the app theme) because they render on the preview
+// TILES (white / black / the user's colour), not the UI surface. Each has a bright and a dark
+// variant; the badge renderer picks whichever reads on that tile. These mirror the CSS
+// --pass / --error theme values — one source in JS so the (previously triplicated) literals and
+// their luminance derivations can't drift apart again.
+const PASS_GREEN = '#5dde8a', PASS_GREEN_DK = '#1a7a42';
+const FAIL_RED   = '#ff7076', FAIL_RED_DK   = '#b3261e';
 
 /**
  * OKLCH [L 0–1, C ≥ 0, H° 0–360] → 8-bit sRGB [r,g,b], the inverse of rgbToOklch
@@ -682,7 +795,7 @@ void main() {
     if (lum(hsl(h, sat, mid)) < uLum) lo = mid; else hi = mid;
   }
 
-  vec3  color = hsl(h, sat, (lo + hi) * 0.5);
+  vec3  color = hsl(h, sat, hi); // hi = ≥uLum side; matches findLightness so the wheel pixel and the JS swatch agree (no 1-step split)
   
   // Apply CVD Simulation in linear space if active
   if (uCvdActive > 0.5) {
@@ -1141,16 +1254,19 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
     }
   }
 
-  // lum(#5dde8a) ≈ 0.586 (bright green),  lum(#1a7a42) ≈ 0.057 (dark green)
-  const LUM_BRIGHT = 0.586, LUM_DARK = 0.057;
+  // Derive the pass-badge greens' luminances straight from their hexes — single source of truth,
+  // so the AA (4.5:1) boundary below is exact. (Hard-coded values had drifted: the dark green's
+  // was 0.057 vs the true 0.145, over-crediting its contrast and letting it fail AA on mid-lum bg.)
+  const LUM_BRIGHT = relativeLuminance(...hexToRgb(PASS_GREEN));    // bright green ≈ 0.564
+  const LUM_DARK   = relativeLuminance(...hexToRgb(PASS_GREEN_DK)); // dark green   ≈ 0.145
   const cr = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   const crBright = cr(bgLum, LUM_BRIGHT);
   const crDark   = cr(bgLum, LUM_DARK);
 
   // Text: use green when it achieves ≥4.5:1; otherwise fall back to black/white
   // (isLight ≡ bgLum > 0.179 ≡ black gives more contrast than white)
-  const passColor = crBright >= 4.5 ? '#5dde8a'
-                  : crDark   >= 4.5 ? '#1a7a42'
+  const passColor = crBright >= 4.5 ? PASS_GREEN
+                  : crDark   >= 4.5 ? PASS_GREEN_DK
                   : isLight          ? '#000000'
                   :                    '#ffffff';
 
@@ -1185,8 +1301,8 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
       dom.apcaFontEl.textContent = shown.font.text;
       dom.apcaFontEl.title = shown.font.title;
       dom.apcaFontEl.style.color = cvdTransformHex(shown.font.pass
-        ? (isLight ? '#1a7a42' : '#5dde8a')
-        : (isLight ? '#b3261e' : '#ff7076'));
+        ? (isLight ? PASS_GREEN_DK : PASS_GREEN)
+        : (isLight ? FAIL_RED_DK : FAIL_RED));
     } else {
       dom.apcaFontEl.textContent = '';
     }
@@ -1340,6 +1456,20 @@ function updatePreview(selectedHex, customHex, selectedLum, customLum) {
     effTextRelB, effBgRelB, relativeLuminance(...effBgSel),
     effTextB, effBgSel, apcaAnchorLc('pb'), true,
   );
+
+  // Announce the main pair (tile A: selected TEXT on custom BG) to the live region. In APCA mode
+  // read the rendered usage tier + font verdict (the source of truth the user sees); in WCAG mode
+  // state the ratio and the highest level it clears.
+  if (contrastLockMode === 'apca') {
+    const tier = (document.querySelector('#pa-wcag .preview-apca-tier')?.textContent || '').trim();
+    const font = (document.querySelector('#pa-wcag .preview-apca-font')?.textContent || '').trim();
+    announceContrast(['Text on background, APCA', tier, font].filter(Boolean).join(' — '));
+  } else {
+    const r = contrastRatio(effTextRelA, effBgRelA);
+    const verdict = r >= 7 ? 'passes AAA' : r >= 4.5 ? 'passes AA'
+                  : r >= 3 ? 'passes AA for large text only' : 'fails AA';
+    announceContrast(`Text on background contrast ${r.toFixed(2)} to 1, ${verdict}.`);
+  }
 }
 
 // ─── Preview sample text sizes ────────────────────────────────────────────────
@@ -1667,7 +1797,7 @@ function applyLockAdjustment(changed, desired) {
     targetLum = desired;
     lumSlider.value = String(Math.round(targetLum * 1000));
     if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-    saveToStorage('sel-lum', String(targetLum));
+    saveToStorage('sel-lum', String(relLumOf(targetLum)));
     scheduleRender(true);
   }
 }
@@ -1811,7 +1941,7 @@ function applyLockAlpha(changed, desired) {
     targetLum = desired;
     lumSlider.value = String(Math.round(targetLum * 1000));
     if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-    saveToStorage('sel-lum', String(targetLum));
+    saveToStorage('sel-lum', String(relLumOf(targetLum)));
   }
 }
 
@@ -2093,7 +2223,7 @@ function syncCustomControls() {
     customColorSaved = { r: cR, g: cG, b: cB };
     saveToStorage('custom-color-rgb', JSON.stringify(customColorSaved));
     if (customMode === 'lum') {
-      customLumSaved = { lum: cuLum, hue: cuHue, sat: cuSat };
+      customLumSaved = { lum: relLumOf(cuLum), hue: cuHue, sat: cuSat };
       saveToStorage('custom-lum-v', JSON.stringify(customLumSaved));
     }
   }
@@ -2272,7 +2402,7 @@ lumSlider.addEventListener('input', () => {
   targetLum = lumSlider.value / 1000;
   if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
   scheduleRender(true);
-  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-lum', String(relLumOf(targetLum)));
 });
 
 hueSlider.addEventListener('input', () => {
@@ -2407,7 +2537,7 @@ wireValInput(lumValEl, 0, 1, 0.001, parseFloat, v => v.toFixed(3), v => {
   targetLum = v;
   lumSlider.value = String(Math.round(v * 1000));
   scheduleRender(true);
-  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-lum', String(relLumOf(targetLum)));
 });
 
 wireValInput(hueValEl, 0, 359, 1, str => Math.round(parseFloat(str)), v => v + '°', v => {
@@ -2603,7 +2733,7 @@ function applyMainHex(r, g, b, a = 1) {
   setUnitVal(satValEl, Math.round(selSat * 100), '%');
   updateMarkerPosition();
   scheduleRender(true);
-  saveToStorage('sel-lum', String(targetLum));
+  saveToStorage('sel-lum', String(relLumOf(targetLum)));
   saveToStorage('sel-hue', String(selHue));
   saveToStorage('sel-sat', String(selSat));
 }
@@ -2692,14 +2822,22 @@ function fallbackCopy(text) {
   document.body.removeChild(el);
 }
 
-document.addEventListener('click', e => {
-  const el = /** @type {HTMLElement | null} */ (
-    /** @type {HTMLElement} */ (e.target).closest('.copyable')
-  );
+// Click-to-copy value readouts (.copyable). Keyboard-operable too: the markup carries
+// role="button" + tabindex="0", and Enter/Space activate the same copy as a click.
+function _activateCopyable(target) {
+  const el = /** @type {HTMLElement | null} */ (target && target.closest && target.closest('.copyable'));
   if (!el || el.classList.contains('copied')) return;
   copyToClipboard(el.dataset.copy ?? el.textContent.trim());
   el.classList.add('copied');
   setTimeout(() => el.classList.remove('copied'), 1500);
+}
+document.addEventListener('click', e => _activateCopyable(e.target));
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+  const el = /** @type {HTMLElement} */ (e.target);
+  if (!el.closest || !el.closest('.copyable')) return;
+  e.preventDefault();
+  _activateCopyable(el);
 });
 
 // ─── Theme toggle (handled inside settings panel) ─────────────────────────────
@@ -2988,7 +3126,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
       }
       lumSlider.value = String(Math.round(targetLum * 1000));
       if (document.activeElement !== lumValEl) lumValEl.value = targetLum.toFixed(3);
-      saveToStorage('sel-lum', String(targetLum));
+      saveToStorage('sel-lum', String(relLumOf(targetLum)));
       // Everything below is cached against the old definition
       _cwLumCache = null;
       _lumTrackKey = '';
@@ -3414,13 +3552,13 @@ function buildShareUrl() {
   if (shareState) {
     p.set('h', String(Math.round(selHue)));
     p.set('s', String(Math.round(selSat * 100)));
-    p.set('l', String(Math.round(targetLum * 1000)));
+    p.set('l', String(Math.round(relLumOf(targetLum) * 1000)));
     p.set('c', toHex(cR, cG, cB).slice(1).toLowerCase());
     p.set('m', customMode);
     if (selAlpha < 0.9995) p.set('a',  String(Math.round(selAlpha * 100)));
     if (cAlpha   < 0.9995) p.set('ca', String(Math.round(cAlpha * 100)));
     if (customMode === 'lum') {
-      p.set('cl', String(Math.round(cuLum * 1000)));
+      p.set('cl', String(Math.round(relLumOf(cuLum) * 1000)));
       p.set('ch', String(Math.round(cuHue)));
       p.set('cs', String(Math.round(cuSat * 100)));
     }
@@ -3550,8 +3688,11 @@ function buildExport(format) {
   // Token/variable name per colour: its user-set name (sanitized to a valid identifier) when
   // present, else the positional rank. De-duplicated within a role group so two same-named
   // colours don't collide (…-2, …-3). The role prefix (text/bg or content/surface) is added
-  // by each format below.
-  const sanitizeName = s => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  // by each format below. The user's CASE is preserved (CSS custom properties and DTCG token
+  // names are both case-sensitive, and no format mandates lowercasing names) — only characters
+  // invalid in an identifier are collapsed to '-'. Colour VALUES stay lowercase (the hex
+  // convention across CSS/Tailwind/DTCG).
+  const sanitizeName = s => s.trim().replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const resolveKeys = list => {
     const used = new Set();
     return list.map((c, i) => {
@@ -3603,28 +3744,30 @@ ${lines.join('\n')}
 }
 `;
   }
-  // W3C Design Tokens (DTCG), tool-implemented editors'-draft form: a color $value
-  // is a CSS hex STRING — #rrggbb, or #rrggbbaa when translucent (alpha in the hex).
-  // Every DTCG processor (Style Dictionary, Tokens Studio, Cobalt, Terrazzo) parses
-  // this directly, with no custom transformer. The 2025.x "object color" drafts
-  // (colorSpace/components) are labelled "do not implement", so we don't emit them;
-  // instead the OKLCH/sRGB components the export toggle selects, plus the app's
-  // luminance, live under $extensions (which tools MUST preserve) — a single source
-  // of truth in $value, richer data alongside.
+  // W3C Design Tokens (DTCG), Format Module 2025.10 (first stable release). A color $value is
+  // the spec's OBJECT form { colorSpace, components, hex }: spec-aware processors (Style
+  // Dictionary, Tokens Studio, Terrazzo) read the components, and `hex` is the spec's own
+  // fallback so hex-only tools still import a colour. The toggle picks the colorSpace (srgb:
+  // components 0–1, or oklch: [L, C, H]); alpha appears only when <1. The app's relative
+  // luminance stays under $extensions (which tools MUST preserve).
   const NS = 'app.vercel.relative-luminous-color-wheel'; // reverse-DNS ext namespace (DTCG SHOULD)
-  const colorMeta = c => {
-    const meta = { alpha: +hexToRgba(c.hex)[3].toFixed(4), luminance: +c.lum.toFixed(4) };
-    if (exportColorFmt === 'oklch') { meta.colorSpace = 'oklch'; meta.components = oklchComponents(c.hex); meta.oklch = oklchCss(c.hex); }
-    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(c.hex).map(v => +(v / 255).toFixed(4)); }
-    return meta;
+  const colorValue = hex => {
+    const v = {
+      colorSpace: exportColorFmt === 'oklch' ? 'oklch' : 'srgb',
+      components: exportColorFmt === 'oklch' ? oklchComponents(hex) : hexToRgb(hex).map(v => +(v / 255).toFixed(4)),
+      hex: hex.toLowerCase(),
+    };
+    const a = +hexToRgba(hex)[3].toFixed(4);
+    if (a < 1) v.alpha = a;
+    return v;
   };
-  const colorToken = c => ({ $value: c.hex.toLowerCase(), $extensions: { [NS]: colorMeta(c) } });
+  const colorToken = c => ({ $value: colorValue(c.hex), $extensions: { [NS]: { luminance: +c.lum.toFixed(4) } } });
   const groupTokens = (list, keys) => Object.fromEntries(list.map((c, i) => [keys[i], colorToken(c)]));
   const fmtNote = exportColorFmt === 'oklch'
-    ? 'Each $value is a CSS hex string; the OKLCH components, alpha, and the colour’s relative luminance are under $extensions.'
-    : 'Each $value is a CSS hex string; sRGB components (0–1), alpha, and relative luminance are under $extensions.';
+    ? 'Each color $value is a DTCG object: colorSpace "oklch", components [L, C, H], plus a hex fallback.'
+    : 'Each color $value is a DTCG object: colorSpace "srgb", components [r, g, b] (0–1), plus a hex fallback.';
   const json = {
-    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
+    $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
       text: groupTokens(text, textKeys),
@@ -4034,7 +4177,8 @@ let _closeLayoutPopper = null;
 }
 
 // ─── Scale & theme generator (v2 beta) ────────────────────────────────────────
-// From the current colour, generate a luminance-keyed tonal scale (50–950) and
+// From the current colour, generate a tonal scale (50–950) stepped evenly in OKLab
+// perceptual lightness (not in WCAG relative luminance) and
 // derive light + dark semantic themes whose text/muted/accent contrasts are
 // guaranteed by construction: each step is solved to a target WCAG relative
 // luminance, so pair contrasts are KNOWN (not audited afterwards). Reuses the
@@ -4180,6 +4324,82 @@ function themeLink(th) {
   return contrastRatio(th.accent.lum, th.surface.lum) >= 4.5 ? th.accent : th.text;
 }
 
+// State (status) colors — fixed, seed-INDEPENDENT hues that every product UI needs: success
+// (green), warning (amber), danger (red), info (blue). Generated in OKLab like the scale so they
+// sit at a consistent lightness/vividness and pair with light/dark themes.
+const STATE_HUES = { success: 152, warning: 85, danger: 27, info: 255 };
+
+// A role value {step,hex,lum} built straight from OKLCh (off the tonal scale — step:null).
+function mkOklch(L, C, H) {
+  const [r, g, b] = oklchToRgb(L, C, H);
+  return { step: null, hex: toHex(r, g, b).toLowerCase(), lum: relativeLuminance(r, g, b) };
+}
+// The status FOREGROUND colour (text/icon on the page): tuned to read at ~AA on the theme's
+// page — dark-ish on light (L 0.56), bright on dark (L 0.72).
+function stateColor(hue, dark) {
+  const L = dark ? 0.72 : 0.56;
+  return mkOklch(L, maxChromaInGamut(L, hue) * 0.92, hue);
+}
+// Material-3-style container pair for a hue: a soft FILL + its on-colour. Light theme → pale
+// tint + dark-saturated on-colour; dark theme → deep muted fill + light on-colour. Lets filled
+// badges / alerts / soft buttons be built accessibly (verified ≥ AA below by construction).
+function containerPair(hue, dark) {
+  const fillL = dark ? 0.34 : 0.93, onL = dark ? 0.90 : 0.38;
+  return {
+    fill: mkOklch(fillL, Math.min(maxChromaInGamut(fillL, hue), dark ? 0.07 : 0.05), hue),
+    on:   mkOklch(onL,   maxChromaInGamut(onL, hue) * 0.85, hue),
+  };
+}
+// Interaction-state shade of a fill: shift OKLab L toward "more pressed" (darker on light
+// themes, lighter on dark), holding hue, chroma re-clamped to gamut. hover < active.
+function shiftLightness(hex, dL, dark) {
+  const [L, C, H] = rgbToOklch(...hexToRgb(hex));
+  const nL = Math.max(0.06, Math.min(0.96, L + (dark ? dL : -dL)));
+  return mkOklch(nL, Math.min(C, maxChromaInGamut(nL, H)), H);
+}
+// Per-state roles: the status foreground + a container fill + its on-colour, for every hue.
+function stateRoles(dark) {
+  const out = {};
+  for (const [name, hue] of Object.entries(STATE_HUES)) {
+    out[name] = stateColor(hue, dark);              // status text / icon on the page
+    const cont = containerPair(hue, dark);
+    out[name + 'Container']   = cont.fill;          // soft fill for filled alerts / badges
+    out[name + 'OnContainer'] = cont.on;            // text / icon on that fill
+  }
+  return out;
+}
+
+// Accent interaction states + container. Hover/active are ADJACENT SCALE STEPS (darker on light,
+// lighter on dark), so they sit on the brand ramp and reference color.scale.* — the accent's
+// palette stays one coherent family instead of scattering into off-scale primitives. The soft
+// container pair is a low-chroma tint at the accent's hue (genuinely off the scale).
+function accentRoles(scale, accIdx, dark) {
+  const clamp = i => scale[Math.max(0, Math.min(scale.length - 1, i))];
+  const hue = rgbToOklch(...hexToRgb(scale[accIdx].hex))[2];
+  const cont = containerPair(hue, dark);
+  return {
+    accentContainer: cont.fill, accentContainerText: cont.on,
+    accentHover:  clamp(dark ? accIdx - 1 : accIdx + 1),   // one step more pressed
+    accentActive: clamp(dark ? accIdx - 2 : accIdx + 2),   // two steps
+  };
+}
+
+// Scrim: a fixed translucent-black overlay for modal backdrops / drawer scrims, identical in
+// light and dark. 33.33% black — hex #00000055 (0x55/255 ≈ 0.3333); the export carries the alpha
+// through as an 8-digit hex / rgba / oklch(… / 0.333) and a DTCG $value with an `alpha` field.
+const SCRIM = { step: null, hex: '#00000055', lum: 0 };
+
+// Pick the accent's scale index: keep the preferred vivid mid step, but if it collides with the
+// text or muted step (so the accent fill would be the SAME colour as body / secondary text — a
+// WCAG 1.4.1 affordance failure and visually confusing), fall back to the nearest saturated step
+// that's distinct. muted is left at its contrast-optimal pick; only the (semantically flexible)
+// accent moves. `avoid` are the step numbers already taken by text/muted.
+function chooseAccentIdx(scale, preferred, candidates, avoid) {
+  for (const i of [preferred, ...candidates])
+    if (i >= 0 && i < scale.length && !avoid.includes(scale[i].step)) return i;
+  return preferred; // scale exhausted (won't happen for 11 steps) — keep preferred
+}
+
 function deriveTheme(scale, dark) {
   // Body & muted text are picked against SURFACE, not bg. Surface is always the
   // harder of the two backgrounds (one step in from bg toward the text), so
@@ -4187,23 +4407,31 @@ function deriveTheme(scale, dark) {
   // muted text sat on cards below AA (e.g. dark muted was 3.78:1 on surface).
   if (!dark) {
     const bg = { step: null, hex: '#ffffff', lum: 1 };
-    const surface = scale[0];
-    const acc = accentPair(scale, 6);                        // step 600 — distinct from muted (700)/text (800)
+    const surface = scale[0];                                // 50  — cards / panels
+    const text  = pickByContrast(scale, surface.lum, 7,   false); // lightest dark step ≥ AAA on surface & bg
+    const muted = pickByContrast(scale, surface.lum, 4.5, false); // …≥ AA on surface & bg
+    const accIdx = chooseAccentIdx(scale, 6, [7, 5, 8, 4], [text.step, muted.step]); // vivid mid, distinct from text/muted
+    const acc = accentPair(scale, accIdx);
     return {
-      dark: false, bg, surface, border: scale[2],
-      text:  pickByContrast(scale, surface.lum, 7,   false), // lightest dark step ≥ AAA on surface & bg
-      muted: pickByContrast(scale, surface.lum, 4.5, false), // …≥ AA on surface & bg
+      dark: false, bg, surface, surface2: scale[1], border: scale[2], scrim: SCRIM, // surface-2 (100): nested / elevated
+      text, muted,
       accent: acc.accent, accentText: acc.accentText,
+      ...accentRoles(scale, accIdx, false),
+      ...stateRoles(false),
     };
   }
   const bg = scale[scale.length - 1];                        // 950
-  const surface = scale[scale.length - 2];                   // 900
-  const acc = accentPair(scale, 3);                          // step 300 — a bright fill distinct from muted/text
+  const surface = scale[scale.length - 2];                   // 900 — cards / panels
+  const text  = scale[1];                                    // 100 — clears AAA on bg & surface
+  const muted = pickByContrast(scale, surface.lum, 4.5, true); // ≥ AA on surface (the harder bg)
+  const accIdx = chooseAccentIdx(scale, 3, [2, 4, 1, 5], [text.step, muted.step]); // bright, distinct from text/muted
+  const acc = accentPair(scale, accIdx);
   return {
-    dark: true, bg, surface, border: scale[scale.length - 3],
-    text:  scale[1],                                         // 100 — clears AAA on bg & surface
-    muted: pickByContrast(scale, surface.lum, 4.5, true),    // ≥ AA on surface (the harder bg)
+    dark: true, bg, surface, surface2: scale[scale.length - 3], border: scale[scale.length - 4], scrim: SCRIM, // surface-2 (800), border (700)
+    text, muted,
     accent: acc.accent, accentText: acc.accentText,
+    ...accentRoles(scale, accIdx, true),
+    ...stateRoles(true),
   };
 }
 
@@ -4225,26 +4453,99 @@ function copyHexSwatch(hex, el) {
 let _scaleExportFmt = 'css';      // 'css' | 'tailwind' | 'json' — CSS custom properties by default
 let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by default
 
-// Semantic role → theme key. The order the themes are emitted in.
+// Semantic role → theme key. The order the themes are emitted in. Layered like Material 3:
+// surfaces (bg → surface → surface-2 → border → scrim overlay), text (on-surface / -variant), the accent with
+// its on-colour, interaction states (hover/active) and soft container pair, then the four
+// status colours — each a page foreground plus a container fill + on-container.
 const SCALE_SEM_ROLES = [
-  ['bg', 'bg'], ['surface', 'surface'], ['border', 'border'], ['text', 'text'],
-  ['muted', 'muted'], ['accent', 'accent'], ['accent-foreground', 'accentText'],
+  ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'], ['scrim', 'scrim'],
+  ['text', 'text'], ['muted', 'muted'],
+  ['accent', 'accent'], ['accent-foreground', 'accentText'],
+  ['accent-hover', 'accentHover'], ['accent-active', 'accentActive'],
+  ['accent-container', 'accentContainer'], ['accent-container-foreground', 'accentContainerText'],
+  ['success', 'success'], ['success-container', 'successContainer'], ['success-container-foreground', 'successOnContainer'],
+  ['warning', 'warning'], ['warning-container', 'warningContainer'], ['warning-container-foreground', 'warningOnContainer'],
+  ['danger', 'danger'],   ['danger-container', 'dangerContainer'],   ['danger-container-foreground', 'dangerOnContainer'],
+  ['info', 'info'],       ['info-container', 'infoContainer'],       ['info-container-foreground', 'infoOnContainer'],
 ];
 
-/** Full Scale export as GLOBAL (primitive) tokens — the luminance-keyed tonal
+/** Full Scale export as GLOBAL (primitive) tokens — the OKLab-lightness tonal
  *  scale 50–950 — plus the light/dark semantic themes as tokens that REFERENCE
  *  those globals (var() in CSS/Tailwind, DTCG aliases in JSON). This is distinct
  *  from the palette export, which is purely semantic role tokens.
  *  @param {'css'|'tailwind'|'json'} format
  *  @param {'oklch'|'hex'} colorFmt */
+// OKLCH hue (0–360) → a colour-family name. Descriptive only (used to name off-scale
+// primitives), so exact boundaries don't matter; the four fixed status hues land on
+// red (danger 27) / amber (warning 85) / green (success 152) / blue (info 255).
+function hueFamily(H) {
+  H = ((H % 360) + 360) % 360;
+  const t = [[40,'red'],[70,'orange'],[95,'amber'],[125,'yellow'],[150,'lime'],[175,'green'],
+             [200,'teal'],[225,'cyan'],[275,'blue'],[305,'indigo'],[335,'violet'],[360,'pink']];
+  for (const [max, name] of t) if (H < max) return name;
+  return 'red';
+}
+// OKLCH lightness → the nearest tonal-scale step number (50…950), so a primitive's tone reads
+// on the same 50–950 ramp as color.scale.*.
+function toneForL(L) {
+  let best = SCALE_STEPS[0], bd = Infinity;
+  SCALE_L.forEach((sl, i) => { const d = Math.abs(sl - L); if (d < bd) { bd = d; best = SCALE_STEPS[i]; } });
+  return best;
+}
+// Descriptive name PARTS for an off-scale colour: a fixed name (white/black, incl. an -aNN alpha
+// suffix), or a colour family + tone. No role or theme is encoded — the primitive layer describes
+// colour only; the semantic theme layer carries meaning via aliases.
+function colorNameParts(hex) {
+  const [L, C, H] = rgbToOklch(...hexToRgb(hex));
+  const a = hexToRgba(hex)[3];
+  const aSuf = a < 0.9995 ? '-a' + Math.round(a * 100) : '';
+  if (C < 0.02) { // achromatic
+    const h = hex.slice(0, 7).toLowerCase();
+    if (h === '#ffffff') return { fixed: 'white' + aSuf };
+    if (h === '#000000') return { fixed: 'black' + aSuf };
+    const t = toneForL(L);
+    if (t <= 50)  return { fixed: 'white' + aSuf };
+    if (t >= 950) return { fixed: 'black' + aSuf };
+    return { family: 'neutral', tone: t, aSuf };
+  }
+  return { family: hueFamily(H), tone: toneForL(L), aSuf };
+}
+
 function buildScaleExport(format, colorFmt, scale, light, dark) {
   const cval = hex => colorFmt === 'hex' ? hex.toLowerCase() : oklchCss(hex);
   const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
 
-  // Theme values that aren't on the scale are pure #fff/#000 (the light bg and the
-  // black/white accent-foreground). Promote them to base primitive vars so the semantic
-  // layer references ONLY globals — never a raw color — exactly as the JSON export does.
-  const BASE_NAMES = { '#ffffff': 'white', '#000000': 'black' };
+  // Off-scale theme values → DESCRIPTIVE primitive names (colour family + tone, e.g. green-700).
+  // The primitive layer describes colour only — no role or theme in a name. Each unique hex is
+  // named once (shared hexes dedupe); when two distinct colours want the same family+tone, the
+  // second takes the nearest FREE tone in that family (green-700 → green-800), so names stay
+  // regular and tone-ordered rather than growing "-2/-3" collision suffixes. Light roles are
+  // named before dark for deterministic output.
+  const BASE_NAMES = {};
+  const usedNames = new Set();
+  const famTones = {}; // family → Set of tones already taken
+  const nearestFreeTone = (want, used) => {
+    if (!used.has(want)) return want;
+    const i0 = SCALE_STEPS.indexOf(want);
+    for (let d = 1; d < SCALE_STEPS.length; d++)
+      for (const j of [i0 + d, i0 - d])
+        if (j >= 0 && j < SCALE_STEPS.length && !used.has(SCALE_STEPS[j])) return SCALE_STEPS[j];
+    return want; // family exhausted (very unlikely) → safety suffix below
+  };
+  const assign = hex => {
+    if (BASE_NAMES[hex]) return;
+    const p = colorNameParts(hex);
+    let name;
+    if (p.fixed)      name = p.fixed;
+    else if (p.aSuf)  name = p.family + '-' + p.tone + p.aSuf; // translucent: alpha already distinguishes
+    else { const used = famTones[p.family] || (famTones[p.family] = new Set());
+           const tone = nearestFreeTone(p.tone, used); used.add(tone); name = p.family + '-' + tone; }
+    let final = name, i = 2;
+    while (usedNames.has(final)) final = name + '-' + (i++); // safety only
+    usedNames.add(final); BASE_NAMES[hex] = final;
+  };
+  for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
+  for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex);
 
   if (format === 'css') {
     const gval = hex => cval(hex);
@@ -4261,9 +4562,9 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
     const baseGlobals = [...baseUsed.entries()].sort((a, b) => a[0] < b[0] ? 1 : -1) // white → black
       .map(([hex, name]) => `  --color-${name}: ${gval(hex)};  /* ${alt(hex)} */`).join('\n');
     const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
-    return `/* Global tokens — base white/black + the luminance-keyed tonal scale (50–950),
-   primitives. The semantic themes below reference ONLY these, so re-theming is swapping
-   aliases. From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
+    return `/* Global tokens — base white/black + a tonal scale (50–950) stepped evenly in OKLab
+   perceptual lightness (not in WCAG relative luminance), primitives. The light/dark semantic
+   themes below reference ONLY these. From the Relative Luminous Color Wheel — relative-luminous-color-wheel.vercel.app */
 :root {
 ${baseGlobals ? baseGlobals + '\n' : ''}${globals}
 }
@@ -4308,30 +4609,72 @@ ${darkLines}
 `;
   }
 
-  // JSON — W3C Design Tokens (DTCG), tool-implemented editors'-draft form: every color
-  // $value is a CSS hex STRING (Style Dictionary / Tokens Studio / Cobalt parse it
-  // directly). Scale primitives live under color.scale; the light/dark themes under
-  // theme.* are ALIASES ({color.scale.N}) — the standard, widely-supported reference
-  // form. The OKLCH/sRGB components the toggle selects, plus luminance, ride in
-  // $extensions (which tools MUST preserve). The 2025.x "object color" drafts are
-  // labelled "do not implement", so we don't emit that shape in $value.
+  if (format === 'shadcn') {
+    // shadcn/ui theme: the app's roles mapped to shadcn's fixed token names, emitted as the
+    // :root (light) + .dark blocks shadcn expects in globals.css. Values honour the colour-format
+    // toggle (hex or oklch — modern shadcn uses oklch). Drop-in: paste over the generated
+    // :root/.dark in a shadcn project (the @theme inline mapping there consumes these).
+    const on = hex => { const l = relativeLuminance(...hexToRgb(hex)); return contrastRatio(l, 1) >= contrastRatio(l, 0) ? '#ffffff' : '#000000'; };
+    const vars = t => [
+      ['background', t.bg.hex], ['foreground', t.text.hex],
+      ['card', t.surface.hex], ['card-foreground', t.text.hex],
+      ['popover', t.surface2.hex], ['popover-foreground', t.text.hex],
+      ['primary', t.accent.hex], ['primary-foreground', t.accentText.hex],
+      ['secondary', t.surface2.hex], ['secondary-foreground', t.text.hex],
+      ['muted', t.surface2.hex], ['muted-foreground', t.muted.hex],
+      ['accent', t.accentContainer.hex], ['accent-foreground', t.accentContainerText.hex],
+      ['destructive', t.danger.hex], ['destructive-foreground', on(t.danger.hex)],
+      ['border', t.border.hex], ['input', t.border.hex], ['ring', t.accent.hex],
+      // Five chart hues: the accent plus the four status colours.
+      ['chart-1', t.accent.hex], ['chart-2', t.info.hex], ['chart-3', t.success.hex],
+      ['chart-4', t.warning.hex], ['chart-5', t.danger.hex],
+      // Sidebar surface set (shadcn ≥ 0.9).
+      ['sidebar', t.surface.hex], ['sidebar-foreground', t.text.hex],
+      ['sidebar-primary', t.accent.hex], ['sidebar-primary-foreground', t.accentText.hex],
+      ['sidebar-accent', t.accentContainer.hex], ['sidebar-accent-foreground', t.accentContainerText.hex],
+      ['sidebar-border', t.border.hex], ['sidebar-ring', t.accent.hex],
+    ];
+    const lines = t => vars(t).map(([n, hex]) => `  --${n}: ${cval(hex)};`).join('\n');
+    return `/* shadcn/ui theme — from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app).
+   Paste over the :root / .dark blocks in your globals.css. */
+:root {
+  --radius: 0.625rem;
+${lines(light)}
+}
+
+.dark {
+${lines(dark)}
+}
+`;
+  }
+
+  // JSON — W3C Design Tokens (DTCG), Format Module 2025.10 (first stable release). A color
+  // $value is the spec's OBJECT form { colorSpace, components, hex }: spec-aware tools (Style
+  // Dictionary, Tokens Studio, Terrazzo) read the components, while `hex` is the spec's own
+  // built-in fallback so hex-only importers still get a colour — the widest-compatible shape.
+  // The export toggle chooses the colorSpace (srgb: components 0–1, or oklch: [L,C,H]); alpha
+  // rides in $value only when <1. Scale primitives live under color.scale; the light/dark
+  // themes under theme.* are ALIASES ({color.scale.N}). App luminance stays in $extensions.
   const NS = 'app.vercel.relative-luminous-color-wheel';
-  const colorMeta = hex => {
-    const meta = { alpha: 1 };
-    if (colorFmt === 'oklch') { meta.colorSpace = 'oklch'; meta.components = oklchComponents(hex); meta.oklch = oklchCss(hex); }
-    else { meta.colorSpace = 'srgb'; meta.components = hexToRgb(hex).map(v => +(v / 255).toFixed(4)); }
-    return meta;
+  const colorValue = hex => {
+    const v = {
+      colorSpace: colorFmt === 'oklch' ? 'oklch' : 'srgb',
+      components: colorFmt === 'oklch' ? oklchComponents(hex) : hexToRgb(hex).map(v => +(v / 255).toFixed(4)),
+      hex: hex.toLowerCase(),
+    };
+    const a = +hexToRgba(hex)[3].toFixed(4);
+    if (a < 1) v.alpha = a;
+    return v;
   };
   const litToken = (hex, lum) => {
-    const meta = colorMeta(hex);
-    if (lum != null) meta.luminance = +lum.toFixed(4);
-    return { $value: hex.toLowerCase(), $extensions: { [NS]: meta } };
+    const t = { $value: colorValue(hex) };
+    if (lum != null) t.$extensions = { [NS]: { luminance: +lum.toFixed(4) } };
+    return t;
   };
   const scaleGroup = Object.fromEntries(scale.map(c => [String(c.step), litToken(c.hex, c.lum)]));
-  // Keep the semantic layer alias-ONLY: any theme value not on the scale (the light
-  // bg and the black/white accent-foreground labels are pure #fff/#000) is promoted to
-  // a color.base.* primitive and referenced, so changing e.g. "black" is a one-line
-  // edit that cascades to every theme (no absolute colors hard-coded under theme.*).
+  // Keep the semantic layer alias-ONLY: any theme value not on the scale is promoted to a
+  // color.base.* primitive with a DESCRIPTIVE name (colour family + tone, e.g. green-700) and
+  // referenced, so a primitive describes colour only — role and theme live solely in theme.*.
   // (BASE_NAMES is declared once near the top of the function, shared by all formats.)
   const baseUsed = new Map(); // hex → { name, lum } for every base primitive actually referenced
   const themeRef = e => {
@@ -4346,26 +4689,27 @@ ${darkLines}
   const baseGroup = Object.fromEntries([...baseUsed.entries()]
     .sort((a, b) => b[1].lum - a[1].lum) // white → black
     .map(([hex, { name, lum }]) => [name, litToken(hex, lum)]));
-  const fmtNote = colorFmt === 'oklch' ? 'Each $value is a CSS hex string; OKLCH components, alpha, and luminance are under $extensions.'
-                :                        'Each $value is a CSS hex string; sRGB components (0–1), alpha, and luminance are under $extensions.';
+  const fmtNote = colorFmt === 'oklch' ? 'Each color $value is a DTCG object: colorSpace "oklch", components [L, C, H], plus a hex fallback.'
+                :                        'Each color $value is a DTCG object: colorSpace "srgb", components [r, g, b] (0–1), plus a hex fallback.';
   const json = {
-    $description: `Global tonal-scale tokens (primitives, color.scale.* and color.base.*) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the widely-implemented W3C DTCG editors'-draft format (color $value as a hex string).`,
+    $description: `Global primitive tokens (color.scale.* tonal ramp and color.base.* colour-descriptive primitives) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
-      $description: 'Primitive colors — the luminance-keyed tonal scale (50–950) plus base white/black. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      $description: 'Primitive colors, described by colour only (no role, no theme): a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end — plus off-scale primitives named by colour family + tone (e.g. green-700, blue-300) and white/black. With the Text/BG (gradient) source the ramp also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
       base:  baseGroup,
       scale: scaleGroup,
     },
     theme: {
       $type: 'color',
-      $description: 'Semantic role tokens; every value is an alias to a color.scale or color.base primitive, so re-theming means swapping references, never editing colors here.',
+      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role sets sharing the same primitives — select one at build time (or via the 2025.10 sets/resolutionOrder mechanism).',
       light: lightGroup,
       dark:  darkGroup,
     },
     $extensions: {
       [NS]: {
+        // Ordered list of the scale's step names (a convenience index; the per-token relative
+        // luminance lives on each color.scale.* token's own $extensions — not duplicated here).
         scaleSteps: scale.map(c => c.step),
-        scaleLuminances: scale.map(c => +c.lum.toFixed(4)),
       },
     },
   };
@@ -4375,6 +4719,7 @@ ${darkLines}
 const SCALE_EXPORT_FILE = {
   css:      { name: 'scale.tokens.css',   mime: 'text/css' },
   tailwind: { name: 'scale.tailwind.css', mime: 'text/css' },
+  shadcn:   { name: 'shadcn-theme.css',   mime: 'text/css' },
   json:     { name: 'scale.tokens.json',  mime: 'application/design-tokens+json' },
 };
 function downloadScaleExport(format, colorFmt, scale, light, dark) {
@@ -4424,6 +4769,27 @@ function renderLayoutPreview() {
   layoutPreviewEl.appendChild(lpModeToggle());
   if (_lpMode === 'theme') renderThemeLayout();
   else renderPaletteLayout();
+}
+
+// Which face of the theme each preview shows: a marketing 'page', or a systematic
+// 'components' gallery (buttons / inputs / badges / table across default·hover·active·disabled).
+let _lpThemeView = 'page';
+
+function themeViewToggle() {
+  const wrap = lpEl('div', 'lp-modes lp-view-modes');
+  for (const [v, label] of [['page', 'Page'], ['components', 'Components']]) {
+    const btn = lpEl('button', 'lp-mode-btn' + (_lpThemeView === v ? ' active' : ''), label);
+    btn.type = 'button';
+    btn.addEventListener('click', () => { if (_lpThemeView !== v) { _lpThemeView = v; renderLayoutPreview(); } });
+    wrap.appendChild(btn);
+  }
+  return wrap;
+}
+
+// Dispatch to the current theme view. Both faces are driven entirely by `th`'s role colours, so
+// they stay consistent with the tokens the app exports.
+function buildThemeView(th, footerNote) {
+  return _lpThemeView === 'components' ? buildComponentGallery(th, footerNote) : buildThemeMock(th, footerNote);
 }
 
 // ── Contrast audit (shared by both Layout preview modes) ──────────────────────
@@ -4536,161 +4902,98 @@ function buildThemeChecklist(th) {
 function renderPaletteLayout() {
   const liveText = toHex(...selectedRgbBiased()).toLowerCase();
   const liveBg   = toHex(cR, cG, cB).toLowerCase();
-  const roleHexes = (role, live) => {
-    const h = palette.filter(e => e.role === role).map(e => e.hex);
-    return h.length ? h : [live];
-  };
-  const texts = roleHexes('fg', liveText);
-  const bgs   = roleHexes('bg', liveBg);
-  const t = i => cvdTransformHex(texts[i % texts.length]); // text colour by rank (cycled)
-  const b = i => cvdTransformHex(bgs[i % bgs.length]);      // bg colour by rank (cycled)
   const saved = palette.length > 0;
-  // Coloured text node in one call: element with class `cls`, text, colour rank.
-  const tx = (tag, cls, text, ti) => { const n = lpEl(tag, cls, text); n.style.color = t(ti); return n; };
-  // Filled "button": brand-accent bg + label colour (cosmetic hover/active in CSS).
-  const btn = (label, cls, bi = 2, ti = 0) => { const n = lpEl('span', 'lp-btn' + (cls ? ' ' + cls : ''), label); n.style.background = b(bi); n.style.color = t(ti); return n; };
 
-  // Every saved colour is used in the layout itself: the ten sections below are
-  // each a distinct SURFACE painted with bg ranks 0–9 (nav…footer), and the text
-  // ranks 0–9 are spread across their headings, body, links, marks and stats —
-  // so all 10×2 colours appear organically, without a feature-card grid.
-  if (!saved) {
-    layoutPreviewEl.appendChild(lpEl('div', 'lp-hint',
-      'Showing the current picker pair. Pin text and background colours to the palette to preview a full design system here.'));
+  // Dress the SAME semantic mock the Scales preview uses, but sourced from the palette by NAME
+  // so each colour lands in the role its name implies: 'body'/'text'→text, 'muted'→muted,
+  // 'page'→bg, 'surface'→surface, 'border'→border, 'accent'→accent, 'on-accent'→accentText,
+  // 'success'/'warning'/'danger'/'info'→their status roles. Unmatched roles fall back to the
+  // first colour of that role, then the live picker pair — so a hand-pinned palette still previews.
+  const wrap = hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) });
+  const byName = (role, ...names) => {
+    for (const nm of names) {
+      const e = palette.find(x => x.role === role && (x.name || '').toLowerCase() === nm);
+      if (e) return e.hex;
+    }
+    return null;
+  };
+  const firstOf = role => { const e = palette.find(x => x.role === role); return e ? e.hex : null; };
+  // Missing roles resolve WITHIN the palette; the only non-palette colour we ever allow is the
+  // main picker's colour for a group that's EMPTY — an empty Text palette borrows the picker's
+  // TEXT colour, an empty Background palette borrows the picker's BG colour (per the user's rule).
+  // `bestFgOn` picks the most-contrasting TEXT colour already saved to sit on `overHex`, and only
+  // falls back to the picker's TEXT colour when the Text palette has no entries at all.
+  const lumOf = hex => relativeLuminance(...hexToRgb(hex));
+  const bestFgOn = overHex => {
+    let best = null, bestC = -1;
+    for (const e of palette) if (e.role === 'fg') { const cc = contrastRatio(lumOf(e.hex), lumOf(overHex)); if (cc > bestC) { bestC = cc; best = e.hex; } }
+    return best || liveText;
+  };
+
+  const textHex   = byName('fg', 'body', 'text') || firstOf('fg') || liveText; // empty Text → picker TEXT
+  const bgHex     = byName('bg', 'page', 'bg', 'background') || firstOf('bg') || liveBg; // empty BG → picker BG
+  const accentHex = byName('bg', 'accent') || firstOf('bg') || liveBg;
+  const th = {
+    bg:         wrap(bgHex),
+    surface:    wrap(byName('bg', 'surface') || bgHex),
+    border:     wrap(byName('bg', 'border') || byName('fg', 'muted') || textHex),
+    text:       wrap(textHex),
+    muted:      wrap(byName('fg', 'muted') || textHex),
+    accent:     wrap(accentHex),
+    accentText: wrap(byName('fg', 'on-accent', 'onaccent', 'accent-foreground') || bestFgOn(accentHex)),
+  };
+  // Optional roles — only set when the palette actually carries them, so the mock shows the
+  // surface-2 panel / filled containers / hover-active chips exactly when those colours exist.
+  const opt = (key, role, ...names) => { const h = byName(role, ...names); if (h) th[key] = wrap(h); };
+  opt('surface2', 'bg', 'surface-2', 'surface2');
+  opt('accentContainer', 'bg', 'accent-container');
+  opt('accentContainerText', 'fg', 'on-accent-container');
+  opt('accentHover', 'bg', 'accent-hover');
+  opt('accentActive', 'bg', 'accent-active');
+  for (const s of Object.keys(STATE_HUES)) {
+    opt(s, 'fg', s);
+    opt(s + 'Container', 'bg', s + '-container');
+    opt(s + 'OnContainer', 'fg', 'on-' + s + '-container');
   }
 
-  const screen = lpEl('div', 'lp-screen');
+  if (!saved) {
+    layoutPreviewEl.appendChild(lpEl('div', 'lp-hint',
+      'Showing the current picker pair. Pin colours — or save a theme from Scales — to preview your palette used by role here.'));
+  }
 
-  // ── Nav (bg 0) ────────────────────────────────────────────────────────────
-  const nav = lpEl('div', 'lp-nav');
-  nav.style.background = b(0);
-  const brandWrap = lpEl('div', 'lp-brand-wrap');
-  const dot = lpEl('span', 'lp-brand-dot'); dot.style.background = t(0);
-  brandWrap.append(dot, tx('span', 'lp-brand', 'Aurora', 0));
-  const navLinks = lpEl('div', 'lp-navlinks');
-  ['Product', 'Docs', 'Blog'].forEach((txt, i) => navLinks.appendChild(tx('span', 'lp-navlink', txt, i + 1)));
-  const navRight = lpEl('div', 'lp-navright');
-  const search = tx('span', 'lp-search', 'Search', 3); search.style.borderColor = t(3);
-  navRight.append(search, btn('Sign up'));
-  nav.append(brandWrap, navLinks, navRight);
-  screen.appendChild(nav);
+  layoutPreviewEl.appendChild(themeViewToggle());
+  layoutPreviewEl.appendChild(buildThemeView(th, saved ? '© 2026 Aurora — your palette' : '© 2026 Aurora — live pair'));
 
-  // ── Hero (bg 1) + product-shot window (bg 2) ──────────────────────────────
-  const hero = lpEl('div', 'lp-hero');
-  hero.style.background = b(1);
-  const eyebrow = tx('span', 'lp-eyebrow', '● New — v2 is here', 2); eyebrow.style.borderColor = t(2);
-  const heroBtns = lpEl('div', 'lp-herobtns');
-  const ghost = lpEl('span', 'lp-btn lp-btn-lg lp-btn-ghost', 'Live demo'); ghost.style.color = t(1); ghost.style.borderColor = t(1);
-  heroBtns.append(btn('Get started', 'lp-btn-lg'), ghost);
-  const shot = lpEl('div', 'lp-shot'); shot.style.background = b(2);
-  const shotBar = lpEl('div', 'lp-shot-bar');
-  [1, 2, 3].forEach(i => { const d = lpEl('span', 'lp-shot-dot'); d.style.background = t(i); shotBar.appendChild(d); });
-  const shotBody = lpEl('div', 'lp-shot-body');
-  const bar = (w, ti) => { const n = lpEl('div', 'lp-shot-line'); n.style.width = w; n.style.background = t(ti); return n; };
-  shotBody.append(bar('55%', 0), bar('92%', 1), bar('78%', 4), bar('45%', 5));
-  shot.append(shotBar, shotBody);
-  hero.append(eyebrow,
-    tx('div', 'lp-h1', 'Accessible colour, by construction.', 0),
-    tx('div', 'lp-sub', 'Lock a contrast target and explore hue and saturation without ever breaking readability.', 1),
-    heroBtns, shot);
-  screen.appendChild(hero);
+  // Coverage bar — EVERY saved colour, labelled by its NAME (or rank) + hex, so nothing the
+  // palette holds is hidden even when it isn't one of the semantic roles the mock consumes.
+  const texts = palette.filter(e => e.role === 'fg');
+  const bgs   = palette.filter(e => e.role === 'bg');
+  if (saved) {
+    const pal = lpEl('div', 'lp-palette lp-palette-standalone');
+    const addPal = (label, items, role) => {
+      if (!items.length) return;
+      const grp = lpEl('div', 'lp-pal-group');
+      grp.appendChild(lpEl('div', 'lp-pal-label', label));
+      const sws = lpEl('div', 'lp-pal-swatches');
+      items.forEach((e, i) => {
+        const sw = lpEl('span', 'lp-pal-swatch');
+        sw.title = (e.name || paletteRankLabel(i)) + ' · ' + hexDisplay(e.hex);
+        if (role === 'fg') { sw.textContent = 'Ag'; sw.style.color = cvdTransformHex(e.hex); }
+        else { sw.classList.add('lp-pal-swatch-fill'); sw.style.background = cvdTransformHex(e.hex); }
+        sws.appendChild(sw);
+      });
+      grp.appendChild(sws);
+      pal.appendChild(grp);
+    };
+    addPal('Text', texts, 'fg');
+    addPal('Background', bgs, 'bg');
+    layoutPreviewEl.appendChild(pal);
+  }
 
-  // ── Trust strip (bg 3) — six wordmarks carry text ranks 4–9 ───────────────
-  const trust = lpEl('div', 'lp-trust'); trust.style.background = b(3);
-  trust.appendChild(tx('span', 'lp-trust-label', 'Trusted by', 2));
-  const marks = lpEl('div', 'lp-trust-marks');
-  ['NOVA', 'Lumen', 'Verdi', 'Halo', 'Onyx', 'Pico'].forEach((m, i) => marks.appendChild(tx('span', 'lp-trust-mark', m, i + 4)));
-  trust.appendChild(marks);
-  screen.appendChild(trust);
-
-  // ── Stats band (bg 4) ─────────────────────────────────────────────────────
-  const stats = lpEl('div', 'lp-stats'); stats.style.background = b(4);
-  [['4.5:1', 'WCAG AA', 0, 1], ['Lc 90', 'APCA', 6, 7], ['10+10', 'colours', 8, 9]].forEach(([num, lab, ni, li]) => {
-    const s = lpEl('div', 'lp-stat');
-    s.append(tx('div', 'lp-stat-num', num, ni), tx('div', 'lp-stat-lab', lab, li));
-    stats.appendChild(s);
-  });
-  screen.appendChild(stats);
-
-  // ── Testimonial (bg 5) ────────────────────────────────────────────────────
-  const quote = lpEl('div', 'lp-quote'); quote.style.background = b(5);
-  quote.appendChild(tx('div', 'lp-quote-text', '“Our whole design system stayed readable the moment we switched.”', 0));
-  const person = lpEl('div', 'lp-person');
-  const av = lpEl('span', 'lp-avatar'); av.style.background = t(2);
-  const pmeta = lpEl('div', 'lp-person-meta');
-  pmeta.append(tx('div', 'lp-person-name', 'Mira Chen', 0), tx('div', 'lp-person-role', 'Design Lead, NOVA', 1));
-  person.append(av, pmeta);
-  quote.appendChild(person);
-  screen.appendChild(quote);
-
-  // ── Highlights panel (bg 6) — no pricing: this tool is entirely free ──────
-  const pricing = lpEl('div', 'lp-pricing'); pricing.style.background = b(6);
-  const priceHead = lpEl('div', 'lp-price-head');
-  priceHead.append(tx('span', 'lp-price-plan', 'Everything included', 0), tx('span', 'lp-price-amt', 'Free forever', 3));
-  const feats = lpEl('div', 'lp-price-feats');
-  [['✓ Unlimited palettes', 1], ['✓ APCA verdicts', 7], ['✓ Token export', 8]].forEach(([f, ti]) => feats.appendChild(tx('div', 'lp-price-feat', f, ti)));
-  pricing.append(priceHead, feats, btn('Start creating', 'lp-btn-block'));
-  screen.appendChild(pricing);
-
-  // ── Newsletter band (bg 7) — the field reacts on hover/press ──────────────
-  const news = lpEl('div', 'lp-news'); news.style.background = b(7);
-  news.appendChild(tx('div', 'lp-news-title', 'Stay in the loop', 0));
-  const form = lpEl('div', 'lp-news-form');
-  const input = tx('span', 'lp-input', 'you@example.com', 1); input.style.borderColor = t(1);
-  form.append(input, btn('Subscribe'));
-  news.appendChild(form);
-  screen.appendChild(news);
-
-  // ── CTA band (bg 8) ───────────────────────────────────────────────────────
-  const cta = lpEl('div', 'lp-cta'); cta.style.background = b(8);
-  cta.append(tx('div', 'lp-cta-title', 'Start building accessible palettes today.', 0),
-             tx('div', 'lp-cta-sub', 'No account needed — everything runs locally.', 1));
-  cta.appendChild(btn('Get started free', 'lp-btn-lg'));
-  screen.appendChild(cta);
-
-  // ── Footer (bg 9): brand + link columns + brand palette + copyright ───────
-  const footer = lpEl('div', 'lp-footer'); footer.style.background = b(9);
-  const fTop = lpEl('div', 'lp-footer-top');
-  const fBrand = lpEl('div', 'lp-footer-brand');
-  const fdot = lpEl('span', 'lp-brand-dot'); fdot.style.background = t(0);
-  fBrand.append(fdot, tx('span', 'lp-brand', 'Aurora', 0),
-    tx('div', 'lp-footer-tag', 'Accessible colour tooling for design systems.', 1));
-  const cols = lpEl('div', 'lp-footer-cols');
-  [['Product', ['Features', 'Guides', 'Changelog']], ['Company', ['About', 'Blog', 'Careers']]].forEach(([head, items]) => {
-    const col = lpEl('div', 'lp-footer-col');
-    col.appendChild(tx('div', 'lp-footer-head', head, 2));
-    items.forEach((it, i) => col.appendChild(tx('span', 'lp-footer-link', it, i + 1)));
-    cols.appendChild(col);
-  });
-  fTop.append(fBrand, cols);
-  footer.appendChild(fTop);
-
-  // Brand palette — the coverage guarantee: every text and background colour,
-  // labelled by rank + hex in a tooltip, styled as a footer palette bar.
-  const pal = lpEl('div', 'lp-palette');
-  const addPal = (label, hexes, role) => {
-    const grp = lpEl('div', 'lp-pal-group');
-    grp.appendChild(tx('div', 'lp-pal-label', label, 2));
-    const sws = lpEl('div', 'lp-pal-swatches');
-    hexes.forEach((hex, i) => {
-      const sw = lpEl('span', 'lp-pal-swatch');
-      sw.title = paletteRankLabel(i) + ' · ' + hexDisplay(hex);
-      if (role === 'fg') { sw.textContent = 'Ag'; sw.style.color = cvdTransformHex(hex); }
-      else { sw.classList.add('lp-pal-swatch-fill'); sw.style.background = cvdTransformHex(hex); }
-      sws.appendChild(sw);
-    });
-    grp.appendChild(sws);
-    pal.appendChild(grp);
-  };
-  addPal(saved ? 'Text' : 'Text (live)', texts, 'fg');
-  addPal(saved ? 'Background' : 'Background (live)', bgs, 'bg');
-  footer.appendChild(pal);
-  footer.appendChild(tx('div', 'lp-copy', '© 2026 Aurora — every colour from your palette.', 2));
-  screen.appendChild(footer);
-
-  layoutPreviewEl.appendChild(screen);
-  // Contrast audit of every text × background pair the mock draws from.
-  layoutPreviewEl.appendChild(buildContrastMatrix(texts, bgs));
+  // Contrast audit of every text × background pair.
+  layoutPreviewEl.appendChild(buildContrastMatrix(
+    texts.length ? texts.map(e => e.hex) : [liveText],
+    bgs.length ? bgs.map(e => e.hex) : [liveBg]));
 }
 
 // ── Scales mode: preview the GENERATED scale/themes in a real layout —
@@ -4710,12 +5013,14 @@ function renderThemeLayout() {
     sw.style.background = cvdTransformHex(c.hex);
     sw.dataset.name = c.step + ' · ' + hexDisplay(c.hex) + ' ⧉'; // hover label: step + hex + copy cue
     sw.title = 'Click to copy ' + hexDisplay(c.hex) + ' (step ' + c.step + ')';
+    sw.tabIndex = 0; sw.setAttribute('role', 'button'); sw.setAttribute('aria-label', 'Copy ' + hexDisplay(c.hex) + ' (step ' + c.step + ')');
     sw.addEventListener('click', () => copyHexSwatch(c.hex, sw));
+    sw.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyHexSwatch(c.hex, sw); } });
     strip.appendChild(sw);
   });
   layoutPreviewEl.appendChild(strip);
-  // The full mock website dressed in each theme is the preview (supersedes the
-  // old compact theme cards).
+  // Page ⇄ Components view toggle, then each theme dressed in the chosen face.
+  layoutPreviewEl.appendChild(themeViewToggle());
   layoutPreviewEl.appendChild(themedScreen('Light', light));
   layoutPreviewEl.appendChild(themedScreen('Dark',  dark));
   // Full export as GLOBAL tokens, laid out like the sidebar palette export: a
@@ -4737,7 +5042,7 @@ function renderThemeLayout() {
   };
   const tabs = lpEl('div', 'palette-export-tabs'); // file-format group first, then colour group
   tabs.append(
-    seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['json', 'JSON']], _scaleExportFmt,
+    seg([['css', 'CSS'], ['tailwind', 'Tailwind'], ['shadcn', 'shadcn'], ['json', 'JSON']], _scaleExportFmt,
       v => { _scaleExportFmt = v; renderLayoutPreview(); }),
     seg([['oklch', 'OKLCH'], ['hex', 'HEX']], _scaleExportColorFmt,
       v => { _scaleExportColorFmt = v; renderLayoutPreview(); }),
@@ -4761,42 +5066,23 @@ function renderThemeLayout() {
   layoutPreviewEl.appendChild(exp);
 }
 
-function themedScreen(name, th) {
+// Shared semantic mock screen. Dressed in a theme's roles so every colour is shown in the
+// role its NAME implies: accent carries fills, on-accent (accentText) is the label ON those
+// fills, muted is secondary text, and success / warning / danger / info drive status messages.
+// Used by BOTH the Scales/gradient preview (themedScreen) and the palette preview
+// (renderPaletteLayout) so the two stay consistent. `th` is a role map of { hex, lum } objects;
+// status roles are optional and their rows are skipped when absent.
+function buildThemeMock(th, footerNote) {
   const C = hex => cvdTransformHex(hex);
   const bg = th.bg.hex, surface = th.surface.hex, border = th.border.hex,
         text = th.text.hex, muted = th.muted.hex, accent = th.accent.hex, accentFg = th.accentText.hex;
-
-  const block = lpEl('div', 'lp-theme-block');
-  const head = lpEl('div', 'lp-theme-head');
-  head.appendChild(lpEl('span', 'lp-theme-name', name));
-  const saveBtn = lpEl('button', 'lp-theme-save', '+ Palette');
-  saveBtn.type = 'button';
-  saveBtn.title = 'Save this theme’s colours to the palette — text / muted / label → Text; bg / surface / border / accent → Background';
-  saveBtn.addEventListener('click', () => {
-    const n = addColorsToPalette([
-      { hex: th.text.hex,       role: 'fg' },
-      { hex: th.muted.hex,      role: 'fg' },
-      { hex: th.accentText.hex, role: 'fg' },
-      { hex: th.bg.hex,         role: 'bg' },
-      { hex: th.surface.hex,    role: 'bg' },
-      { hex: th.border.hex,     role: 'bg' },
-      { hex: th.accent.hex,     role: 'bg' },
-    ]);
-    saveBtn.textContent = n ? 'Saved ' + n : 'Nothing new';
-    setTimeout(() => { saveBtn.textContent = '+ Palette'; }, 1400);
-    // On narrow (modal) widths the Layout popper covers the screen, so hand off to the sidebar:
-    // close the popper and slide the palette in so the just-saved colours are visible.
-    if (n && window.matchMedia('(max-width: 640px)').matches) {
-      if (_closeLayoutPopper) _closeLayoutPopper();
-      setPaletteOpen(true);
-    }
-  });
-  head.appendChild(saveBtn);
-  block.appendChild(head);
+  const surface2 = th.surface2 ? th.surface2.hex : surface; // nested / elevated surface (falls back to surface)
 
   const screen = lpEl('div', 'lp-screen');
   screen.style.background = C(bg);
   screen.style.borderColor = C(border);
+  screen.style.color = C(text); // inherited default = the theme's body text, so no element ever
+                                // falls back to the stylesheet's grey (a non-palette colour)
 
   // Nav
   const nav = lpEl('div', 'lp-nav'); nav.style.borderBottom = '1px solid ' + C(border);
@@ -4819,6 +5105,16 @@ function themedScreen(name, th) {
   const b2 = lpEl('span', 'lp-btn lp-btn-lg lp-btn-ghost', 'Docs'); b2.style.color = C(text); b2.style.borderColor = C(border);
   hb.append(b1, b2);
   hero.append(h1, sub, hb);
+  // Interaction states — the accent fill's default / hover / active shades, shown as a swatch
+  // trio so the hover & active roles are visible (they're expressed as CSS :hover in real code).
+  if (th.accentHover && th.accentActive) {
+    const states = lpEl('div', 'lp-states');
+    [['Default', accent], ['Hover', th.accentHover.hex], ['Active', th.accentActive.hex]].forEach(([lab, hex]) => {
+      const chip = lpEl('span', 'lp-state-chip', lab); chip.style.background = C(hex); chip.style.color = C(accentFg);
+      states.appendChild(chip);
+    });
+    hero.appendChild(states);
+  }
   screen.appendChild(hero);
 
   // Cards (surface)
@@ -4834,7 +5130,36 @@ function themedScreen(name, th) {
   });
   screen.appendChild(cards);
 
-  // CTA band (accent)
+  // Status section — nested on the surface-2 (elevated) panel. Each status is shown as a FILLED
+  // alert using its container fill + on-container text when those roles exist (success=confirm,
+  // warning=caution, danger=error, info=notice); otherwise it falls back to the status foreground
+  // on the panel. Rows for roles the theme/palette doesn't carry are omitted.
+  const statusRows = [
+    ['success', '✓', 'Payment received — your order is confirmed.'],
+    ['warning', '⚠', 'Storage is almost full — free up space soon.'],
+    ['danger',  '✕', 'Your card was declined. Please try another.'],
+    ['info',    'ℹ', 'A new version is available to install.'],
+  ].filter(([k]) => th[k] || th[k + 'Container']);
+  if (statusRows.length) {
+    const alerts = lpEl('div', 'lp-alerts');
+    alerts.style.background = C(surface2); alerts.style.borderColor = C(border);
+    statusRows.forEach(([k, icon, msg]) => {
+      const cont = th[k + 'Container'], onCont = th[k + 'OnContainer'];
+      const row = lpEl('div', 'lp-alert');
+      const ic = lpEl('span', 'lp-alert-icon', icon);
+      if (cont && onCont) {                        // filled: container fill + on-container text
+        row.classList.add('lp-alert-filled');
+        row.style.background = C(cont.hex); row.style.color = C(onCont.hex);
+      } else {                                     // fallback: status foreground on the panel
+        row.style.color = C(th[k].hex); ic.style.color = C(th[k].hex);
+      }
+      row.append(ic, lpEl('span', 'lp-alert-text', msg));
+      alerts.appendChild(row);
+    });
+    screen.appendChild(alerts);
+  }
+
+  // CTA band (accent) — on-accent label ON the accent fill
   const cta = lpEl('div', 'lp-cta'); cta.style.background = C(accent);
   const ctaT = lpEl('div', 'lp-cta-title', 'Start building today.'); ctaT.style.color = C(accentFg);
   const ctaBtn = lpEl('span', 'lp-btn lp-btn-lg', 'Get started free'); ctaBtn.style.background = C(bg); ctaBtn.style.color = C(text);
@@ -4843,10 +5168,223 @@ function themedScreen(name, th) {
 
   // Footer (surface)
   const footer = lpEl('div', 'lp-footer'); footer.style.background = C(surface); footer.style.borderTop = '1px solid ' + C(border);
-  const ftag = lpEl('div', 'lp-footer-tag', '© 2026 Aurora — ' + name.toLowerCase() + ' theme'); ftag.style.color = C(muted);
+  const ftag = lpEl('div', 'lp-footer-tag', footerNote || '© 2026 Aurora'); ftag.style.color = C(muted);
   footer.appendChild(ftag);
   screen.appendChild(footer);
 
+  return screen;
+}
+
+// Component gallery — the same theme roles, but shown as a systematic set of real UI components
+// across default / hover / active / disabled, so the M3 roles (surfaces, accent + interaction
+// states, containers, status) are all demonstrated at a glance. Every colour is inline from `th`,
+// so it works for both the generated themes and a saved palette. Hover/active shades for fills
+// that carry no explicit token are derived with the SAME OKLab nudge the generator uses.
+function buildComponentGallery(th, footerNote) {
+  const C = hex => cvdTransformHex(hex);
+  const bg = th.bg.hex, surface = th.surface.hex, border = th.border.hex,
+        text = th.text.hex, muted = th.muted.hex, accent = th.accent.hex, accentFg = th.accentText.hex;
+  const surface2 = th.surface2 ? th.surface2.hex : surface;
+  const isDark = th.bg.lum < 0.5;
+  const shade = (hex, dL) => shiftLightness(hex, dL, isDark).hex; // pressed-ward OKLab nudge
+  const bestOn = hex => { const l = relativeLuminance(...hexToRgb(hex)); return contrastRatio(l, 1) >= contrastRatio(l, 0) ? '#ffffff' : '#000000'; };
+  const accHover  = th.accentHover  ? th.accentHover.hex  : shade(accent, 0.05);
+  const accActive = th.accentActive ? th.accentActive.hex : shade(accent, 0.10);
+  const accCont   = th.accentContainer ? th.accentContainer.hex : surface2;
+
+  const screen = lpEl('div', 'lp-screen lp-gallery');
+  screen.style.background = C(bg); screen.style.borderColor = C(border); screen.style.color = C(text);
+
+  const section = title => { const s = lpEl('div', 'lp-cg-sec'); s.appendChild(lpEl('div', 'lp-cg-h', title)); return s; };
+  // A filled/outlined "control" chip. o = {bg, fg, bd} (any omitted → not set).
+  const chip = (label, o, cls) => {
+    const n = lpEl('span', 'lp-cg-btn' + (cls ? ' ' + cls : ''), label);
+    if (o.bg) n.style.background = C(o.bg);
+    if (o.fg) n.style.color = C(o.fg);
+    if (o.bd) { n.style.borderColor = C(o.bd); n.style.borderStyle = 'solid'; }
+    return n;
+  };
+  const STATES = ['Default', 'Hover', 'Active', 'Disabled'];
+  // One variant row: four state cells built from a base fill.
+  const variantRow = (name, states) => {
+    const row = lpEl('div', 'lp-cg-row');
+    row.appendChild(lpEl('span', 'lp-cg-rowlabel', name));
+    STATES.forEach(st => {
+      const cell = lpEl('div', 'lp-cg-cell');
+      cell.appendChild(chip(st, states[st] || states.Default, st === 'Disabled' ? 'lp-cg-disabled' : ''));
+      row.appendChild(cell);
+    });
+    return row;
+  };
+
+  // ── Buttons ───────────────────────────────────────────────────────────────
+  const btns = section('Buttons');
+  const head = lpEl('div', 'lp-cg-row lp-cg-head');
+  head.appendChild(lpEl('span', 'lp-cg-rowlabel', ''));
+  STATES.forEach(s => { const h = lpEl('span', 'lp-cg-state', s); h.style.color = C(muted); head.appendChild(h); });
+  btns.appendChild(head);
+  const disabledCell = { bg: surface2, fg: muted, bd: border };
+  btns.appendChild(variantRow('Primary', {
+    Default: { bg: accent,    fg: accentFg },
+    Hover:   { bg: accHover,  fg: accentFg },
+    Active:  { bg: accActive, fg: accentFg },
+    Disabled: disabledCell,
+  }));
+  btns.appendChild(variantRow('Secondary', {
+    Default: { bg: surface2,          fg: text, bd: border },
+    Hover:   { bg: border,            fg: text, bd: border },
+    Active:  { bg: shade(border, 0.04), fg: text, bd: border },
+    Disabled: disabledCell,
+  }));
+  if (th.danger) {
+    const dng = th.danger.hex;
+    btns.appendChild(variantRow('Destructive', {
+      Default: { bg: dng,            fg: bestOn(dng) },
+      Hover:   { bg: shade(dng, 0.05), fg: bestOn(dng) },
+      Active:  { bg: shade(dng, 0.10), fg: bestOn(dng) },
+      Disabled: disabledCell,
+    }));
+  }
+  btns.appendChild(variantRow('Ghost', {
+    Default: { fg: themeLink(th).hex },
+    Hover:   { bg: accCont, fg: themeLink(th).hex },
+    Active:  { bg: shade(accCont, 0.04), fg: themeLink(th).hex },
+    Disabled: { fg: muted },
+  }));
+  screen.appendChild(btns);
+
+  // ── Inputs ────────────────────────────────────────────────────────────────
+  const inputs = section('Inputs');
+  const inRow = lpEl('div', 'lp-cg-inputs');
+  const field = (label, o) => {
+    const wrap = lpEl('div', 'lp-cg-field');
+    const lab = lpEl('div', 'lp-cg-flabel', label); lab.style.color = C(muted);
+    const box = lpEl('div', 'lp-cg-input');
+    box.style.background = C(o.bg); box.style.borderColor = C(o.bd); box.style.color = C(o.fg);
+    if (o.ring) box.style.boxShadow = '0 0 0 2px ' + C(o.ring);
+    box.textContent = o.text;
+    wrap.append(lab, box);
+    return wrap;
+  };
+  inRow.append(
+    field('Default', { bg: bg,       bd: border, fg: muted, text: 'you@example.com' }),
+    field('Focus',   { bg: bg,       bd: accent, fg: text,  text: 'you@example.com', ring: accent }),
+    field('Disabled',{ bg: surface2, bd: border, fg: muted, text: 'Disabled' }),
+  );
+  inputs.appendChild(inRow);
+  screen.appendChild(inputs);
+
+  // ── Badges (status containers + accent) ──────────────────────────────────
+  const badges = section('Badges');
+  const bwrap = lpEl('div', 'lp-cg-badges');
+  const badge = (label, o) => { const n = lpEl('span', 'lp-cg-badge', label); n.style.background = C(o.bg); n.style.color = C(o.fg); if (o.bd) n.style.borderColor = C(o.bd); return n; };
+  bwrap.appendChild(badge('Accent', { bg: accent, fg: accentFg }));
+  bwrap.appendChild(badge('Neutral', { bg: surface2, fg: muted, bd: border }));
+  [['success', 'Success'], ['warning', 'Warning'], ['danger', 'Danger'], ['info', 'Info']].forEach(([k, lab]) => {
+    const cont = th[k + 'Container'], on = th[k + 'OnContainer'];
+    if (cont && on) bwrap.appendChild(badge(lab, { bg: cont.hex, fg: on.hex }));
+  });
+  badges.appendChild(bwrap);
+  screen.appendChild(badges);
+
+  // ── Table ─────────────────────────────────────────────────────────────────
+  const tsec = section('Table');
+  const table = lpEl('div', 'lp-cg-table'); table.style.borderColor = C(border);
+  const thead = lpEl('div', 'lp-cg-tr lp-cg-thead'); thead.style.background = C(surface2); thead.style.borderColor = C(border);
+  ['Name', 'Role', 'Status'].forEach(h => { const c = lpEl('span', 'lp-cg-td', h); c.style.color = C(text); thead.appendChild(c); });
+  table.appendChild(thead);
+  const rows = [['Mira Chen', 'Owner', 'success', 'Active'], ['Sam Ito', 'Editor', 'warning', 'Pending'], ['Lee Park', 'Viewer', 'danger', 'Blocked']];
+  rows.forEach(([nm, role, k, stLab], i) => {
+    const tr = lpEl('div', 'lp-cg-tr'); tr.style.background = C(i % 2 ? surface : bg); tr.style.borderColor = C(border);
+    const c1 = lpEl('span', 'lp-cg-td', nm); c1.style.color = C(text);
+    const c2 = lpEl('span', 'lp-cg-td', role); c2.style.color = C(muted);
+    const c3 = lpEl('span', 'lp-cg-td');
+    const cont = th[k + 'Container'], on = th[k + 'OnContainer'];
+    if (cont && on) { const b = lpEl('span', 'lp-cg-badge', stLab); b.style.background = C(cont.hex); b.style.color = C(on.hex); c3.appendChild(b); }
+    else { c3.textContent = stLab; c3.style.color = C(th[k] ? th[k].hex : text); }
+    tr.append(c1, c2, c3);
+    table.appendChild(tr);
+  });
+  tsec.appendChild(table);
+  screen.appendChild(tsec);
+
+  // ── Overlay (scrim) — a modal backdrop dimming the content, with a dialog on top ──
+  if (th.scrim) {
+    const osec = section('Overlay');
+    const stage = lpEl('div', 'lp-cg-overlay'); stage.style.background = C(surface); stage.style.borderColor = C(border);
+    // Dimmed content behind the scrim.
+    const behind = lpEl('div', 'lp-cg-overlay-behind');
+    behind.append(lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'));
+    [...behind.children].forEach((b, i) => { b.style.background = C(i ? muted : text); b.style.width = ['70%', '90%', '55%'][i]; });
+    // The scrim: 33.33% black. Black is CVD-invariant, so an rgba from its alpha is exact.
+    const scrimA = hexToRgba(th.scrim.hex)[3];
+    const veil = lpEl('div', 'lp-cg-scrim'); veil.style.background = `rgba(0,0,0,${scrimA})`;
+    // Dialog floating above the scrim.
+    const dialog = lpEl('div', 'lp-cg-dialog'); dialog.style.background = C(bg); dialog.style.borderColor = C(border);
+    const dt = lpEl('div', 'lp-cg-dtitle', 'Delete file?'); dt.style.color = C(text);
+    const db = lpEl('div', 'lp-cg-dbody', 'This action can’t be undone.'); db.style.color = C(muted);
+    const da = lpEl('div', 'lp-cg-dbtns');
+    const cancel = lpEl('span', 'lp-cg-btn', 'Cancel'); cancel.style.background = C(surface2); cancel.style.color = C(text); cancel.style.borderColor = C(border); cancel.style.borderStyle = 'solid';
+    const ok = lpEl('span', 'lp-cg-btn', 'Delete'); const dng = th.danger ? th.danger.hex : accent; ok.style.background = C(dng); ok.style.color = C(bestOn(dng));
+    da.append(cancel, ok); dialog.append(dt, db, da);
+    stage.append(behind, veil, dialog);
+    osec.appendChild(stage);
+    screen.appendChild(osec);
+  }
+
+  const footer = lpEl('div', 'lp-footer'); footer.style.background = C(surface); footer.style.borderTop = '1px solid ' + C(border);
+  const ftag = lpEl('div', 'lp-footer-tag', footerNote || '© 2026 Aurora'); ftag.style.color = C(muted);
+  footer.appendChild(ftag);
+  screen.appendChild(footer);
+  return screen;
+}
+
+function themedScreen(name, th) {
+  const block = lpEl('div', 'lp-theme-block');
+  const head = lpEl('div', 'lp-theme-head');
+  head.appendChild(lpEl('span', 'lp-theme-name', name));
+  const saveBtn = lpEl('button', 'lp-theme-save', '+ Palette');
+  saveBtn.type = 'button';
+  saveBtn.title = 'Save this theme’s full role set to the palette — surfaces, text, accent (+container), and the four status colours with their containers';
+  saveBtn.addEventListener('click', () => {
+    // Save with the semantic ROLE as each colour's name so the palette isn't a bare numbered
+    // list and its export reads as --color-text-body / --color-bg-surface … (the palette groups
+    // are Text=fg / Background=bg, so names are the bare role — no doubled text-/bg- prefix).
+    const entries = [
+      { hex: th.text.hex,                role: 'fg', name: 'body' },
+      { hex: th.muted.hex,               role: 'fg', name: 'muted' },
+      { hex: th.accentText.hex,          role: 'fg', name: 'on-accent' },
+      { hex: th.accentContainerText.hex, role: 'fg', name: 'on-accent-container' },
+      { hex: th.bg.hex,                  role: 'bg', name: 'page' },
+      { hex: th.surface.hex,             role: 'bg', name: 'surface' },
+      { hex: th.surface2.hex,            role: 'bg', name: 'surface-2' },
+      { hex: th.border.hex,              role: 'bg', name: 'border' },
+      { hex: th.accent.hex,              role: 'bg', name: 'accent' },
+      { hex: th.accentContainer.hex,     role: 'bg', name: 'accent-container' },
+    ];
+    // Status colours: the page foreground (success/…, Text group), its soft container fill
+    // (Background) and the on-container text (Text) — so a filled alert/badge can be built from
+    // the palette too. Interaction states (accent hover/active) stay export-only (they're CSS
+    // :hover shades, not swatches you pick by hand).
+    for (const s of Object.keys(STATE_HUES)) {
+      if (th[s])                 entries.push({ hex: th[s].hex,                 role: 'fg', name: s });
+      if (th[s + 'Container'])   entries.push({ hex: th[s + 'Container'].hex,   role: 'bg', name: s + '-container' });
+      if (th[s + 'OnContainer']) entries.push({ hex: th[s + 'OnContainer'].hex, role: 'fg', name: 'on-' + s + '-container' });
+    }
+    const n = addColorsToPalette(entries);
+    saveBtn.textContent = n ? 'Saved ' + n : 'Nothing new';
+    setTimeout(() => { saveBtn.textContent = '+ Palette'; }, 1400);
+    // On narrow (modal) widths the Layout popper covers the screen, so hand off to the sidebar:
+    // close the popper and slide the palette in so the just-saved colours are visible.
+    if (n && window.matchMedia('(max-width: 640px)').matches) {
+      if (_closeLayoutPopper) _closeLayoutPopper();
+      setPaletteOpen(true);
+    }
+  });
+  head.appendChild(saveBtn);
+  block.appendChild(head);
+
+  const screen = buildThemeView(th, '© 2026 Aurora — ' + name.toLowerCase() + ' theme');
   block.appendChild(screen);
   block.appendChild(buildThemeChecklist(th)); // contrast audit for this theme
   return block;
@@ -4857,9 +5395,11 @@ function themedScreen(name, th) {
 // governed by the "Color in share link" preference). The section is hidden
 // while empty so it never affects the height-fitted layouts.
 
-// Per role: all ten get Latin-ordinal names (primary … denary), which is also
-// the storage cap.
-const PALETTE_ROLE_MAX = 10;
+// Max colours stored per role (fg / bg). Sized to hold a whole saved theme's role set
+// (surfaces + text + accent(+container) + the four status colours with containers) with room
+// to spare. The first ten positions get Latin-ordinal names (primary … denary, PALETTE_RANKS);
+// beyond that a plain ordinal (11, 12, …) is used, and any colour with a user name shows that.
+const PALETTE_ROLE_MAX = 24;
 /** @type {{hex: string, role: 'fg'|'bg'}[]} hex is lowercase '#rrggbb'; role
     records which picker the color was pinned from (fg = wheel, bg = custom)
     so re-editing reopens it in the same picker */
@@ -4956,6 +5496,10 @@ function _runFitSession() {
   _fitQueued = false;
   const el = document.getElementById('app-wrapper');
   if (!el) return;
+  // Height available to the app. The Figma plugin build reserves space at the bottom for
+  // its fixed action bar via --rlcw-fit-reserve; 0 on the web, so this is a no-op there.
+  const _reserve = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rlcw-fit-reserve')) || 0;
+  const availH = window.innerHeight - _reserve;
   if (window.innerWidth < 861 || !CSS.supports('zoom', '1')) {
     if (el.style.zoom) el.style.zoom = '';
     const ab = el.querySelector('.app-body');
@@ -4993,7 +5537,7 @@ function _runFitSession() {
     }
     const natural = el.scrollHeight;
     if (!natural) break;
-    let nz = (window.innerHeight - 1) / natural; // −1: keep rounding on the no-scroll side
+    let nz = (availH - 1) / natural; // −1: keep rounding on the no-scroll side
     // Never squeeze the layout narrower than the two-column desktop design
     // (very tall portrait windows hit this cap first — the leftover height is
     // then centered by the body flex rule); clamp the extremes (below ~0.55
@@ -5016,8 +5560,8 @@ function _runFitSession() {
   // ends below the flip point. Compare real rendered px against the window
   // directly: document.scrollHeight can under-report the spill when the body
   // flex-centering clips the top edge.
-  for (let i = 0; i < 4 && el.getBoundingClientRect().height > window.innerHeight - 0.5; i++) {
-    z = Math.max(0.55, z * (window.innerHeight - 1) / el.getBoundingClientRect().height);
+  for (let i = 0; i < 4 && el.getBoundingClientRect().height > availH - 0.5; i++) {
+    z = Math.max(0.55, z * (availH - 1) / el.getBoundingClientRect().height);
     el.style.zoom = z.toFixed(4);
   }
   _fitLast = { zoom: el.style.zoom, natural: el.scrollHeight, w: window.innerWidth, h: window.innerHeight };
@@ -5514,7 +6058,7 @@ function duplicateInPalette(index) {
     if (!src) return;
     if (palette.filter(e => e.role === src.role).length >= PALETTE_ROLE_MAX) return;
     recordPaletteHistory();
-    palette.splice(index + 1, 0, { hex: src.hex, role: src.role });
+    palette.splice(index + 1, 0, { ...src }); // carry the semantic name too (export dedups collisions)
     savePalette();
     renderPalette();
   };
@@ -5527,14 +6071,16 @@ function duplicateInPalette(index) {
     past the per-role cap. Returns how many were actually added. */
 function addColorsToPalette(entries) {
   const toAdd = [];
-  for (const { hex, role } of entries) {
+  for (const { hex, role, name } of entries) {
     const h = String(hex).toLowerCase();
     if (!/^#([0-9a-f]{6}|[0-9a-f]{8})$/.test(h)) continue;
     const inRole = palette.filter(e => e.role === role).length + toAdd.filter(e => e.role === role).length;
     if (inRole >= PALETTE_ROLE_MAX) continue;
     const dup = palette.some(e => e.role === role && e.hex === h) || toAdd.some(e => e.role === role && e.hex === h);
     if (dup) continue;
-    toAdd.push({ hex: h, role });
+    const entry = { hex: h, role };
+    if (name && String(name).trim()) entry.name = String(name).trim().slice(0, 40); // semantic role name
+    toAdd.push(entry);
   }
   if (!toAdd.length) return 0;
   recordPaletteHistory();
@@ -5969,6 +6515,7 @@ function chipEditorActiveIdx() { return _ceIdx; }
 function buildChipEditor() {
   _ceEl = /** @type {HTMLElement} */ (_chipEditorTpl.content.firstElementChild.cloneNode(true));
   applyCvdChannelLetters(_ceEl); // fresh clone: simulate its R/G/B letters too
+  _ceEl.querySelectorAll('input[type="range"]').forEach(_labelSlider); // label the cloned sliders (they're off-DOM at page load)
   const q = sel => _ceEl.querySelector(sel);
   _ceRefs = {
     tabs:   [..._ceEl.querySelectorAll('[data-emode]')],
@@ -6894,7 +7441,8 @@ function renderPalette() {
 
     attachChipDrag(chip, pos, role, list);
 
-    chip.append(grip, rank, hexLabel, edit, copy, duplicate, recall, remove);
+    chip.append(grip, rank, hexLabel, edit, copy, duplicate, recall);
+    chip.append(remove);
     list.appendChild(chip);
     });
 
@@ -6968,7 +7516,7 @@ updatePaletteHistoryButtons(); // start with both disabled (empty history)
 // Restore: localStorage first, then share-URL override.
 // Legacy entries (plain hex strings / unprefixed URL tokens) predate the
 // fg/bg distinction; they were always edited in the custom picker, so 'bg'.
-// Cap at four entries per role (legacy palettes could hold more).
+// Cap each role at PALETTE_ROLE_MAX entries (older palettes could hold a different count).
 function capPaletteRoles(list) {
   const kept = [], count = { fg: 0, bg: 0 };
   for (const e of list) {
