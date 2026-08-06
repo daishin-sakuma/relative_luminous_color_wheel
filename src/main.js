@@ -3774,6 +3774,7 @@ ${lines.join('\n')}
     ? 'Each color $value is a DTCG object: colorSpace "oklch", components [L, C, H], plus a hex fallback.'
     : 'Each color $value is a DTCG object: colorSpace "srgb", components [r, g, b] (0–1), plus a hex fallback.';
   const json = {
+    $schema: 'https://www.designtokens.org/schemas/2025.10/format.json',
     $description: `Accessible color palette exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
@@ -4515,22 +4516,38 @@ const SCALE_SEM_ROLES = [
  *  from the palette export, which is purely semantic role tokens.
  *  @param {'css'|'tailwind'|'json'} format
  *  @param {'oklch'|'hex'} colorFmt */
-// OKLCH hue (0–360) → a colour-family name. Descriptive only (used to name off-scale
-// primitives), so exact boundaries don't matter; the four fixed status hues land on
-// red (danger 27) / amber (warning 85) / green (success 152) / blue (info 255).
+// OKLCH hue (0–360) → a colour-family name, using the familiar Tailwind palette names (the tool
+// already targets Tailwind/shadcn). Fine granularity (~17 stops) so two colours whose hue differs
+// by more than ~15° land in DIFFERENT families and get distinct names — instead of colliding in a
+// coarse bucket and needing a "-2" suffix. Descriptive only, so exact boundaries needn't be perfect.
 function hueFamily(H) {
   H = ((H % 360) + 360) % 360;
-  const t = [[40,'red'],[70,'orange'],[95,'amber'],[125,'yellow'],[150,'lime'],[175,'green'],
-             [200,'teal'],[225,'cyan'],[275,'blue'],[305,'indigo'],[335,'violet'],[360,'pink']];
+  const t = [[15,'rose'],[35,'red'],[50,'orange'],[70,'amber'],[95,'yellow'],[130,'lime'],
+             [155,'green'],[178,'emerald'],[198,'teal'],[218,'cyan'],[248,'sky'],[272,'blue'],
+             [292,'indigo'],[315,'violet'],[335,'purple'],[350,'fuchsia'],[360,'pink']];
   for (const [max, name] of t) if (H < max) return name;
-  return 'red';
+  return 'rose';
 }
-// OKLCH lightness → the nearest tonal-scale step number (50…950), so a primitive's tone reads
-// on the same 50–950 ramp as color.scale.*.
+// OKLab lightness → a tone number on the same 50–950 ramp as color.scale.*, but at a FINE
+// (25-unit) resolution. The scale itself uses the coarse canonical steps; off-scale primitives
+// interpolate that L→step mapping and snap to 25, so two colours whose lightness differs (even by
+// ~0.03 L) get DISTINCT tone numbers (e.g. green-200 vs green-225) instead of colliding in one
+// coarse bucket and needing a "-2" suffix. Tone still honestly tracks lightness.
 function toneForL(L) {
-  let best = SCALE_STEPS[0], bd = Infinity;
-  SCALE_L.forEach((sl, i) => { const d = Math.abs(sl - L); if (d < bd) { bd = d; best = SCALE_STEPS[i]; } });
-  return best;
+  let t;
+  if (L >= SCALE_L[0]) t = SCALE_STEPS[0];
+  else if (L <= SCALE_L[SCALE_L.length - 1]) t = SCALE_STEPS[SCALE_STEPS.length - 1];
+  else {
+    t = SCALE_STEPS[SCALE_STEPS.length - 1];
+    for (let i = 0; i < SCALE_L.length - 1; i++) {
+      if (L <= SCALE_L[i] && L >= SCALE_L[i + 1]) {
+        const f = (SCALE_L[i] - L) / (SCALE_L[i] - SCALE_L[i + 1]);
+        t = SCALE_STEPS[i] + f * (SCALE_STEPS[i + 1] - SCALE_STEPS[i]);
+        break;
+      }
+    }
+  }
+  return Math.max(50, Math.min(950, Math.round(t / 25) * 25));
 }
 // Descriptive name PARTS for an off-scale colour: a fixed name (white/black, incl. an -aNN alpha
 // suffix), or a colour family + tone. No role or theme is encoded — the primitive layer describes
@@ -4571,22 +4588,27 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
   // light roles are named before dark for deterministic output.
   const BASE_NAMES = {};
   const usedNames = new Set();
-  // Perceptual dedupe: OKLab (L,a,b) of a hex. Two off-scale colours within a tiny ΔE (and the
-  // same alpha) are the SAME colour to the eye — reuse one primitive instead of minting a near-
-  // identical twin with a -N suffix. NB: a small WCAG contrast ratio (≈1.0) is NOT identity — it
-  // only means equal luminance; two hues at the same L read as 1.0:1 yet look different — so we
-  // dedupe on ΔE, never on contrast.
-  const oklabOf = hex => { const [L, C, H] = rgbToOklch(...hexToRgb(hex)); const r = H * Math.PI / 180; return [L, C * Math.cos(r), C * Math.sin(r)]; };
+  // Perceptual, HUE-AWARE dedupe. Two off-scale colours are "the same primitive" when they're
+  // indistinguishable to the eye — but ΔE alone can't tell a genuine near-twin (same hue, trivially
+  // different L) from two DIFFERENT hues that happen to sit at a similar ΔE. So merge when either:
+  //   • ΔE < 0.024 (~JND — clearly one colour), or
+  //   • same hue (ΔH < 4°) and ΔE < 0.032 (a near-twin differing only slightly in lightness).
+  // Different-hue colours (e.g. a brick red vs a rose red, ΔH 17–23°) are NEVER merged — they're
+  // distinct and keep separate primitives. A small WCAG contrast ratio (≈1.0) is NOT identity, so
+  // it's never the test. Alpha must match (an opaque colour ≠ its translucent twin).
+  const oklchOf = hex => rgbToOklch(...hexToRgb(hex)); // [L, C, H°]
+  const labOf = hex => { const [L, C, H] = oklchOf(hex); const r = H * Math.PI / 180; return [L, C * Math.cos(r), C * Math.sin(r)]; };
   const alphaOf = hex => hexToRgba(hex)[3];
-  const DEDUPE_DE = 0.015; // well under the ~0.02 JND: merges only truly-indistinguishable colours
+  const dHue = (a, b) => { let d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
   const assign = hex => {
     if (BASE_NAMES[hex]) return;
-    const lab = oklabOf(hex), a = alphaOf(hex);
+    const lab = labOf(hex), a = alphaOf(hex), [, C, H] = oklchOf(hex);
     for (const h of Object.keys(BASE_NAMES)) {                 // reuse a perceptually-identical primitive
-      if (Math.abs(alphaOf(h) - a) < 0.005) {
-        const l2 = oklabOf(h);
-        if (Math.hypot(lab[0] - l2[0], lab[1] - l2[1], lab[2] - l2[2]) < DEDUPE_DE) { BASE_NAMES[hex] = BASE_NAMES[h]; return; }
-      }
+      if (Math.abs(alphaOf(h) - a) >= 0.005) continue;
+      const l2 = labOf(h), dE = Math.hypot(lab[0] - l2[0], lab[1] - l2[1], lab[2] - l2[2]);
+      const [, C2, H2] = oklchOf(h);
+      const sameHue = C > 0.02 && C2 > 0.02 && dHue(H, H2) < 4;
+      if (dE < 0.024 || (sameHue && dE < 0.032)) { BASE_NAMES[hex] = BASE_NAMES[h]; return; }
     }
     const p = colorNameParts(hex);
     const base = p.fixed ? p.fixed : (p.family + '-' + p.tone + (p.aSuf || ''));
@@ -4726,26 +4748,37 @@ ${lines(dark)}
   // color.base.* primitive with a DESCRIPTIVE name (colour family + tone, e.g. green-700) and
   // referenced, so a primitive describes colour only — role and theme live solely in theme.*.
   // (BASE_NAMES is declared once near the top of the function, shared by all formats.)
+  // A flat primitive name (family + tone, e.g. green-700 / red-muted-700) nests under its hue
+  // family: green-700 → base.green.700, red-muted-700 → base['red-muted'].700. Names without a
+  // trailing tone (white, black, the translucent black-a33) stay leaf tokens directly under base.
+  // So the alias path swaps the last "-<tone>" for ".<tone>".
+  const nestPath = name => { const m = name.match(/^(.+)-(\d+)$/); return m ? `${m[1]}.${m[2]}` : name; };
   const baseUsed = new Map(); // hex → { name, lum } for every base primitive actually referenced
   const themeRef = e => {
     if (e.step !== null) return { $value: `{color.scale.${e.step}}` };
     const hex = e.hex.toLowerCase();
     const name = BASE_NAMES[hex] || ('c' + hex.slice(1)); // stable name for any non-white/black literal
     baseUsed.set(hex, { name, lum: e.lum });
-    return { $value: `{color.base.${name}}` };
+    return { $value: `{color.base.${nestPath(name)}}` };
   };
   const themeGroup = t => Object.fromEntries(SCALE_SEM_ROLES.map(([n, k]) => [n, themeRef(t[k])]));
   const lightGroup = themeGroup(light), darkGroup = themeGroup(dark); // populates baseUsed
-  const baseGroup = Object.fromEntries([...baseUsed.entries()]
-    .sort((a, b) => b[1].lum - a[1].lum) // white → black
-    .map(([hex, { name, lum }]) => [name, litToken(hex, lum)]));
+  // Nest the primitives by hue family so color.base is navigable and each family can carry its own
+  // metadata: base.green.{tones}, base['red-muted'].{tones}, plus leaf white/black/black-a33.
+  const baseGroup = {};
+  for (const [hex, { name, lum }] of [...baseUsed.entries()].sort((a, b) => b[1].lum - a[1].lum)) { // white → black
+    const m = name.match(/^(.+)-(\d+)$/);
+    if (m) { (baseGroup[m[1]] || (baseGroup[m[1]] = {}))[m[2]] = litToken(hex, lum); }
+    else baseGroup[name] = litToken(hex, lum);
+  }
   const fmtNote = colorFmt === 'oklch' ? 'Each color $value is a DTCG object: colorSpace "oklch", components [L, C, H], plus a hex fallback.'
                 :                        'Each color $value is a DTCG object: colorSpace "srgb", components [r, g, b] (0–1), plus a hex fallback.';
   const json = {
+    $schema: 'https://www.designtokens.org/schemas/2025.10/format.json',
     $description: `Global primitive tokens (color.scale.* tonal ramp and color.base.* colour-descriptive primitives) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
-      $description: 'Primitive colors, described by colour only (no role, no theme): a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end — plus off-scale primitives named by colour family + tone (e.g. green-700, blue-300) and white/black. With the Text/BG (gradient) source the ramp also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      $description: 'Primitive colors, described by colour only (no role, no theme): color.scale is a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end. color.base holds off-scale primitives nested by hue family (color.base.green.700, color.base.blue.300; low-chroma tints under family-muted; leaf white/black). With the Text/BG (gradient) source the scale also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
       base:  baseGroup,
       scale: scaleGroup,
     },
