@@ -4368,14 +4368,18 @@ function stateRoles(dark) {
   return out;
 }
 
-// Accent's own hue, so its container/hover/active track the accent (not a fixed hue).
-function accentRoles(accent, dark) {
-  const hue = rgbToOklch(...hexToRgb(accent.hex))[2];
+// Accent interaction states + container. Hover/active are ADJACENT SCALE STEPS (darker on light,
+// lighter on dark), so they sit on the brand ramp and reference color.scale.* — the accent's
+// palette stays one coherent family instead of scattering into off-scale primitives. The soft
+// container pair is a low-chroma tint at the accent's hue (genuinely off the scale).
+function accentRoles(scale, accIdx, dark) {
+  const clamp = i => scale[Math.max(0, Math.min(scale.length - 1, i))];
+  const hue = rgbToOklch(...hexToRgb(scale[accIdx].hex))[2];
   const cont = containerPair(hue, dark);
   return {
     accentContainer: cont.fill, accentContainerText: cont.on,
-    accentHover:  shiftLightness(accent.hex, 0.05, dark),
-    accentActive: shiftLightness(accent.hex, 0.10, dark),
+    accentHover:  clamp(dark ? accIdx - 1 : accIdx + 1),   // one step more pressed
+    accentActive: clamp(dark ? accIdx - 2 : accIdx + 2),   // two steps
   };
 }
 
@@ -4398,7 +4402,7 @@ function deriveTheme(scale, dark) {
       text:  pickByContrast(scale, surface.lum, 7,   false), // lightest dark step ≥ AAA on surface & bg
       muted: pickByContrast(scale, surface.lum, 4.5, false), // …≥ AA on surface & bg
       accent: acc.accent, accentText: acc.accentText,
-      ...accentRoles(acc.accent, false),
+      ...accentRoles(scale, 6, false),
       ...stateRoles(false),
     };
   }
@@ -4410,7 +4414,7 @@ function deriveTheme(scale, dark) {
     text:  scale[1],                                         // 100 — clears AAA on bg & surface
     muted: pickByContrast(scale, surface.lum, 4.5, true),    // ≥ AA on surface (the harder bg)
     accent: acc.accent, accentText: acc.accentText,
-    ...accentRoles(acc.accent, true),
+    ...accentRoles(scale, 3, true),
     ...stateRoles(true),
   };
 }
@@ -4472,39 +4476,57 @@ function toneForL(L) {
   SCALE_L.forEach((sl, i) => { const d = Math.abs(sl - L); if (d < bd) { bd = d; best = SCALE_STEPS[i]; } });
   return best;
 }
-// A DESCRIPTIVE primitive name for an off-scale colour — its colour family + tone (e.g. green-700),
-// or white / black / neutral-N for achromatics, with an -aNN suffix when translucent. No role or
-// theme is encoded (a green stays "green-700" whether it's a success container in light or dark),
-// so the primitive layer describes colour only and the semantic theme layer carries the meaning.
-function descriptiveColorName(hex) {
+// Descriptive name PARTS for an off-scale colour: a fixed name (white/black, incl. an -aNN alpha
+// suffix), or a colour family + tone. No role or theme is encoded — the primitive layer describes
+// colour only; the semantic theme layer carries meaning via aliases.
+function colorNameParts(hex) {
   const [L, C, H] = rgbToOklch(...hexToRgb(hex));
   const a = hexToRgba(hex)[3];
-  const suffix = a < 0.9995 ? '-a' + Math.round(a * 100) : '';
+  const aSuf = a < 0.9995 ? '-a' + Math.round(a * 100) : '';
   if (C < 0.02) { // achromatic
     const h = hex.slice(0, 7).toLowerCase();
-    const base = h === '#ffffff' ? 'white' : h === '#000000' ? 'black'
-               : toneForL(L) <= 50 ? 'white' : toneForL(L) >= 950 ? 'black' : 'neutral-' + toneForL(L);
-    return base + suffix;
+    if (h === '#ffffff') return { fixed: 'white' + aSuf };
+    if (h === '#000000') return { fixed: 'black' + aSuf };
+    const t = toneForL(L);
+    if (t <= 50)  return { fixed: 'white' + aSuf };
+    if (t >= 950) return { fixed: 'black' + aSuf };
+    return { family: 'neutral', tone: t, aSuf };
   }
-  return hueFamily(H) + '-' + toneForL(L) + suffix;
+  return { family: hueFamily(H), tone: toneForL(L), aSuf };
 }
 
 function buildScaleExport(format, colorFmt, scale, light, dark) {
   const cval = hex => colorFmt === 'hex' ? hex.toLowerCase() : oklchCss(hex);
   const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
 
-  // Off-scale theme values → DESCRIPTIVE primitive names (colour family + tone, e.g. green-700),
-  // so the primitive layer describes colour only — no role or theme leaks into a primitive's name.
-  // Each unique hex is named once (shared hexes dedupe); two different colours that map to the same
-  // family+tone get a numeric suffix. Light roles are named before dark for deterministic output.
+  // Off-scale theme values → DESCRIPTIVE primitive names (colour family + tone, e.g. green-700).
+  // The primitive layer describes colour only — no role or theme in a name. Each unique hex is
+  // named once (shared hexes dedupe); when two distinct colours want the same family+tone, the
+  // second takes the nearest FREE tone in that family (green-700 → green-800), so names stay
+  // regular and tone-ordered rather than growing "-2/-3" collision suffixes. Light roles are
+  // named before dark for deterministic output.
   const BASE_NAMES = {};
   const usedNames = new Set();
+  const famTones = {}; // family → Set of tones already taken
+  const nearestFreeTone = (want, used) => {
+    if (!used.has(want)) return want;
+    const i0 = SCALE_STEPS.indexOf(want);
+    for (let d = 1; d < SCALE_STEPS.length; d++)
+      for (const j of [i0 + d, i0 - d])
+        if (j >= 0 && j < SCALE_STEPS.length && !used.has(SCALE_STEPS[j])) return SCALE_STEPS[j];
+    return want; // family exhausted (very unlikely) → safety suffix below
+  };
   const assign = hex => {
     if (BASE_NAMES[hex]) return;
-    const base = descriptiveColorName(hex);
-    let name = base, i = 2;
-    while (usedNames.has(name)) name = base + '-' + (i++);
-    usedNames.add(name); BASE_NAMES[hex] = name;
+    const p = colorNameParts(hex);
+    let name;
+    if (p.fixed)      name = p.fixed;
+    else if (p.aSuf)  name = p.family + '-' + p.tone + p.aSuf; // translucent: alpha already distinguishes
+    else { const used = famTones[p.family] || (famTones[p.family] = new Set());
+           const tone = nearestFreeTone(p.tone, used); used.add(tone); name = p.family + '-' + tone; }
+    let final = name, i = 2;
+    while (usedNames.has(final)) final = name + '-' + (i++); // safety only
+    usedNames.add(final); BASE_NAMES[hex] = final;
   };
   for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
   for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex);
