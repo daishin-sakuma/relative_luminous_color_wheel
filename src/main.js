@@ -4361,7 +4361,10 @@ function shiftLightness(hex, dL, dark) {
 function stateRoles(dark) {
   const out = {};
   for (const [name, hue] of Object.entries(STATE_HUES)) {
-    out[name] = stateColor(hue, dark);              // status text / icon on the page
+    const fill = stateColor(hue, dark);
+    out[name] = fill;                               // status text / icon on the page, also a solid fill
+    out[name + 'Hover']  = shiftLightness(fill.hex, 0.05, dark); // pressed-ward shades for a solid
+    out[name + 'Active'] = shiftLightness(fill.hex, 0.10, dark); // status button (mirrors accent-hover/active)
     const cont = containerPair(hue, dark);
     out[name + 'Container']   = cont.fill;          // soft fill for filled alerts / badges
     out[name + 'OnContainer'] = cont.on;            // text / icon on that fill
@@ -4456,17 +4459,18 @@ let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by
 // Semantic role → theme key. The order the themes are emitted in. Layered like Material 3:
 // surfaces (bg → surface → surface-2 → border → scrim overlay), text (on-surface / -variant), the accent with
 // its on-colour, interaction states (hover/active) and soft container pair, then the four
-// status colours — each a page foreground plus a container fill + on-container.
+// status colours — each a foreground/solid fill with its own hover/active states plus a
+// container fill + on-container.
 const SCALE_SEM_ROLES = [
   ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'], ['scrim', 'scrim'],
   ['text', 'text'], ['muted', 'muted'],
   ['accent', 'accent'], ['accent-foreground', 'accentText'],
   ['accent-hover', 'accentHover'], ['accent-active', 'accentActive'],
   ['accent-container', 'accentContainer'], ['accent-container-foreground', 'accentContainerText'],
-  ['success', 'success'], ['success-container', 'successContainer'], ['success-container-foreground', 'successOnContainer'],
-  ['warning', 'warning'], ['warning-container', 'warningContainer'], ['warning-container-foreground', 'warningOnContainer'],
-  ['danger', 'danger'],   ['danger-container', 'dangerContainer'],   ['danger-container-foreground', 'dangerOnContainer'],
-  ['info', 'info'],       ['info-container', 'infoContainer'],       ['info-container-foreground', 'infoOnContainer'],
+  ['success', 'success'], ['success-hover', 'successHover'], ['success-active', 'successActive'], ['success-container', 'successContainer'], ['success-container-foreground', 'successOnContainer'],
+  ['warning', 'warning'], ['warning-hover', 'warningHover'], ['warning-active', 'warningActive'], ['warning-container', 'warningContainer'], ['warning-container-foreground', 'warningOnContainer'],
+  ['danger', 'danger'],   ['danger-hover', 'dangerHover'],   ['danger-active', 'dangerActive'],   ['danger-container', 'dangerContainer'],   ['danger-container-foreground', 'dangerOnContainer'],
+  ['info', 'info'],       ['info-hover', 'infoHover'],       ['info-active', 'infoActive'],       ['info-container', 'infoContainer'],       ['info-container-foreground', 'infoOnContainer'],
 ];
 
 /** Full Scale export as GLOBAL (primitive) tokens — the OKLab-lightness tonal
@@ -4516,33 +4520,23 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
   const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
 
   // Off-scale theme values → DESCRIPTIVE primitive names (colour family + tone, e.g. green-700).
-  // The primitive layer describes colour only — no role or theme in a name. Each unique hex is
-  // named once (shared hexes dedupe); when two distinct colours want the same family+tone, the
-  // second takes the nearest FREE tone in that family (green-700 → green-800), so names stay
-  // regular and tone-ordered rather than growing "-2/-3" collision suffixes. Light roles are
-  // named before dark for deterministic output.
+  // The primitive layer describes colour only — no role or theme in a name. The tone number is
+  // ALWAYS the colour's true OKLab lightness step (toneForL): a near-white red is red-100, never
+  // a higher number — so "tone = lightness" holds and a name can't misrepresent brightness. When
+  // two genuinely-different hexes map to the same family+tone (e.g. a red-family accent container
+  // and the danger container both at tone 100 with slightly different hues), the later one gets a
+  // numeric suffix (red-100, red-100-2) — an honest "another colour at this exact tone" rather
+  // than bumping the tone number to a value that lies about the lightness. Shared hexes dedupe;
+  // light roles are named before dark for deterministic output.
   const BASE_NAMES = {};
   const usedNames = new Set();
-  const famTones = {}; // family → Set of tones already taken
-  const nearestFreeTone = (want, used) => {
-    if (!used.has(want)) return want;
-    const i0 = SCALE_STEPS.indexOf(want);
-    for (let d = 1; d < SCALE_STEPS.length; d++)
-      for (const j of [i0 + d, i0 - d])
-        if (j >= 0 && j < SCALE_STEPS.length && !used.has(SCALE_STEPS[j])) return SCALE_STEPS[j];
-    return want; // family exhausted (very unlikely) → safety suffix below
-  };
   const assign = hex => {
     if (BASE_NAMES[hex]) return;
     const p = colorNameParts(hex);
-    let name;
-    if (p.fixed)      name = p.fixed;
-    else if (p.aSuf)  name = p.family + '-' + p.tone + p.aSuf; // translucent: alpha already distinguishes
-    else { const used = famTones[p.family] || (famTones[p.family] = new Set());
-           const tone = nearestFreeTone(p.tone, used); used.add(tone); name = p.family + '-' + tone; }
-    let final = name, i = 2;
-    while (usedNames.has(final)) final = name + '-' + (i++); // safety only
-    usedNames.add(final); BASE_NAMES[hex] = final;
+    const base = p.fixed ? p.fixed : (p.family + '-' + p.tone + (p.aSuf || ''));
+    let name = base, i = 2;
+    while (usedNames.has(name)) name = base + '-' + (i++); // honest tone kept; suffix only on a real same-tone/different-hex clash
+    usedNames.add(name); BASE_NAMES[hex] = name;
   };
   for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
   for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex);
