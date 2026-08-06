@@ -4455,20 +4455,59 @@ const SCALE_SEM_ROLES = [
  *  from the palette export, which is purely semantic role tokens.
  *  @param {'css'|'tailwind'|'json'} format
  *  @param {'oklch'|'hex'} colorFmt */
+// OKLCH hue (0–360) → a colour-family name. Descriptive only (used to name off-scale
+// primitives), so exact boundaries don't matter; the four fixed status hues land on
+// red (danger 27) / amber (warning 85) / green (success 152) / blue (info 255).
+function hueFamily(H) {
+  H = ((H % 360) + 360) % 360;
+  const t = [[40,'red'],[70,'orange'],[95,'amber'],[125,'yellow'],[150,'lime'],[175,'green'],
+             [200,'teal'],[225,'cyan'],[275,'blue'],[305,'indigo'],[335,'violet'],[360,'pink']];
+  for (const [max, name] of t) if (H < max) return name;
+  return 'red';
+}
+// OKLCH lightness → the nearest tonal-scale step number (50…950), so a primitive's tone reads
+// on the same 50–950 ramp as color.scale.*.
+function toneForL(L) {
+  let best = SCALE_STEPS[0], bd = Infinity;
+  SCALE_L.forEach((sl, i) => { const d = Math.abs(sl - L); if (d < bd) { bd = d; best = SCALE_STEPS[i]; } });
+  return best;
+}
+// A DESCRIPTIVE primitive name for an off-scale colour — its colour family + tone (e.g. green-700),
+// or white / black / neutral-N for achromatics, with an -aNN suffix when translucent. No role or
+// theme is encoded (a green stays "green-700" whether it's a success container in light or dark),
+// so the primitive layer describes colour only and the semantic theme layer carries the meaning.
+function descriptiveColorName(hex) {
+  const [L, C, H] = rgbToOklch(...hexToRgb(hex));
+  const a = hexToRgba(hex)[3];
+  const suffix = a < 0.9995 ? '-a' + Math.round(a * 100) : '';
+  if (C < 0.02) { // achromatic
+    const h = hex.slice(0, 7).toLowerCase();
+    const base = h === '#ffffff' ? 'white' : h === '#000000' ? 'black'
+               : toneForL(L) <= 50 ? 'white' : toneForL(L) >= 950 ? 'black' : 'neutral-' + toneForL(L);
+    return base + suffix;
+  }
+  return hueFamily(H) + '-' + toneForL(L) + suffix;
+}
+
 function buildScaleExport(format, colorFmt, scale, light, dark) {
   const cval = hex => colorFmt === 'hex' ? hex.toLowerCase() : oklchCss(hex);
   const alt  = hex => colorFmt === 'hex' ? oklchCss(hex) : hex.toLowerCase();
 
-  // Off-scale theme values → readable primitive names so the semantic layer references named
-  // globals, never a raw hex. Pure #fff/#000 (light bg, accent-foreground) plus every role that
-  // isn't on the seed's tonal scale (containers, accent hover/active, the fixed-hue status
-  // colours). Named after the FIRST role that carries the hex; light/dark differ, so dark values
-  // get a "-dark" suffix. First writer wins, so shared hexes (e.g. #fff) resolve once.
-  const BASE_NAMES = { '#ffffff': 'white', '#000000': 'black' };
-  for (const [n, k] of SCALE_SEM_ROLES) {
-    if (light[k] && light[k].step === null && !BASE_NAMES[light[k].hex]) BASE_NAMES[light[k].hex] = n;
-    if (dark[k]  && dark[k].step === null  && !BASE_NAMES[dark[k].hex])  BASE_NAMES[dark[k].hex]  = n + '-dark';
-  }
+  // Off-scale theme values → DESCRIPTIVE primitive names (colour family + tone, e.g. green-700),
+  // so the primitive layer describes colour only — no role or theme leaks into a primitive's name.
+  // Each unique hex is named once (shared hexes dedupe); two different colours that map to the same
+  // family+tone get a numeric suffix. Light roles are named before dark for deterministic output.
+  const BASE_NAMES = {};
+  const usedNames = new Set();
+  const assign = hex => {
+    if (BASE_NAMES[hex]) return;
+    const base = descriptiveColorName(hex);
+    let name = base, i = 2;
+    while (usedNames.has(name)) name = base + '-' + (i++);
+    usedNames.add(name); BASE_NAMES[hex] = name;
+  };
+  for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
+  for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex);
 
   if (format === 'css') {
     const gval = hex => cval(hex);
@@ -4595,10 +4634,9 @@ ${lines(dark)}
     return t;
   };
   const scaleGroup = Object.fromEntries(scale.map(c => [String(c.step), litToken(c.hex, c.lum)]));
-  // Keep the semantic layer alias-ONLY: any theme value not on the scale (the light
-  // bg and the black/white accent-foreground labels are pure #fff/#000) is promoted to
-  // a color.base.* primitive and referenced, so changing e.g. "black" is a one-line
-  // edit that cascades to every theme (no absolute colors hard-coded under theme.*).
+  // Keep the semantic layer alias-ONLY: any theme value not on the scale is promoted to a
+  // color.base.* primitive with a DESCRIPTIVE name (colour family + tone, e.g. green-700) and
+  // referenced, so a primitive describes colour only — role and theme live solely in theme.*.
   // (BASE_NAMES is declared once near the top of the function, shared by all formats.)
   const baseUsed = new Map(); // hex → { name, lum } for every base primitive actually referenced
   const themeRef = e => {
@@ -4616,10 +4654,10 @@ ${lines(dark)}
   const fmtNote = colorFmt === 'oklch' ? 'Each color $value is a DTCG object: colorSpace "oklch", components [L, C, H], plus a hex fallback.'
                 :                        'Each color $value is a DTCG object: colorSpace "srgb", components [r, g, b] (0–1), plus a hex fallback.';
   const json = {
-    $description: `Global tonal-scale tokens (primitives, color.scale.* and color.base.*) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
+    $description: `Global primitive tokens (color.scale.* tonal ramp and color.base.* colour-descriptive primitives) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
-      $description: 'Primitive colors — the luminance-keyed tonal scale (50–950) plus base white/black. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      $description: 'Primitive colors, described by colour only (no role, no theme): the luminance-keyed tonal scale (50–950) plus off-scale primitives named by colour family + tone (e.g. green-700, blue-300) and white/black. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
       base:  baseGroup,
       scale: scaleGroup,
     },
