@@ -533,6 +533,13 @@ function oklchComponents(hex) {
   const [L, C, H] = rgbToOklch(...hexToRgb(hex));
   return [+L.toFixed(4), +C.toFixed(4), +H.toFixed(2)];
 }
+// Same, but for the DTCG export: an achromatic colour's hue is POWERLESS, so emit "none" (per
+// CSS Color 4 / DTCG 2025.10) — safer than 0, which some tools interpolate as red.
+function oklchComponentsDTCG(hex) {
+  const c = oklchComponents(hex);
+  if (c[1] < 0.0005) c[2] = 'none';
+  return c;
+}
 
 
 /**
@@ -3754,8 +3761,8 @@ ${lines.join('\n')}
   const colorValue = hex => {
     const v = {
       colorSpace: exportColorFmt === 'oklch' ? 'oklch' : 'srgb',
-      components: exportColorFmt === 'oklch' ? oklchComponents(hex) : hexToRgb(hex).map(v => +(v / 255).toFixed(4)),
-      hex: hex.toLowerCase(),
+      components: exportColorFmt === 'oklch' ? oklchComponentsDTCG(hex) : hexToRgb(hex).map(v => +(v / 255).toFixed(4)),
+      hex: hex.slice(0, 7).toLowerCase(), // DTCG hex fallback MUST be 6-digit #rrggbb; alpha rides in `alpha`
     };
     const a = +hexToRgba(hex)[3].toFixed(4);
     if (a < 1) v.alpha = a;
@@ -4334,11 +4341,24 @@ function mkOklch(L, C, H) {
   const [r, g, b] = oklchToRgb(L, C, H);
   return { step: null, hex: toHex(r, g, b).toLowerCase(), lum: relativeLuminance(r, g, b) };
 }
-// The status FOREGROUND colour (text/icon on the page): tuned to read at ~AA on the theme's
-// page — dark-ish on light (L 0.56), bright on dark (L 0.72).
-function stateColor(hue, dark) {
-  const L = dark ? 0.72 : 0.56;
-  return mkOklch(L, maxChromaInGamut(L, hue) * 0.92, hue);
+// The status FOREGROUND colour (text/icon on the page, also usable as a solid fill). Starts at a
+// nominal tone (dark-ish on light, bright on dark) but is then solved AGAINST the surface so it
+// clears WCAG AA (4.5:1) as text — because at a fixed OKLab L the four hues land at very different
+// relative luminances (green's 0.7152 Y-weight makes it the lightest), so a fixed L left green
+// below AA on light surfaces. Moves toward more contrast (darker on light / lighter on dark) only
+// as far as needed, keeping each hue as vivid as possible. Guarantees AA on bg too (surface is the
+// harder of bg/surface). refLum defaults to white/black when a theme surface isn't supplied.
+function stateColor(hue, dark, refLum) {
+  const ref = refLum != null ? refLum : (dark ? 0 : 1);
+  const mk = l => mkOklch(l, maxChromaInGamut(l, hue) * 0.92, hue);
+  let L = dark ? 0.72 : 0.56, col = mk(L);
+  const dir = dark ? +1 : -1;
+  for (let i = 0; i < 40 && contrastRatio(col.lum, ref) < 4.5; i++) {
+    const nL = L + dir * 0.01;
+    if (nL <= 0.06 || nL >= 0.96) break;
+    L = nL; col = mk(L);
+  }
+  return col;
 }
 // Material-3-style container pair for a hue: a soft FILL + its on-colour. Light theme → pale
 // tint + dark-saturated on-colour; dark theme → deep muted fill + light on-colour. Lets filled
@@ -4357,12 +4377,21 @@ function shiftLightness(hex, dL, dark) {
   const nL = Math.max(0.06, Math.min(0.96, L + (dark ? dL : -dL)));
   return mkOklch(nL, Math.min(C, maxChromaInGamut(nL, H)), H);
 }
-// Per-state roles: the status foreground + a container fill + its on-colour, for every hue.
-function stateRoles(dark) {
+// White/black on-colour with the most contrast over `hex` — the legible label on a solid fill.
+function onColorFor(hex) {
+  const l = relativeLuminance(...hexToRgb(hex));
+  const white = { step: null, hex: '#ffffff', lum: 1 }, black = { step: null, hex: '#000000', lum: 0 };
+  return contrastRatio(l, 1) >= contrastRatio(l, 0) ? white : black;
+}
+// Per-state roles: the status foreground (AA-solved vs `refLum` = the theme surface) with its
+// hover/active shades and an on-colour for use as a solid fill, plus a soft container fill + its
+// on-colour — for every hue.
+function stateRoles(dark, refLum) {
   const out = {};
   for (const [name, hue] of Object.entries(STATE_HUES)) {
-    const fill = stateColor(hue, dark);
+    const fill = stateColor(hue, dark, refLum);
     out[name] = fill;                               // status text / icon on the page, also a solid fill
+    out[name + 'Text']   = onColorFor(fill.hex);    // legible label when the status colour is a fill
     out[name + 'Hover']  = shiftLightness(fill.hex, 0.05, dark); // pressed-ward shades for a solid
     out[name + 'Active'] = shiftLightness(fill.hex, 0.10, dark); // status button (mirrors accent-hover/active)
     const cont = containerPair(hue, dark);
@@ -4404,37 +4433,44 @@ function chooseAccentIdx(scale, preferred, candidates, avoid) {
 }
 
 function deriveTheme(scale, dark) {
-  // Body & muted text are picked against SURFACE, not bg. Surface is always the
-  // harder of the two backgrounds (one step in from bg toward the text), so
-  // clearing the threshold there guarantees it on the page bg too — otherwise
-  // muted text sat on cards below AA (e.g. dark muted was 3.78:1 on surface).
+  // Body & muted text are picked against SURFACE-2 (the most elevated nested panel), which is the
+  // hardest of the three backgrounds (bg / surface / surface-2). Clearing the threshold there
+  // guarantees AA on surface and bg too — so muted stays legible even on the elevated panel.
+  // `border` is a subtle divider (~2:1); `border-strong` is a ≥3:1 step for UI-component
+  // boundaries that must meet WCAG 1.4.11 (input outlines, etc.).
   if (!dark) {
     const bg = { step: null, hex: '#ffffff', lum: 1 };
     const surface = scale[0];                                // 50  — cards / panels
-    const text  = pickByContrast(scale, surface.lum, 7,   false); // lightest dark step ≥ AAA on surface & bg
-    const muted = pickByContrast(scale, surface.lum, 4.5, false); // …≥ AA on surface & bg
+    const surface2 = scale[1];                               // 100 — nested / elevated
+    const text  = pickByContrast(scale, surface2.lum, 7,   false); // lightest dark step ≥ AAA on all surfaces
+    const muted = pickByContrast(scale, surface2.lum, 4.5, false); // …≥ AA on all surfaces
     const accIdx = chooseAccentIdx(scale, 6, [7, 5, 8, 4], [text.step, muted.step]); // vivid mid, distinct from text/muted
     const acc = accentPair(scale, accIdx);
     return {
-      dark: false, bg, surface, surface2: scale[1], border: scale[2], scrim: SCRIM, // surface-2 (100): nested / elevated
+      dark: false, bg, surface, surface2, border: scale[2], // border (200) = subtle divider
+      borderStrong: pickByContrast(scale, bg.lum, 3, false), // ≥ 3:1 vs bg — WCAG 1.4.11 UI boundary
+      scrim: SCRIM,
       text, muted,
       accent: acc.accent, accentText: acc.accentText,
       ...accentRoles(scale, accIdx, false),
-      ...stateRoles(false),
+      ...stateRoles(false, surface2.lum), // status fg solved to clear AA on all surfaces
     };
   }
   const bg = scale[scale.length - 1];                        // 950
   const surface = scale[scale.length - 2];                   // 900 — cards / panels
+  const surface2 = scale[scale.length - 3];                  // 800 — nested / elevated
   const text  = scale[1];                                    // 100 — clears AAA on bg & surface
-  const muted = pickByContrast(scale, surface.lum, 4.5, true); // ≥ AA on surface (the harder bg)
+  const muted = pickByContrast(scale, surface2.lum, 4.5, true); // ≥ AA on all surfaces (surface-2 is the hardest)
   const accIdx = chooseAccentIdx(scale, 3, [2, 4, 1, 5], [text.step, muted.step]); // bright, distinct from text/muted
   const acc = accentPair(scale, accIdx);
   return {
-    dark: true, bg, surface, surface2: scale[scale.length - 3], border: scale[scale.length - 4], scrim: SCRIM, // surface-2 (800), border (700)
+    dark: true, bg, surface, surface2, border: scale[scale.length - 4], // border (700) = subtle divider
+    borderStrong: pickByContrast(scale, bg.lum, 3, true),    // ≥ 3:1 vs bg — WCAG 1.4.11 UI boundary
+    scrim: SCRIM,
     text, muted,
     accent: acc.accent, accentText: acc.accentText,
     ...accentRoles(scale, accIdx, true),
-    ...stateRoles(true),
+    ...stateRoles(true, surface2.lum), // status fg solved to clear AA on all surfaces
   };
 }
 
@@ -4462,15 +4498,15 @@ let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by
 // status colours — each a foreground/solid fill with its own hover/active states plus a
 // container fill + on-container.
 const SCALE_SEM_ROLES = [
-  ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'], ['scrim', 'scrim'],
+  ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'], ['border-strong', 'borderStrong'], ['scrim', 'scrim'],
   ['text', 'text'], ['muted', 'muted'],
   ['accent', 'accent'], ['accent-foreground', 'accentText'],
   ['accent-hover', 'accentHover'], ['accent-active', 'accentActive'],
   ['accent-container', 'accentContainer'], ['accent-container-foreground', 'accentContainerText'],
-  ['success', 'success'], ['success-hover', 'successHover'], ['success-active', 'successActive'], ['success-container', 'successContainer'], ['success-container-foreground', 'successOnContainer'],
-  ['warning', 'warning'], ['warning-hover', 'warningHover'], ['warning-active', 'warningActive'], ['warning-container', 'warningContainer'], ['warning-container-foreground', 'warningOnContainer'],
-  ['danger', 'danger'],   ['danger-hover', 'dangerHover'],   ['danger-active', 'dangerActive'],   ['danger-container', 'dangerContainer'],   ['danger-container-foreground', 'dangerOnContainer'],
-  ['info', 'info'],       ['info-hover', 'infoHover'],       ['info-active', 'infoActive'],       ['info-container', 'infoContainer'],       ['info-container-foreground', 'infoOnContainer'],
+  ['success', 'success'], ['success-foreground', 'successText'], ['success-hover', 'successHover'], ['success-active', 'successActive'], ['success-container', 'successContainer'], ['success-container-foreground', 'successOnContainer'],
+  ['warning', 'warning'], ['warning-foreground', 'warningText'], ['warning-hover', 'warningHover'], ['warning-active', 'warningActive'], ['warning-container', 'warningContainer'], ['warning-container-foreground', 'warningOnContainer'],
+  ['danger', 'danger'],   ['danger-foreground', 'dangerText'],   ['danger-hover', 'dangerHover'],   ['danger-active', 'dangerActive'],   ['danger-container', 'dangerContainer'],   ['danger-container-foreground', 'dangerOnContainer'],
+  ['info', 'info'],       ['info-foreground', 'infoText'],       ['info-hover', 'infoHover'],       ['info-active', 'infoActive'],       ['info-container', 'infoContainer'],       ['info-container-foreground', 'infoOnContainer'],
 ];
 
 /** Full Scale export as GLOBAL (primitive) tokens — the OKLab-lightness tonal
@@ -4512,7 +4548,12 @@ function colorNameParts(hex) {
     if (t >= 950) return { fixed: 'black' + aSuf };
     return { family: 'neutral', tone: t, aSuf };
   }
-  return { family: hueFamily(H), tone: toneForL(L), aSuf };
+  // Chroma tier: low-chroma (desaturated) colours — the soft container fills — get a "-muted"
+  // family qualifier (still colour-descriptive, chroma being a colour property), so a pale
+  // red container reads as red-muted-700 instead of colliding with a vivid red-700 and taking a
+  // "-2" suffix. Vivid colours keep the plain family name.
+  const family = hueFamily(H) + (C < 0.09 ? '-muted' : '');
+  return { family, tone: toneForL(L), aSuf };
 }
 
 function buildScaleExport(format, colorFmt, scale, light, dark) {
@@ -4653,8 +4694,8 @@ ${lines(dark)}
   const colorValue = hex => {
     const v = {
       colorSpace: colorFmt === 'oklch' ? 'oklch' : 'srgb',
-      components: colorFmt === 'oklch' ? oklchComponents(hex) : hexToRgb(hex).map(v => +(v / 255).toFixed(4)),
-      hex: hex.toLowerCase(),
+      components: colorFmt === 'oklch' ? oklchComponentsDTCG(hex) : hexToRgb(hex).map(v => +(v / 255).toFixed(4)),
+      hex: hex.slice(0, 7).toLowerCase(), // DTCG hex fallback MUST be 6-digit #rrggbb; alpha rides in `alpha`
     };
     const a = +hexToRgba(hex)[3].toFixed(4);
     if (a < 1) v.alpha = a;
