@@ -1870,7 +1870,14 @@ function effLockMetricAt(changed, lum, metric) {
 function solveLockAlpha(changed, metric, target) {
   const cur = changed === 'fg' ? wheelLum(cR, cG, cB) : wheelLum(...selectedRgbBiased());
   const m = lum => effLockMetricAt(changed, lum, metric);
-  const f = lum => m(lum) - target;
+  // Meet the target within the SAME tolerance the contrast tiles round to, so the lock's
+  // "reached" state can never disagree with the AA/AAA badges: WCAG ratios are shown to 2 dp
+  // (a value ≥ target−0.005 rounds to the target), APCA Lc to the nearest integer (≥ target−0.5).
+  // This also absorbs floating-point error at exact-boundary pins — e.g. the only 7:1 text on a
+  // mid-dark bg is white, yet contrastRatio(1, 0.10) computes 6.9999999, which previously read as
+  // "can't reach 7:1" while the tile showed 7.00 and passed.
+  const EPS = metric === 'apca' ? 0.5 : 0.005;
+  const f = lum => m(lum) - (target - EPS);
   const N = 256;
   const bounds = [];
   // bestL/M: coarse argmax (for the unreachable best-effort pin). worstL/M: coarse argmin —
@@ -4494,12 +4501,12 @@ let _scaleExportFmt = 'css';      // 'css' | 'tailwind' | 'json' — CSS custom 
 let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by default
 
 // Semantic role → theme key. The order the themes are emitted in. Layered like Material 3:
-// surfaces (bg → surface → surface-2 → border → scrim overlay), text (on-surface / -variant), the accent with
+// surfaces (bg → surface → surface-raised → border → scrim overlay), text (on-surface / -variant), the accent with
 // its on-colour, interaction states (hover/active) and soft container pair, then the four
 // status colours — each a foreground/solid fill with its own hover/active states plus a
 // container fill + on-container.
 const SCALE_SEM_ROLES = [
-  ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'], ['border-strong', 'borderStrong'], ['scrim', 'scrim'],
+  ['bg', 'bg'], ['surface', 'surface'], ['surface-raised', 'surface2'], ['border', 'border'], ['border-strong', 'borderStrong'], ['scrim', 'scrim'],
   ['text', 'text'], ['muted', 'muted'],
   ['accent', 'accent'], ['accent-foreground', 'accentText'],
   ['accent-hover', 'accentHover'], ['accent-active', 'accentActive'],
@@ -5028,7 +5035,7 @@ function renderPaletteLayout() {
   // Optional roles — only set when the palette actually carries them, so the mock shows the
   // surface-2 panel / filled containers / hover-active chips exactly when those colours exist.
   const opt = (key, role, ...names) => { const h = byName(role, ...names); if (h) th[key] = wrap(h); };
-  opt('surface2', 'bg', 'surface-2', 'surface2');
+  opt('surface2', 'bg', 'surface-raised', 'surface-2', 'surface2'); // 'surface-2' kept for older saved palettes
   opt('accentContainer', 'bg', 'accent-container');
   opt('accentContainerText', 'fg', 'on-accent-container');
   opt('accentHover', 'bg', 'accent-hover');
@@ -5440,7 +5447,7 @@ function themedScreen(name, th) {
       { hex: th.accentContainerText.hex, role: 'fg', name: 'on-accent-container' },
       { hex: th.bg.hex,                  role: 'bg', name: 'page' },
       { hex: th.surface.hex,             role: 'bg', name: 'surface' },
-      { hex: th.surface2.hex,            role: 'bg', name: 'surface-2' },
+      { hex: th.surface2.hex,            role: 'bg', name: 'surface-raised' },
       { hex: th.border.hex,              role: 'bg', name: 'border' },
       { hex: th.accent.hex,              role: 'bg', name: 'accent' },
       { hex: th.accentContainer.hex,     role: 'bg', name: 'accent-container' },
