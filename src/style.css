@@ -2116,6 +2116,14 @@ body.about-modal-open { overflow: hidden; }
 .lp-cg-tr:first-child { border-top: 0; }
 .lp-cg-thead { font-weight: 700; }
 .lp-cg-td { padding: 0.34rem 0.5rem; font-size: 0.6rem; display: flex; align-items: center; }
+.lp-cg-overlay { position: relative; border: 1px solid; border-radius: 6px; height: 8.5rem; overflow: hidden; }
+.lp-cg-overlay-behind { position: absolute; inset: 0; padding: 0.7rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.lp-cg-obar { height: 0.5rem; border-radius: 3px; opacity: 0.85; }
+.lp-cg-scrim { position: absolute; inset: 0; }
+.lp-cg-dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 68%; border: 1px solid; border-radius: 7px; padding: 0.6rem 0.7rem; display: flex; flex-direction: column; gap: 0.3rem; box-shadow: 0 6px 20px rgba(0,0,0,0.35); }
+.lp-cg-dtitle { font-size: 0.66rem; font-weight: 700; }
+.lp-cg-dbody { font-size: 0.58rem; line-height: 1.35; }
+.lp-cg-dbtns { display: flex; gap: 0.35rem; justify-content: flex-end; margin-top: 0.2rem; }
 
 /* ── Contrast audit panel (below each Layout preview) ─────────────────────────
    Verdict tokens carry the meaning (AA / AAA / 3:1 / ✗ / Lc n); colour only

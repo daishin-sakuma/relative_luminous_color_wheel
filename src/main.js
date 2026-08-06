@@ -4253,6 +4253,11 @@ function accentRoles(accent, dark) {
   };
 }
 
+// Scrim: a fixed translucent-black overlay for modal backdrops / drawer scrims, identical in
+// light and dark. 33.33% black — hex #00000055 (0x55/255 ≈ 0.3333); the export carries the alpha
+// through as an 8-digit hex / rgba / oklch(… / 0.333) and a DTCG $value with an `alpha` field.
+const SCRIM = { step: null, hex: '#00000055', lum: 0 };
+
 function deriveTheme(scale, dark) {
   // Body & muted text are picked against SURFACE, not bg. Surface is always the
   // harder of the two backgrounds (one step in from bg toward the text), so
@@ -4263,7 +4268,7 @@ function deriveTheme(scale, dark) {
     const surface = scale[0];                                // 50  — cards / panels
     const acc = accentPair(scale, 6);                        // step 600 — distinct from muted/text
     return {
-      dark: false, bg, surface, surface2: scale[1], border: scale[2], // surface-2 (100): nested / elevated
+      dark: false, bg, surface, surface2: scale[1], border: scale[2], scrim: SCRIM, // surface-2 (100): nested / elevated
       text:  pickByContrast(scale, surface.lum, 7,   false), // lightest dark step ≥ AAA on surface & bg
       muted: pickByContrast(scale, surface.lum, 4.5, false), // …≥ AA on surface & bg
       accent: acc.accent, accentText: acc.accentText,
@@ -4275,7 +4280,7 @@ function deriveTheme(scale, dark) {
   const surface = scale[scale.length - 2];                   // 900 — cards / panels
   const acc = accentPair(scale, 3);                          // step 300 — a bright fill distinct from muted/text
   return {
-    dark: true, bg, surface, surface2: scale[scale.length - 3], border: scale[scale.length - 4], // surface-2 (800), border (700)
+    dark: true, bg, surface, surface2: scale[scale.length - 3], border: scale[scale.length - 4], scrim: SCRIM, // surface-2 (800), border (700)
     text:  scale[1],                                         // 100 — clears AAA on bg & surface
     muted: pickByContrast(scale, surface.lum, 4.5, true),    // ≥ AA on surface (the harder bg)
     accent: acc.accent, accentText: acc.accentText,
@@ -4303,11 +4308,11 @@ let _scaleExportFmt = 'css';      // 'css' | 'tailwind' | 'json' — CSS custom 
 let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by default
 
 // Semantic role → theme key. The order the themes are emitted in. Layered like Material 3:
-// surfaces (bg → surface → surface-2 → border), text (on-surface / -variant), the accent with
+// surfaces (bg → surface → surface-2 → border → scrim overlay), text (on-surface / -variant), the accent with
 // its on-colour, interaction states (hover/active) and soft container pair, then the four
 // status colours — each a page foreground plus a container fill + on-container.
 const SCALE_SEM_ROLES = [
-  ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'],
+  ['bg', 'bg'], ['surface', 'surface'], ['surface-2', 'surface2'], ['border', 'border'], ['scrim', 'scrim'],
   ['text', 'text'], ['muted', 'muted'],
   ['accent', 'accent'], ['accent-foreground', 'accentText'],
   ['accent-hover', 'accentHover'], ['accent-active', 'accentActive'],
@@ -5097,6 +5102,30 @@ function buildComponentGallery(th, footerNote) {
   });
   tsec.appendChild(table);
   screen.appendChild(tsec);
+
+  // ── Overlay (scrim) — a modal backdrop dimming the content, with a dialog on top ──
+  if (th.scrim) {
+    const osec = section('Overlay');
+    const stage = lpEl('div', 'lp-cg-overlay'); stage.style.background = C(surface); stage.style.borderColor = C(border);
+    // Dimmed content behind the scrim.
+    const behind = lpEl('div', 'lp-cg-overlay-behind');
+    behind.append(lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'));
+    [...behind.children].forEach((b, i) => { b.style.background = C(i ? muted : text); b.style.width = ['70%', '90%', '55%'][i]; });
+    // The scrim: 33.33% black. Black is CVD-invariant, so an rgba from its alpha is exact.
+    const scrimA = hexToRgba(th.scrim.hex)[3];
+    const veil = lpEl('div', 'lp-cg-scrim'); veil.style.background = `rgba(0,0,0,${scrimA})`;
+    // Dialog floating above the scrim.
+    const dialog = lpEl('div', 'lp-cg-dialog'); dialog.style.background = C(bg); dialog.style.borderColor = C(border);
+    const dt = lpEl('div', 'lp-cg-dtitle', 'Delete file?'); dt.style.color = C(text);
+    const db = lpEl('div', 'lp-cg-dbody', 'This action can’t be undone.'); db.style.color = C(muted);
+    const da = lpEl('div', 'lp-cg-dbtns');
+    const cancel = lpEl('span', 'lp-cg-btn', 'Cancel'); cancel.style.background = C(surface2); cancel.style.color = C(text); cancel.style.borderColor = C(border); cancel.style.borderStyle = 'solid';
+    const ok = lpEl('span', 'lp-cg-btn', 'Delete'); const dng = th.danger ? th.danger.hex : accent; ok.style.background = C(dng); ok.style.color = C(bestOn(dng));
+    da.append(cancel, ok); dialog.append(dt, db, da);
+    stage.append(behind, veil, dialog);
+    osec.appendChild(stage);
+    screen.appendChild(osec);
+  }
 
   const footer = lpEl('div', 'lp-footer'); footer.style.background = C(surface); footer.style.borderTop = '1px solid ' + C(border);
   const ftag = lpEl('div', 'lp-footer-tag', footerNote || '© 2026 Aurora'); ftag.style.color = C(muted);
