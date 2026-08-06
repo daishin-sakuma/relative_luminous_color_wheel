@@ -4571,12 +4571,27 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
   // light roles are named before dark for deterministic output.
   const BASE_NAMES = {};
   const usedNames = new Set();
+  // Perceptual dedupe: OKLab (L,a,b) of a hex. Two off-scale colours within a tiny ΔE (and the
+  // same alpha) are the SAME colour to the eye — reuse one primitive instead of minting a near-
+  // identical twin with a -N suffix. NB: a small WCAG contrast ratio (≈1.0) is NOT identity — it
+  // only means equal luminance; two hues at the same L read as 1.0:1 yet look different — so we
+  // dedupe on ΔE, never on contrast.
+  const oklabOf = hex => { const [L, C, H] = rgbToOklch(...hexToRgb(hex)); const r = H * Math.PI / 180; return [L, C * Math.cos(r), C * Math.sin(r)]; };
+  const alphaOf = hex => hexToRgba(hex)[3];
+  const DEDUPE_DE = 0.015; // well under the ~0.02 JND: merges only truly-indistinguishable colours
   const assign = hex => {
     if (BASE_NAMES[hex]) return;
+    const lab = oklabOf(hex), a = alphaOf(hex);
+    for (const h of Object.keys(BASE_NAMES)) {                 // reuse a perceptually-identical primitive
+      if (Math.abs(alphaOf(h) - a) < 0.005) {
+        const l2 = oklabOf(h);
+        if (Math.hypot(lab[0] - l2[0], lab[1] - l2[1], lab[2] - l2[2]) < DEDUPE_DE) { BASE_NAMES[hex] = BASE_NAMES[h]; return; }
+      }
+    }
     const p = colorNameParts(hex);
     const base = p.fixed ? p.fixed : (p.family + '-' + p.tone + (p.aSuf || ''));
     let name = base, i = 2;
-    while (usedNames.has(name)) name = base + '-' + (i++); // honest tone kept; suffix only on a real same-tone/different-hex clash
+    while (usedNames.has(name)) name = base + '-' + (i++); // honest tone kept; suffix only on a real same-tone/different-hue clash
     usedNames.add(name); BASE_NAMES[hex] = name;
   };
   for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
@@ -4736,7 +4751,7 @@ ${lines(dark)}
     },
     theme: {
       $type: 'color',
-      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role sets sharing the same primitives — select one at build time (or via the 2025.10 sets/resolutionOrder mechanism).',
+      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey).',
       light: lightGroup,
       dark:  darkGroup,
     },
