@@ -1925,13 +1925,35 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
   box-shadow: var(--shadow-xl);
   animation: about-modal-pop var(--dur-slow) ease;
 }
+/* Fixed title header — the moved-in .about-body carries no heading of its own,
+   so the modal gets its own title (the summary's heading stays on the page). */
+.about-modal-head {
+  flex: 0 0 auto;
+  /* right padding clears the floating close button */
+  padding: 1.5rem 3.4rem 1.1rem 2.2rem;
+  border-bottom: 1px solid var(--border);
+}
+.about-modal-title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  color: var(--text);
+}
+.about-modal-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: var(--fs-md);
+  letter-spacing: var(--ls-6);
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .about-modal-scroll {
   overflow-y: auto;
   overscroll-behavior: contain; /* don't let a fling chain out and reveal gaps */
   min-height: 0;                /* allow the flex child to shrink and scroll */
   /* Extra horizontal room so the copy stays clear of the floating close button
      (its hit area sits in the right gutter, never over the text). */
-  padding: var(--space-14) 3.4rem 2.2rem;
+  padding: 1.6rem 3.4rem 2.2rem 2.2rem;
 }
 @keyframes about-modal-fade { from { opacity: 0; } }
 @keyframes about-modal-pop { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
