@@ -3002,7 +3002,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     function clampByteFor(key, n) {
       if (key === 'ulum') return Math.max(0, Math.min(1000, Math.round(n * 1000)));
       if (key === 'r' || key === 'g' || key === 'b' || key === 'gray') return clampB(n);
-      if (key === 'h' || key === 'uhue') return Math.max(0, Math.min(359, Math.round(n)));
+      if (key === 'h' || key === 'uhue') return ((Math.round(n) % 360) + 360) % 360; // hue is cyclic — wraps 0↔359
       return Math.max(0, Math.min(100, Math.round(n))); // s, l, usat
     }
     hexEl.addEventListener('input', () => {
@@ -7098,9 +7098,10 @@ function onChipEditorValInput() {
   const R = _ceRefs.ranges, V = _ceRefs.vals;
   const n = s => { const x = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return Number.isFinite(x) ? x : 0; };
   const set = (rng, v, lo, hi) => { rng.value = String(_ceClamp(Math.round(v), lo, hi)); };
+  const setHue = (rng, v) => { rng.value = String(((Math.round(v) % 360) + 360) % 360); }; // cyclic — wraps 0↔359
   if (_ce.mode === 'rgb')      { set(R.r, n(V.r.value), 0, 255); set(R.g, n(V.g.value), 0, 255); set(R.b, n(V.b.value), 0, 255); }
-  else if (_ce.mode === 'hsl') { set(R.h, n(V.h.value), 0, 359); set(R.s, n(V.s.value), 0, 100); set(R.l, n(V.l.value), 0, 100); }
-  else if (_ce.mode === 'lum') { set(R.clum, n(V.clum.value) * 1000, 0, 1000); set(R.csat, n(V.csat.value), 0, 100); set(R.chue, n(V.chue.value), 0, 359); }
+  else if (_ce.mode === 'hsl') { setHue(R.h, n(V.h.value)); set(R.s, n(V.s.value), 0, 100); set(R.l, n(V.l.value), 0, 100); }
+  else if (_ce.mode === 'lum') { set(R.clum, n(V.clum.value) * 1000, 0, 1000); set(R.csat, n(V.csat.value), 0, 100); setHue(R.chue, n(V.chue.value)); }
   else                         { set(R.gray, n(V.gray.value), 0, 255); }
   onChipEditorSlider();
 }
@@ -7117,7 +7118,9 @@ function chipEditorValStep(input, dir) {
   const rmin = parseFloat(rng.min), rmax = parseFloat(rng.max);
   const cur = parseFloat(String(input.value).replace(/[^0-9.\-]/g, ''));
   const base = Number.isFinite(cur) ? cur : rmin / factor;
-  const next = _ceClamp(base + dir * dispStep, rmin / factor, rmax / factor);
+  const isHue = key === 'h' || key === 'chue'; // hue is cyclic — wraps 0↔359 like the main picker
+  const raw = base + dir * dispStep;
+  const next = isHue ? ((Math.round(raw) % 360) + 360) % 360 : _ceClamp(raw, rmin / factor, rmax / factor);
   rng.value = String(Math.round(next * factor));
   onChipEditorSlider();
 }
