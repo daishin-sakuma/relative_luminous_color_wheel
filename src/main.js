@@ -1181,17 +1181,24 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
   const ratioJudged = (lockedPair && _contrastLockMet && contrastLockMode === 'wcag2' && contrastLockTarget &&
                        ratio >= contrastLockTarget - 0.02)
     ? Math.max(ratio, contrastLockTarget) : ratio;
-  // Judge the AA/AAA chips from the EXACT value shown (2-dp rounded), so the ratio
-  // label and its chips can never disagree at a threshold (e.g. 4.4999 → shows "4.50"
-  // → AA passes, not the raw-value miss the label contradicts).
-  const ratioShown = Number(ratioJudged.toFixed(2));
+  // The ACTUAL measured WCAG ratio of the rendered (composited) 8-bit colours.
+  const wcagActual = (txtRgb && bgRgb)
+    ? contrastRatio(relativeLuminance(...txtRgb), relativeLuminance(...bgRgb)) : ratioJudged;
+  // The floor the label shows and the AA/AAA chips judge must NEVER exceed what the pixels
+  // actually render — otherwise a chip reads "pass" while the real contrast is below threshold
+  // (the "4.50:1 (4.47)" + AA-on false pass). 8-bit quantization, and the lock's target snap
+  // above, can put the anchor floor a hair ABOVE the measured value; clamp it to the measured
+  // ratio so floor ≤ measured by construction. The flicker fix survives: when the pair really
+  // clears the target the measured is ≥ it, so the min keeps the snapped floor.
+  const judged = Math.min(ratioJudged, wcagActual);
+  // Judge the AA/AAA chips from the EXACT value shown (2-dp rounded), so the ratio label and its
+  // chips can never disagree at a threshold. Rounding is monotonic, so ratioShown ≤ the rounded
+  // measured value too — the displayed floor is never shown above the measured ratio.
+  const ratioShown = Number(judged.toFixed(2));
   const isLight = bgLum > 0.179;
   const dim     = isLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
 
   const apcaMode = contrastLockMode === 'apca';
-  // The ACTUAL measured WCAG ratio of the rendered (composited) colours — always ≥ the floor.
-  const wcagActual = (txtRgb && bgRgb)
-    ? contrastRatio(relativeLuminance(...txtRgb), relativeLuminance(...bgRgb)) : ratioShown;
   if (dom.ratioEl) {
     if (apcaMode) {
       // WCAG is the non-active metric in APCA mode — just show the measured ratio.
@@ -1238,6 +1245,11 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         if (lockedPair && _contrastLockMet && apcaLockTarget && Math.abs(lcAbs - apcaLockTarget) <= 0.5) {
           lcAbs = apcaLockTarget;
         }
+        // Same guarantee as WCAG: the judged floor |Lc| must never exceed the actually-rendered
+        // |Lc|. The anchor (and the target snap) can sit above the measured composite — which
+        // would verdict a font as passing while the real pixels fall below. Clamp to measured.
+        const measuredLcAbs = Math.abs(apcaLc(txtRgb, bgRgb));
+        lcAbs = Math.min(lcAbs, measuredLcAbs);
         // Label uses floor(|Lc|+0.3): the usage ladder steps 0.3 before each integer
         // (…44.7, 59.7…), so this shows the SAME integer the tier switches on — the "Lc N"
         // number and its usage tier can never straddle a boundary (no "Lc 15 / INVISIBLE").
@@ -1248,7 +1260,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         if (apcaMode) {
           // APCA active: main = the guaranteed floor |Lc| the verdict judges (hue-invariant),
           // parenthetical = the current measured |Lc| (always ≥ the floor). Same polarity.
-          const actualMag = Math.floor(Math.abs(apcaLc(txtRgb, bgRgb)) + 0.3);
+          const actualMag = Math.floor(measuredLcAbs + 0.3);
           dom.apcaEl.textContent = 'Lc ' + signed(lcLabel) + ' (' + signed(actualMag) + ')';
           dom.apcaEl.title = 'Guaranteed |Lc| ≥ ' + lcLabel + ' at this luminance & opacity for any hue/sat (the verdict judges this floor); (' + signed(actualMag) + ') is the current measured Lc';
         } else {
