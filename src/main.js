@@ -2070,7 +2070,10 @@ function renderCustomWheel() {
   // ── Lum mode: luminance-locked wheel (same as main, using cuLum) ───────────
   if (customMode === 'lum') {
     if (!_cwLumCache || _cwLumCache.lum !== cuLum) {
-      const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
+      // Reuse the cached pixel buffer across lum-drag frames (zero allocation):
+      // the circular mask is geometry-only and constant, so every inside pixel is
+      // rewritten and the skipped outside pixels stay transparent from first alloc.
+      const img  = _cwLumCache ? _cwLumCache.imageData : cwCtx.createImageData(CW_BUF, CW_BUF);
       const data = img.data;
       for (let py = 0; py < CW_BUF; py++) {
         for (let px = 0; px < CW_BUF; px++) {
@@ -2109,7 +2112,7 @@ function renderCustomWheel() {
 
   // ── Color mode: HSL wheel at current lightness (original behavior) ──────────
   if (!_cwColorCache || _cwColorCache.l !== cL) {
-    const img  = cwCtx.createImageData(CW_BUF, CW_BUF);
+    const img  = _cwColorCache ? _cwColorCache.imageData : cwCtx.createImageData(CW_BUF, CW_BUF);
     const data = img.data;
     for (let py = 0; py < CW_BUF; py++) {
       for (let px = 0; px < CW_BUF; px++) {
@@ -7109,7 +7112,11 @@ function renderChipEditorWheel() {
   const lumT = lumMode ? _ce.lum[0] / 1000 : 0;
   const key  = _ce.mode + '|' + (lumMode ? lumT.toFixed(3) : L.toFixed(3));
   if (!_ceWheelCache || _ceWheelCache.key !== key) {
-    const img = ctx.createImageData(SZ, SZ), d = img.data;
+    // Reuse the cached buffer across drag frames unless the canvas was resized
+    // (see renderCustomWheel for why the constant circular mask makes this safe).
+    const img = (_ceWheelCache && _ceWheelCache.img.width === SZ && _ceWheelCache.img.height === SZ)
+      ? _ceWheelCache.img : ctx.createImageData(SZ, SZ);
+    const d = img.data;
     for (let y = 0; y < SZ; y++) {
       for (let x = 0; x < SZ; x++) {
         const dx = x - R + 0.5, dy = y - R + 0.5, dist = Math.hypot(dx, dy), idx = (y * SZ + x) * 4;
