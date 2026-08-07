@@ -2830,6 +2830,10 @@ function fallbackCopy(text) {
   const el = document.createElement('textarea');
   el.value = text;
   el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  // Keep the throwaway field out of the a11y tree and tab order — it exists for
+  // a single synchronous execCommand and must never catch AT focus.
+  el.setAttribute('aria-hidden', 'true');
+  el.tabIndex = -1;
   document.body.appendChild(el);
   el.select();
   document.execCommand('copy');
