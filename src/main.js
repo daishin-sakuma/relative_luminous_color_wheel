@@ -2978,7 +2978,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     try {
       const st = localStorage.getItem('underlay-rgb');
       if (st) { const p = JSON.parse(st); if (Array.isArray(p) && p.length === 3) { underlayRgb[0] = clampB(p[0]); underlayRgb[1] = clampB(p[1]); underlayRgb[2] = clampB(p[2]); } }
-    } catch (e) {}
+    } catch (e) { console.warn('Failed to restore underlay color from storage; using white:', e); }
     applyMode('lum');
     reseed();
     syncAll();
@@ -3427,7 +3427,7 @@ try {
       cuLum = customLumSaved.lum; cuHue = customLumSaved.hue; cuSat = customLumSaved.sat;
     }
   }
-} catch(e) {}
+} catch(e) { console.warn('Failed to restore custom color from storage; using defaults:', e); }
 
 // Apply the active mode's color to cR/cG/cB
 if (customMode === 'gray') {
@@ -3500,6 +3500,23 @@ if (glState) {
   drawHueLabels();
 } else {
   renderWheel2D(targetLum);
+}
+
+// The WebGL context can be lost (GPU reset, driver hiccup, tab backgrounded on
+// some devices). Once lost, drawWheel() would keep no-op'ing against a dead
+// context and the wheel goes black with no recovery. Swallow the loss
+// (preventDefault is required, or the browser never fires 'restored'), drop the
+// stale state, then re-init + redraw when the context comes back.
+if (glState) {
+  wheelCanvas.addEventListener('webglcontextlost', e => {
+    e.preventDefault();
+    glState = null;
+  }, false);
+  wheelCanvas.addEventListener('webglcontextrestored', () => {
+    try { glState = initGL(); }
+    catch (err) { glState = null; console.warn('WebGL restore failed:', err); }
+    if (glState) { drawWheel(targetLum); drawHueLabels(); }
+  }, false);
 }
 
 updateMarkerPosition();
@@ -3919,11 +3936,18 @@ function downloadExport(format) {
     const wide = window.matchMedia('(min-width: 861px)'); // match the app's desktop/mobile breakpoint
     let lastFocus = null;
 
+    // Mark every sibling of the modal inert while it's open, so keyboard/AT focus
+    // can't wander behind it (a focus trap without a manual key loop — the modern
+    // primitive). Background scroll is already frozen via .about-modal-open.
+    const setBackgroundInert = on => {
+      for (const el of modal.parentElement.children) if (el !== modal) el.inert = on;
+    };
     const openModal = () => {
       details.open = false;          // keep the inline copy collapsed
       content.appendChild(body);     // move the node in (no duplicate text)
       modal.hidden = false;
       document.body.classList.add('about-modal-open');
+      setBackgroundInert(true);
       lastFocus = document.activeElement;
       modal.querySelector('.about-modal-close').focus();
     };
@@ -3931,6 +3955,7 @@ function downloadExport(format) {
       if (modal.hidden) return;
       modal.hidden = true;
       document.body.classList.remove('about-modal-open');
+      setBackgroundInert(false);
       details.appendChild(body);     // return the node to <details>
       if (lastFocus && lastFocus.focus) lastFocus.focus();
       else summary.focus();
@@ -6737,6 +6762,7 @@ function buildChipEditor() {
   // button toggles it); clicking again or outside closes it. No hover-open, so
   // it behaves the same on mouse and touch and never appears unintentionally.
   _ceRefs.cmpBtn.addEventListener('click', toggleChipEditorDropdown);
+  _ceRefs.cmpBtn.setAttribute('aria-haspopup', 'listbox');
   attachChipEditorWheel();
 }
 
@@ -6753,6 +6779,8 @@ function buildChipEditorDropdown() {
   // transparent-corner flash a rounded overflow:auto box shows on fast scroll).
   const scroll = document.createElement('div');
   scroll.className = 'chip-editor-dd-scroll';
+  scroll.setAttribute('role', 'listbox');
+  scroll.setAttribute('aria-label', 'Comparison color');
   dd.appendChild(scroll);
   const list = partnerList();
   if (!list.length) {
@@ -6768,6 +6796,7 @@ function buildChipEditorDropdown() {
     const it = document.createElement('button');
     it.type = 'button';
     it.className = 'chip-editor-dd-item';
+    it.id = `chip-editor-dd-opt-${i}`;
     it.setAttribute('role', 'option');
     it.setAttribute('aria-selected', String(i === _cePartner));
     // Role type (TEXT / BG) leads, then the rank name; hex is a muted suffix.
@@ -6790,6 +6819,12 @@ function openChipEditorDropdown() {
   _ceRefs.cmpBtn.setAttribute('aria-expanded', 'true');
   // capture phase so the editor's own stopPropagation doesn't hide these clicks
   document.addEventListener('pointerdown', _ceDropdownOutside, true);
+  _ceRefs.dropdown.addEventListener('keydown', _ceDropdownKey);
+  // Move focus into the list (the selected option, else the first) so the
+  // arrow keys drive it immediately — a proper listbox, not a mouse-only menu.
+  const sel = _ceRefs.dropdown.querySelector('.chip-editor-dd-item[aria-selected="true"]')
+           || _ceRefs.dropdown.querySelector('.chip-editor-dd-item:not([disabled])');
+  if (sel) sel.focus();
 }
 
 function closeChipEditorDropdown() {
@@ -6797,11 +6832,26 @@ function closeChipEditorDropdown() {
   _ceRefs.dropdown.hidden = true;
   _ceRefs.cmpBtn.setAttribute('aria-expanded', 'false');
   document.removeEventListener('pointerdown', _ceDropdownOutside, true);
+  _ceRefs.dropdown.removeEventListener('keydown', _ceDropdownKey);
 }
 
 function _ceDropdownOutside(e) {
   const t = e.target;
   if (!_ceRefs.dropdown.contains(t) && !_ceRefs.cmpBtn.contains(t)) closeChipEditorDropdown();
+}
+
+// Arrow-key roving focus for the compare-color listbox. The options are real
+// <button>s, so Enter/Space already select via their click handler — this adds
+// Up/Down/Home/End movement and Escape-to-close (returning focus to the trigger).
+function _ceDropdownKey(e) {
+  const items = [..._ceRefs.dropdown.querySelectorAll('.chip-editor-dd-item:not([disabled])')];
+  if (!items.length) return;
+  const cur = items.indexOf(/** @type {Element} */ (document.activeElement));
+  if (e.key === 'ArrowDown')      { e.preventDefault(); items[(cur + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp')   { e.preventDefault(); items[(cur - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Home')      { e.preventDefault(); items[0].focus(); }
+  else if (e.key === 'End')       { e.preventDefault(); items[items.length - 1].focus(); }
+  else if (e.key === 'Escape')    { e.preventDefault(); closeChipEditorDropdown(); _ceRefs.cmpBtn.focus(); }
 }
 
 function reseedSubstates() {
@@ -7656,7 +7706,7 @@ try {
       return null;
     }).filter(Boolean));
   }
-} catch (e) {}
+} catch (e) { console.warn('Failed to parse saved palette; starting empty:', e); }
 try {
   const pp = new URLSearchParams(location.search).get('p');
   if (pp !== null) {
@@ -7668,7 +7718,7 @@ try {
     }).filter(Boolean));
     if (fromUrl.length) { palette = fromUrl; savePalette(); }
   }
-} catch (e) {}
+} catch (e) { console.warn('Failed to parse palette from share URL; ignoring it:', e); }
 renderPalette();
 // Open state: explicit preference wins; otherwise open when colors exist
 try {
