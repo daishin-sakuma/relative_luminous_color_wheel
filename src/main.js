@@ -1255,11 +1255,14 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         if (lockedPair && _contrastLockMet && apcaLockTarget && Math.abs(lcAbs - apcaLockTarget) <= 0.5) {
           lcAbs = apcaLockTarget;
         }
-        // Same guarantee as WCAG: the judged floor |Lc| must never exceed the actually-rendered
-        // |Lc|. The anchor (and the target snap) can sit above the measured composite — which
-        // would verdict a font as passing while the real pixels fall below. Clamp to measured.
+        // The live measured |Lc| of the rendered 8-bit pair — shown in the parenthetical only.
+        // Do NOT clamp the judged lcAbs to it: APCA |Lc| is quantization-sensitive, so at a FIXED
+        // luminance the 8-bit measured value wobbles ±1–2 as hue/sat sweep. Clamping the verdict
+        // to that made the usage tier and font verdict flicker across a threshold during
+        // exploration even though the LOCKED (continuous-luminance) contrast is steady — breaking
+        // the app's promise that hue/sat never shakes the verdict. Judge the hue-invariant anchor
+        // (pinned to the target when the lock is met); the measured only rides in the parens.
         const measuredLcAbs = Math.abs(apcaLc(txtRgb, bgRgb));
-        lcAbs = Math.min(lcAbs, measuredLcAbs);
         // Label uses floor(|Lc|+0.3): the usage ladder steps 0.3 before each integer
         // (…44.7, 59.7…), so this shows the SAME integer the tier switches on — the "Lc N"
         // number and its usage tier can never straddle a boundary (no "Lc 15 / INVISIBLE").
