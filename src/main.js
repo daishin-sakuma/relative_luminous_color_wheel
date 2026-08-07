@@ -327,6 +327,15 @@ function normalizeHexInput(str) {
   if (h.length === 3 || h.length === 4) h = h.split('').map(c => c + c).join('');
   return (h.length === 6 || h.length === 8) ? '#' + h : null;
 }
+/** Live-display sanitize for a hex INPUT field while the user types: keep only hex digits
+    (dropping any typed '#'/junk), cap to `maxDigits`, and re-add the leading '#' ONLY when the
+    "Include # in hex" preference is on — so the field never shows a '#' mid-typing while the
+    option is off. Feed the result to normalizeHexInput (which ignores a leading '#') to validate. */
+function sanitizeHexField(raw, maxDigits) {
+  let d = raw.replace(/[^0-9a-fA-F]/g, '');
+  if (d.length > maxDigits) d = d.slice(0, maxDigits);
+  return (stripHash ? '' : '#') + d.toUpperCase();
+}
 /** Parse #rgb6 or #rgb8 → [r,g,b,a] (a is 0–1; 1 when no alpha given). */
 function hexToRgba(hex) {
   const h = hex.replace('#', '');
@@ -2718,11 +2727,8 @@ document.getElementById('custom-tab-color').addEventListener('click', () => setC
 document.getElementById('custom-tab-gray').addEventListener('click',  () => setCustomMode('gray'));
 document.getElementById('custom-tab-lum').addEventListener('click',   () => setCustomMode('lum'));
 customHexInput.addEventListener('input', () => {
-  let val = customHexInput.value.replace(/[^0-9a-fA-F#]/g, '');
-  if (val && !val.startsWith('#')) val = '#' + val;
-  if (val.length > 9) val = val.slice(0, 9);
-  customHexInput.value = val.toUpperCase();
-  const full = normalizeHexInput(val); // accepts 3/4/6/8-digit shorthand
+  customHexInput.value = sanitizeHexField(customHexInput.value, 8);
+  const full = normalizeHexInput(customHexInput.value); // accepts 3/4/6/8-digit shorthand
   if (full) applyCustomHex(...hexToRgba(full));
 });
 const customHexCopyIcon = /** @type {HTMLElement} */ (document.getElementById('custom-hex-copy-icon'));
@@ -2793,11 +2799,8 @@ function applyCustomHex(r, g, b, a = 1) {
 }
 
 swatchHexInput.addEventListener('input', () => {
-  let val = swatchHexInput.value.replace(/[^0-9a-fA-F#]/g, '');
-  if (val && !val.startsWith('#')) val = '#' + val;
-  if (val.length > 9) val = val.slice(0, 9);
-  swatchHexInput.value = val.toUpperCase();
-  const full = normalizeHexInput(val); // accepts 3/4/6/8-digit shorthand
+  swatchHexInput.value = sanitizeHexField(swatchHexInput.value, 8);
+  const full = normalizeHexInput(swatchHexInput.value); // accepts 3/4/6/8-digit shorthand
   if (full) { const [r, g, b, a] = hexToRgba(full); applyMainHex(r, g, b, a); }
 });
 swatchHexInput.addEventListener('click', () => swatchHexInput.select());
@@ -2967,14 +2970,34 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
 
     tabs.forEach(t => t.addEventListener('click', () => { applyMode(t.dataset.umode); reseed(); syncAll(); }));
     Object.values(ranges).forEach(r => r.addEventListener('input', () => { readInputs(); syncVals(); syncHex(); syncSwatch(); refresh(); }));
+    // Display-format a value field from its range value, matching syncVals().
+    const fmtVal = (key, rv) =>
+      key === 'ulum' ? (rv / 1000).toFixed(3)
+      : (key === 'h' || key === 'uhue') ? rv + '°'
+      : (key === 's' || key === 'l' || key === 'usat') ? rv + '%'
+      : String(rv);
+    const commitVal = (v, n) => {
+      const key = v.dataset.uchv;
+      const r = ranges[key];
+      if (!r) return;
+      r.value = String(clampByteFor(key, n));
+      readInputs(); syncAll(); refresh();
+      v.value = fmtVal(key, +r.value); // syncVals skips the focused field, so write it here
+    };
     Object.values(vals).forEach(v => {
       v.addEventListener('change', () => {
-        const n = parseFloat(String(v.value).replace(/[^0-9.\-]/g, '')) || 0;
-        const key = v.dataset.uchv;
-        const r = ranges[key];
-        if (r) { r.value = String(clampByteFor(key, n)); readInputs(); syncAll(); refresh(); }
+        commitVal(v, parseFloat(String(v.value).replace(/[^0-9.\-]/g, '')) || 0);
       });
       v.addEventListener('focus', () => v.select());
+      // ↑/↓ nudge by the field's min unit (Shift = 10×) — matches the main/custom/chip fields,
+      // which the underlay picker previously lacked.
+      v.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        const dispStep = (v.dataset.uchv === 'ulum' ? 0.001 : 1) * (e.shiftKey ? 10 : 1);
+        const cur = parseFloat(String(v.value).replace(/[^0-9.\-]/g, '')) || 0;
+        commitVal(v, cur + (e.key === 'ArrowUp' ? dispStep : -dispStep));
+      });
     });
     function clampByteFor(key, n) {
       if (key === 'ulum') return Math.max(0, Math.min(1000, Math.round(n * 1000)));
@@ -2983,14 +3006,12 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
       return Math.max(0, Math.min(100, Math.round(n))); // s, l, usat
     }
     hexEl.addEventListener('input', () => {
-      let val = hexEl.value.replace(/[^0-9a-fA-F#]/g, '');
-      if (val && !val.startsWith('#')) val = '#' + val;
-      if (val.length > 7) val = val.slice(0, 7);
-      hexEl.value = val.toUpperCase();
-      const full = normalizeHexInput(val); // 3/6-digit shorthand (alpha ignored — underlay is opaque)
+      hexEl.value = sanitizeHexField(hexEl.value, 6);
+      const full = normalizeHexInput(hexEl.value); // 3/6-digit shorthand (alpha ignored — underlay is opaque)
       if (full) { const [r, g, b] = hexToRgb(full); underlayRgb[0] = r; underlayRgb[1] = g; underlayRgb[2] = b; reseed(); syncRanges(); syncVals(); syncSwatch(); refresh(); }
     });
     hexEl.addEventListener('blur', () => { hexEl.value = formatHex(toHex(...underlayRgb)); });
+    hexEl.addEventListener('keydown', e => { if (e.key === 'Enter') hexEl.blur(); }); // Enter commits + expands, like the main hex field
     hexEl.addEventListener('click', () => hexEl.select());
     // Copy affordance, like the other hex fields (honours the # opt-out).
     const copyIcon = /** @type {HTMLElement} */ (document.getElementById('underlay-hex-copy'));
@@ -6746,19 +6767,26 @@ function buildChipEditor() {
   });
   _ceRefs.cancel.addEventListener('click', () => cancelChipEditor());
   _ceRefs.done.addEventListener('click', () => closeChipEditor());
-  _ceRefs.hex.addEventListener('change', () => {
+  // Match the main TEXT hex field exactly: typing live-applies to the wheel/preview and keeps
+  // the shorthand you typed (syncChipEditorHex is guarded on activeElement, so it won't reformat
+  // mid-keystroke); Enter/blur expand "000"/"fff" to full hex (or revert an invalid value).
+  _ceRefs.hex.addEventListener('input', () => {
+    _ceRefs.hex.value = sanitizeHexField(_ceRefs.hex.value, 8);
     const full = normalizeHexInput(_ceRefs.hex.value); // accepts 3/4/6/8-digit shorthand
     if (full) { const [r, g, b, a] = hexToRgba(full); _ce.alpha = a; chipEditorSetRgb(r, g, b); syncChipEditorAlpha(); }
-    else _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1));
   });
-  // Match the main custom hex field: focusing/tapping selects all; the icon copies.
-  // Also keep the field visible in the rail — the mobile keyboard shrinks the
-  // viewport after focus, so scroll now and again once the resize settles.
+  // Focusing/tapping selects all; the icon copies. Also keep the field visible in the rail —
+  // the mobile keyboard shrinks the viewport after focus, so scroll now and once it settles.
   _ceRefs.hex.addEventListener('focus', () => { _ceRefs.hex.select(); scrollChipHexIntoView(); });
   _ceRefs.hex.addEventListener('click', () => _ceRefs.hex.select());
-  // Arm the smooth "return" so that when the keyboard is dismissed the editor
-  // glides back to centre (handled by the visualViewport resize above).
-  _ceRefs.hex.addEventListener('blur', () => { _ceHexReturnPending = true; });
+  _ceRefs.hex.addEventListener('keydown', e => { if (e.key === 'Enter') _ceRefs.hex.blur(); });
+  // Commit on blur: expand shorthand / revert invalid to the current colour, then arm the smooth
+  // "return" so the editor glides back to centre when the mobile keyboard is dismissed.
+  _ceRefs.hex.addEventListener('blur', () => {
+    _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1));
+    fitHexField(_ceRefs.hex);
+    _ceHexReturnPending = true;
+  });
   _ceRefs.hexCopy.addEventListener('click', () => {
     copyToClipboard(formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)));
     // Flash the copy icon only (✓) — not the whole field — matching the main picker's hex copy.
