@@ -237,6 +237,10 @@ header {
   position: absolute;
   top: 0;
   left: 0;
+  /* The wheel is a drag surface; block the browser's own touch gestures (scroll,
+     double-tap zoom) at the CSS layer — more reliable on iOS than preventDefault
+     alone, which a separate gesture recognizer can still slip past. */
+  touch-action: none;
 }
 
 #overlay {
@@ -493,6 +497,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   cursor: crosshair;
   display: block;
   flex-shrink: 0;
+  touch-action: none; /* drag surface — same rationale as #wheel */
 }
 
 /* Shared height keeps the color preview and the hex input below it equal */
