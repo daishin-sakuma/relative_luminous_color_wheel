@@ -42,7 +42,8 @@ function wireValInput(input, min, max, step, parse, format, applyState, cyclic =
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       const cur = parse(input.value);
-      apply((isFinite(cur) ? cur : 0) + (e.key === 'ArrowUp' ? step : -step));
+      const delta = (e.key === 'ArrowUp' ? step : -step) * (e.shiftKey ? 10 : 1); // Shift = 10× the min unit
+      apply((isFinite(cur) ? cur : 0) + delta);
     } else if (e.key === 'Enter') { commit(); input.blur(); }
   });
 }
@@ -2313,7 +2314,10 @@ function syncCustomControls() {
 /** Full sync including hex text input (use when change did NOT come from that input). */
 function syncCustomUI() {
   const chi = /** @type {HTMLInputElement} */ (document.getElementById('custom-hex-input'));
-  chi.value = formatHex(toHexA(cR, cG, cB, cAlpha));
+  // Don't rewrite the field while the user is typing in it — otherwise a live edit (which
+  // re-renders) reformats a half-typed value, so "000"/"fff" shorthand gets auto-expanded
+  // mid-keystroke. Like the main TEXT hex field, expansion happens only on Enter/blur.
+  if (document.activeElement !== chi) chi.value = formatHex(toHexA(cR, cG, cB, cAlpha));
   fitHexField(chi);
   syncCustomControls();
 }
@@ -6727,14 +6731,14 @@ function buildChipEditor() {
     addSliderTouchFix(inp); // cloned after the initial pass, so wire touch dragging here
   });
   // Value inputs behave like the main picker's: select-all on focus (paste/copy),
-  // Arrow Up/Down nudge by one unit, Enter commits.
+  // Arrow Up/Down nudge by one unit (Shift = 10× the min unit), Enter commits.
   Object.values(_ceRefs.vals).forEach(inp => {
     inp.addEventListener('change', onChipEditorValInput);
     inp.addEventListener('focus', () => inp.select());
     inp.addEventListener('keydown', e => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
-        chipEditorValStep(inp, e.key === 'ArrowUp' ? 1 : -1);
+        chipEditorValStep(inp, (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1));
       } else if (e.key === 'Enter') {
         inp.blur();
       }
@@ -6977,7 +6981,7 @@ function syncChipEditorAlpha() {
   (_ceRefs.alphaVals || []).forEach(v => { if (document.activeElement !== v) v.value = pct + '%'; });
 }
 
-function syncChipEditorHex() { _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)); fitHexField(_ceRefs.hex); }
+function syncChipEditorHex() { if (document.activeElement !== _ceRefs.hex) _ceRefs.hex.value = formatHex(toHexA(_ce.r, _ce.g, _ce.b, _ce.alpha ?? 1)); fitHexField(_ceRefs.hex); }
 
 function syncChipEditorControls() {
   syncChipEditorRanges();
