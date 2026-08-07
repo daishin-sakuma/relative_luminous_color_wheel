@@ -1266,7 +1266,13 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         // exploration even though the LOCKED (continuous-luminance) contrast is steady — breaking
         // the app's promise that hue/sat never shakes the verdict. Judge the hue-invariant anchor
         // (pinned to the target when the lock is met); the measured only rides in the parens.
+        // The floor must never exceed the rendered pixels: clamp to the measured |Lc|. With the
+        // lock now pinning the pair to the actual target (not target−EPS), the biased render lands
+        // at/above the target, so measured ≥ the anchor and this min is a no-op in the common case
+        // — it only trims the rare 8-bit dip, and since measured sits at the target (above the
+        // usage-ladder boundary at target−0.3) it doesn't flip the tier, so no flicker.
         const measuredLcAbs = Math.abs(apcaLc(txtRgb, bgRgb));
+        lcAbs = Math.min(lcAbs, measuredLcAbs);
         // Label uses floor(|Lc|+0.3): the usage ladder steps 0.3 before each integer
         // (…44.7, 59.7…), so this shows the SAME integer the tier switches on — the "Lc N"
         // number and its usage tier can never straddle a boundary (no "Lc 15 / INVISIBLE").
@@ -1276,7 +1282,7 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         const signed = mag => (mag === 0 ? '0' : (lc < 0 ? -mag : mag));
         if (apcaMode) {
           // APCA active: main = the guaranteed floor |Lc| the verdict judges (hue-invariant),
-          // parenthetical = the current measured |Lc| (always ≥ the floor). Same polarity.
+          // parenthetical = the current measured |Lc| (≥ the floor — the floor is clamped to it).
           const actualMag = Math.floor(measuredLcAbs + 0.3);
           dom.apcaEl.textContent = 'Lc ' + signed(lcLabel) + ' (' + signed(actualMag) + ')';
           dom.apcaEl.title = 'Guaranteed |Lc| ≥ ' + lcLabel + ' at this luminance & opacity for any hue/sat (the verdict judges this floor); (' + signed(actualMag) + ') is the current measured Lc';
@@ -1904,14 +1910,16 @@ function effLockMetricAt(changed, lum, metric) {
 function solveLockAlpha(changed, metric, target) {
   const cur = changed === 'fg' ? wheelLum(cR, cG, cB) : wheelLum(...selectedRgbBiased());
   const m = lum => effLockMetricAt(changed, lum, metric);
-  // Meet the target within the SAME tolerance the contrast tiles round to, so the lock's
-  // "reached" state can never disagree with the AA/AAA badges: WCAG ratios are shown to 2 dp
-  // (a value ≥ target−0.005 rounds to the target), APCA Lc to the nearest integer (≥ target−0.5).
-  // This also absorbs floating-point error at exact-boundary pins — e.g. the only 7:1 text on a
-  // mid-dark bg is white, yet contrastRatio(1, 0.10) computes 6.9999999, which previously read as
-  // "can't reach 7:1" while the tile showed 7.00 and passed.
+  // Pin the free side so the CONTINUOUS pair meets the ACTUAL target — not target−EPS. Aiming
+  // at target−EPS (the old behaviour) left the pinned pair half a step short, so the guaranteed
+  // floor was really target−EPS while the tile snapped the DISPLAY up to the target: the rendered
+  // 8-bit contrast then read BELOW the shown floor (e.g. "Lc 60 (59)"). Aiming at the target makes
+  // the floor a true minimum — the biased 8-bit render lands at/above it, so measured ≥ floor.
+  // EPS survives only as the "reached" tolerance (below): a pair whose best contrast rounds to the
+  // target (≥ target−EPS: WCAG 2 dp, APCA nearest integer) still reports met, absorbing the
+  // float error at exact-boundary pins (e.g. contrastRatio(1, 0.10) = 6.9999999 for a 7:1 lock).
   const EPS = metric === 'apca' ? 0.5 : 0.005;
-  const f = lum => m(lum) - (target - EPS);
+  const f = lum => m(lum) - target;
   const N = 256;
   const bounds = [];
   // bestL/M: coarse argmax (for the unreachable best-effort pin). worstL/M: coarse argmin —
@@ -1950,15 +1958,17 @@ function solveLockAlpha(changed, metric, target) {
     pool.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
     return { lum: pool[0], reached: true };
   }
-  if (f(0) >= 0 || f(1) >= 0) return { lum: cur, reached: true }; // meets everywhere → keep
-  // Unreachable: refine the coarse argmax (the max sits at/near an endpoint since a
-  // boundary would exist if the peak cleared the target) and pin there, best-effort.
+  if (f(0) >= 0 || f(1) >= 0) return { lum: cur, reached: true }; // meets target everywhere → keep
+  // No luminance reaches the target exactly. Pin at the max-contrast point (best effort) and
+  // refine the coarse argmax. Report reached when that best rounds to the target (bestM ≥
+  // target−EPS) — so a pair whose display rounds to the target isn't flagged "can't reach";
+  // otherwise it's genuinely short and the caller shows the message.
   let lo = Math.max(0, bestL - 1 / N), hi = Math.min(1, bestL + 1 / N);
   for (let k = 0; k < 24; k++) {
     const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
     if (m(a) < m(b)) lo = a; else hi = b;
   }
-  return { lum: (lo + hi) / 2, reached: false };
+  return { lum: (lo + hi) / 2, reached: bestM >= target - EPS };
 }
 
 /** Pin the free side to continuous luminance `desired` for the translucent lock.
