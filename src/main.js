@@ -1167,14 +1167,19 @@ function buildPreviewWcag(el) {
 function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedPair) {
   const dom = _wcagDom.get(el) || buildPreviewWcag(el);
   const ratio   = contrastRatio(l1, l2);
-  // Locked pair: the WCAG lock pins this ratio to exactly its target, but the numeric
-  // solve (gray-composite anchor) can land a hair under while it still ROUNDS UP to the
-  // target in the label — which then read as "achieved" while the AA/AAA chip judged the
-  // raw value as a miss. Snap a within-rounding locked ratio up to the target so the
-  // label, the chips and the lock's own "met" state never disagree. Unreachable
-  // best-effort pins sit far below the target, so they don't snap (chip fails + message).
+  // Locked pair: when the lock REPORTS met, the solver has pinned this anchor pair to within
+  // its own tolerance (EPS = 0.005) of the target — so judge the target exactly. Snapping keeps
+  // the label, the AA/AAA chips and the lock's "met" state in agreement. Unreachable best-effort
+  // pins report NOT met (_contrastLockMet false), so they don't snap (chip fails + message).
+  //
+  // Gate on _contrastLockMet alone — NOT on a second `ratio >= target - 0.005` test. The solver
+  // lands the pair at exactly target − EPS, whose float value (e.g. 6.99499… for a 7:1 lock) is
+  // < 6.995, so that extra test missed on a knife-edge: the badge read one step below target
+  // (6.99, AAA off) while the lock said met, and wobbled across the boundary during a Lum drag
+  // (the flicker). A loose −0.02 bound stays only as defence against a grossly-off pair (never
+  // expected while met), well clear of the EPS boundary + float noise.
   const ratioJudged = (lockedPair && _contrastLockMet && contrastLockMode === 'wcag2' && contrastLockTarget &&
-                       ratio >= contrastLockTarget - 0.005)
+                       ratio >= contrastLockTarget - 0.02)
     ? Math.max(ratio, contrastLockTarget) : ratio;
   // Judge the AA/AAA chips from the EXACT value shown (2-dp rounded), so the ratio
   // label and its chips can never disagree at a threshold (e.g. 4.4999 → shows "4.50"
@@ -5938,8 +5943,12 @@ function finishPaletteSwipeCancel() {
 
 paletteSection.addEventListener('pointerdown', e => {
   if (!paletteOpen || e.pointerType === 'mouse' || (e.button != null && e.button !== 0)) return;
+  if (_chipDragActive) return; // a chip reorder owns this gesture — never arm the swipe-to-close
   const t = /** @type {HTMLElement} */ (e.target);
-  if (t.closest('button,input,select,textarea,.chip-editor')) return;
+  // The grip starts a reorder drag (touch-action:none); a press on it must NOT also arm the
+  // swipe-to-close, or moving right both closes the palette AND steals the chip's pointer
+  // capture — which cancels the drag at a bogus release point (the held color jumps to the top).
+  if (t.closest('button,input,select,textarea,.chip-editor,.palette-chip-grip')) return;
   clearTimeout(_paletteSwipeTimer);
   resetPaletteSwipeStyles();
   _paletteSwipe = {
@@ -5955,6 +5964,7 @@ paletteSection.addEventListener('pointerdown', e => {
 }, true);
 paletteSection.addEventListener('pointermove', e => {
   if (!_paletteSwipe || e.pointerId !== _paletteSwipe.id) return;
+  if (_chipDragActive) { resetPaletteSwipeStyles(); _paletteSwipe = null; return; } // reorder took over
   const now = performance.now();
   const dx = e.clientX - _paletteSwipe.x;
   const dy = e.clientY - _paletteSwipe.y;
@@ -6330,7 +6340,10 @@ function attachChipDrag(chip, index, role, listEl) {
       if (_ceIdx !== null) closeChipEditor(true); // don't drag with an editor open
       try { chip.setPointerCapture(e.pointerId); } catch (_) {}
       chip.classList.add('palette-chip--lifted');
-      chip.style.transform = 'scale(1.03)';
+      // No scale on lift: scaling re-rasterizes the layer and iOS/WebKit then drops the
+      // border-radius clip, squaring off the chip's corners. The chip is picked up as-is
+      // (raised only by its shadow); a pure translateY during the drag just repositions the
+      // already-rasterized layer, so the rounded corners survive.
       // Unclip the sidebar so the chip stays visible outside the rail
       paletteSection.classList.add('palette-section--dragging');
       document.addEventListener('touchmove', blockScroll, { passive: false });
@@ -6445,7 +6458,7 @@ function attachChipDrag(chip, index, role, listEl) {
         lift();
       }
       // Free movement — only the insertion target is clamped to the list span
-      chip.style.transform = `translateY(${rawDy}px) scale(1.03)`;
+      chip.style.transform = `translateY(${rawDy}px)`;
       const { tr, ti } = determineTarget(ev.clientY);
       applyVisualShift(tr, ti);
     };
@@ -6490,6 +6503,10 @@ function attachChipDrag(chip, index, role, listEl) {
     // deliberate cross-group move isn't silently lost. (settle() is guarded by
     // `ended`, so a follow-up pointerup can't double-commit.)
     const onCancel = ev => {
+      // If a palette swipe-close is in progress, this cancel is capture theft, not an
+      // iOS scroll gesture — the release point is bogus (often clientY≈0, which would
+      // reorder the held chip to the top). Revert instead of committing.
+      if (_paletteSwipe && _paletteSwipe.dragging) { settle(false); return; }
       if (lifted) { onUp(ev); return; }
       settle(false);
     };
