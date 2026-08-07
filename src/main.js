@@ -1247,13 +1247,17 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         // the label shows) is exactly on it — so the label read "met" while the chip
         // showed a miss. Unreachable best-effort pins sit well below, so they don't snap.
         let lcAbs = Math.abs(lc);
-        // Snap to the target only while the lock actually MEETS it (not a best-effort
-        // pin) AND this tile's |Lc| is within display-rounding of it — so an unreachable
-        // pin reads as a miss (matching the "can't reach" message), and a tile sitting
-        // well ABOVE the target (e.g. the reverse-polarity tile) keeps its own verdict
-        // instead of being clamped down to the target.
-        if (lockedPair && _contrastLockMet && apcaLockTarget && Math.abs(lcAbs - apcaLockTarget) <= 0.5) {
-          lcAbs = apcaLockTarget;
+        // Snap UP to the target while the lock MEETS it (not a best-effort pin). The solver
+        // lands the pinned pair at exactly target − EPS (0.5 for APCA), so the OLD two-sided
+        // test `|lcAbs - target| <= 0.5` sat right on a knife-edge: in float, target−0.5 often
+        // reads as 0.5000…1 away and MISSED, so the locked tile showed target−1 (e.g. "Lc 44"
+        // under a 45 lock) and a sub-target verdict even though the lock was met — and flipped
+        // as the solve drifted across the boundary. Use a loose lower bound (well past the EPS
+        // knife-edge) with Math.max, so a met lock reliably reads the target while a tile sitting
+        // genuinely ABOVE it (the reverse-polarity tile) keeps its own higher verdict. Unreachable
+        // best-effort pins report NOT met, so they don't snap (they show the real miss + message).
+        if (lockedPair && _contrastLockMet && apcaLockTarget && lcAbs >= apcaLockTarget - 0.6) {
+          lcAbs = Math.max(lcAbs, apcaLockTarget);
         }
         // The live measured |Lc| of the rendered 8-bit pair — shown in the parenthetical only.
         // Do NOT clamp the judged lcAbs to it: APCA |Lc| is quantization-sensitive, so at a FIXED
