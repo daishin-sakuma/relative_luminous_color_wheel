@@ -1280,15 +1280,17 @@ function renderPreviewWcag(el, l1, l2, bgLum, txtRgb, bgRgb, lcOverride, lockedP
         // 43.2) still verdicts precisely — rounding it would drop the font below threshold.
         const lcLabel = Math.floor(lcAbs + 0.3);
         const signed = mag => (mag === 0 ? '0' : (lc < 0 ? -mag : mag));
+        // Measured |Lc| to one decimal, signed like the value. The guaranteed FLOOR stays an
+        // integer (it's tier-aligned via floor(|Lc|+0.3)); only the MEASURED readout is fractional.
+        const signedFixed = mag => { const s = (lc < 0 ? -mag : mag).toFixed(1); return s === '-0.0' ? '0.0' : s; };
         if (apcaMode) {
           // APCA active: main = the guaranteed floor |Lc| the verdict judges (hue-invariant),
-          // parenthetical = the current measured |Lc| (≥ the floor — the floor is clamped to it).
-          const actualMag = Math.floor(measuredLcAbs + 0.3);
-          dom.apcaEl.textContent = 'Lc ' + signed(lcLabel) + ' (' + signed(actualMag) + ')';
-          dom.apcaEl.title = 'Guaranteed |Lc| ≥ ' + lcLabel + ' at this luminance & opacity for any hue/sat (the verdict judges this floor); (' + signed(actualMag) + ') is the current measured Lc';
+          // parenthetical = the current measured |Lc| to 1 dp (≥ the floor — the floor is clamped to it).
+          dom.apcaEl.textContent = 'Lc ' + signed(lcLabel) + ' (' + signedFixed(measuredLcAbs) + ')';
+          dom.apcaEl.title = 'Guaranteed |Lc| ≥ ' + lcLabel + ' at this luminance & opacity for any hue/sat (the verdict judges this floor); (' + signedFixed(measuredLcAbs) + ') is the current measured Lc';
         } else {
-          // APCA is the non-active metric in WCAG mode — lc is already the measured value.
-          dom.apcaEl.textContent = 'Lc ' + signed(lcLabel);
+          // APCA is the non-active metric in WCAG mode — show the measured |Lc| to 1 dp.
+          dom.apcaEl.textContent = 'Lc ' + signedFixed(measuredLcAbs);
         }
         disc.tier = apcaUsageTier(lcAbs);
         disc.tierTitle = 'APCA usage level for |Lc| ' + lcLabel + ' (reference-tool ladder)';
