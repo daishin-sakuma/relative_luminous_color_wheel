@@ -4741,11 +4741,15 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
     usedNames.add(name); BASE_NAMES[key] = name; BASE_CANON[name] = hex; // record the canonical hex for this name
   };
   // Unique base primitives actually referenced, as [name, canonicalHex] — one per NAME (dedupe
-  // merges collapse to one). Sorted light→dark for a readable ramp in the export.
+  // merges collapse to one). Grouped BY FAMILY (alphabetical), then light→dark within each family —
+  // so the flat CSS/Tailwind primitive list reads the same way the DTCG tree nests it (all `red-*`
+  // together, all `blue-*` together …) instead of interleaving hues in one global light→dark ramp,
+  // which made a family's tones hard to scan. famKey strips the trailing tone / alpha suffix.
+  const famKey = name => name.replace(/-(?:a\d+|\d+)$/, '');
   const baseGlobalList = entries => {
     const seen = new Set(), out = [];
     for (const [name, hex] of entries) { if (seen.has(name)) continue; seen.add(name); out.push([name, BASE_CANON[name] || hex]); }
-    return out.sort((a, b) => a[1] < b[1] ? 1 : -1);
+    return out.sort((a, b) => { const fa = famKey(a[0]), fb = famKey(b[0]); return fa !== fb ? (fa < fb ? -1 : 1) : (a[1] < b[1] ? 1 : -1); });
   };
   // Off-scale roles derived from the user's PICKED colour that are CHROMATIC at the brand hue —
   // the soft accent container and its on-colour — are "brand": flagged so their primitives get a
@@ -4829,8 +4833,13 @@ ${darkLines}
     const vars = t => [
       ['background', t.bg.hex], ['foreground', t.text.hex],
       ['card', t.surface.hex], ['card-foreground', t.text.hex],
-      ['popover', t.surface2.hex], ['popover-foreground', t.text.hex],
+      // popover groups with card (shadcn's own theme keeps background = card = popover), NOT with
+      // secondary/muted — mapping it to surface2 collided all three onto one colour. surface keeps
+      // popover on the elevated-white tier, distinct from the surface2 grey that secondary/muted use.
+      ['popover', t.surface.hex], ['popover-foreground', t.text.hex],
       ['primary', t.accent.hex], ['primary-foreground', t.accentText.hex],
+      // secondary == muted == surface2 is intentional and matches shadcn's default theme (both are
+      // the same neutral grey); they read as a tier below card/popover.
       ['secondary', t.surface2.hex], ['secondary-foreground', t.text.hex],
       ['muted', t.surface2.hex], ['muted-foreground', t.muted.hex],
       ['accent', t.accentContainer.hex], ['accent-foreground', t.accentContainerText.hex],
@@ -4923,7 +4932,7 @@ ${lines(dark)}
     $description: `Global primitive tokens (color.scale.* tonal ramp and color.base.* colour-descriptive primitives) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
-      $description: 'Primitive colors, described by colour only (no role, no theme): color.scale is a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end. color.base holds off-scale primitives nested by hue family (color.base.green.700, color.base.blue.300; low-chroma tints under family-muted; leaf white/black). Primitives derived from YOUR picked colour (the accent and its soft container/on-colour) carry a brand- prefix (color.base.brand-green.700, color.base[\'brand-blue-muted\'].75) so a green or red accent never collides with the fixed status greens/reds (success/danger) that share the same hue family — brand-green and green stay distinct. With the Text/BG (gradient) source the scale also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      $description: 'Primitive colors, described by colour only (no role, no theme): color.scale is a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end. color.base holds off-scale primitives nested by hue family (color.base.green.700, color.base.blue.300; low-chroma tints under family-muted; leaf white/black). Primitives derived from YOUR picked colour (the accent and its soft container/on-colour) carry a brand- prefix (color.base.brand-green.700, color.base.brand-blue-muted.75) so a green or red accent never collides with the fixed status greens/reds (success/danger) that share the same hue family — brand-green and green stay distinct. With the Text/BG (gradient) source the scale also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
       base:  baseGroup,
       scale: scaleGroup,
     },
