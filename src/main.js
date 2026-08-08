@@ -4518,7 +4518,11 @@ function accentRoles(scale, accIdx, dark) {
 // Scrim: a fixed translucent-black overlay for modal backdrops / drawer scrims, identical in
 // light and dark. 33.33% black — hex #00000055 (0x55/255 ≈ 0.3333); the export carries the alpha
 // through as an 8-digit hex / rgba / oklch(… / 0.333) and a DTCG $value with an `alpha` field.
-const SCRIM = { step: null, hex: '#00000055', lum: 0 };
+// Modal-backdrop scrim. Light: 33% black (#00000055) sits well over a light page. Dark: a much
+// heavier 60% black (#00000099) — 33% over the already-dark bg (L≈13%) barely darkened it, so the
+// modal never read as "lifted"; 60% sinks the backdrop clearly. Both stay pure black (CVD-invariant).
+const SCRIM_LIGHT = { step: null, hex: '#00000055', lum: 0 };
+const SCRIM_DARK  = { step: null, hex: '#00000099', lum: 0 };
 
 // Pick the accent's scale index: keep the preferred vivid mid step, but if it collides with the
 // text or muted step (so the accent fill would be the SAME colour as body / secondary text — a
@@ -4548,7 +4552,7 @@ function deriveTheme(scale, dark) {
     return {
       dark: false, bg, surface, surface2, border: scale[2], // border (200) = subtle divider
       borderStrong: pickByContrast(scale, bg.lum, 3, false), // ≥ 3:1 vs bg — WCAG 1.4.11 UI boundary
-      scrim: SCRIM,
+      scrim: SCRIM_LIGHT,
       // `text` is the AAA body colour (lightest step clearing 7:1); `text-strong` is a darker
       // on-ramp step for emphasis / headings — more contrast than text, still a color.scale alias.
       text, textStrong: scale[scale.length - 2], muted,
@@ -4567,7 +4571,7 @@ function deriveTheme(scale, dark) {
   return {
     dark: true, bg, surface, surface2, border: scale[scale.length - 4], // border (700) = subtle divider
     borderStrong: pickByContrast(scale, bg.lum, 3, true),    // ≥ 3:1 vs bg — WCAG 1.4.11 UI boundary
-    scrim: SCRIM,
+    scrim: SCRIM_DARK,
     // `text-strong`: a lighter on-ramp step than `text` for emphasis / headings on the dark bg.
     text, textStrong: scale[0], muted,
     accent: acc.accent, accentText: acc.accentText,
@@ -4653,7 +4657,12 @@ function toneForL(L) {
 // Descriptive name PARTS for an off-scale colour: a fixed name (white/black, incl. an -aNN alpha
 // suffix), or a colour family + tone. No role or theme is encoded — the primitive layer describes
 // colour only; the semantic theme layer carries meaning via aliases.
-function colorNameParts(hex) {
+// `brand` = this off-scale colour is derived from the user's PICKED colour (the accent / its soft
+// container), not a fixed status hue. Such colours get a `brand-` family prefix so a green or red
+// accent lands in `brand-green*` / `brand-red*` and can never collide with the status `green*` /
+// `red*` primitives (success/danger). White/black stay universal — a brand tint is never those.
+function colorNameParts(hex, brand = false) {
+  const bp = brand ? 'brand-' : '';
   const [L, C, H] = rgbToOklch(...hexToRgb(hex));
   const a = hexToRgba(hex)[3];
   const aSuf = a < 0.9995 ? '-a' + Math.round(a * 100) : '';
@@ -4664,13 +4673,13 @@ function colorNameParts(hex) {
     const t = toneForL(L);
     if (t <= 50)  return { fixed: 'white' + aSuf };
     if (t >= 950) return { fixed: 'black' + aSuf };
-    return { family: 'neutral', tone: t, aSuf };
+    return { family: bp + 'neutral', tone: t, aSuf };
   }
   // Chroma tier: low-chroma (desaturated) colours — the soft container fills — get a "-muted"
   // family qualifier (still colour-descriptive, chroma being a colour property), so a pale
   // red container reads as red-muted-700 instead of colliding with a vivid red-700 and taking a
   // "-2" suffix. Vivid colours keep the plain family name.
-  const family = hueFamily(H) + (C < 0.09 ? '-muted' : '');
+  const family = bp + hueFamily(H) + (C < 0.09 ? '-muted' : '');
   return { family, tone: toneForL(L), aSuf };
 }
 
@@ -4705,45 +4714,63 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
   const labOf = hex => { const [L, C, H] = oklchOf(hex); const r = H * Math.PI / 180; return [L, C * Math.cos(r), C * Math.sin(r)]; };
   const alphaOf = hex => hexToRgba(hex)[3];
   const dHue = (a, b) => { let d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
-  const assign = hex => {
-    if (BASE_NAMES[hex]) return;
+  // BASE_NAMES is keyed by (origin, hex), NOT hex alone: a brand-derived colour (the user's picked
+  // accent) and a status colour may land on the SAME 8-bit hex (e.g. a red accent whose container
+  // exactly equals the danger container) yet must stay DISTINCT primitives — one `brand-red*`, one
+  // `red*`. The key prefix keeps them apart, and the dedupe below never merges across origins.
+  const nameKey = (hex, brand) => (brand ? 'brand ' : '') + hex.toLowerCase();
+  const keyHex = k => k.startsWith('brand ') ? k.slice(6) : k;
+  const keyBrand = k => k.startsWith('brand ');
+  const assign = (hex, brand = false) => {
+    const key = nameKey(hex, brand);
+    if (BASE_NAMES[key]) return;
     const lab = labOf(hex), a = alphaOf(hex), [, C, H] = oklchOf(hex);
-    for (const h of Object.keys(BASE_NAMES)) {                 // reuse a perceptually-identical primitive
+    for (const k of Object.keys(BASE_NAMES)) {                 // reuse a perceptually-identical primitive
+      if (keyBrand(k) !== brand) continue;                     // NEVER merge a brand tint into a status hue, or vice versa
+      const h = keyHex(k);
       if (Math.abs(alphaOf(h) - a) >= 0.005) continue;
       const l2 = labOf(h), dE = Math.hypot(lab[0] - l2[0], lab[1] - l2[1], lab[2] - l2[2]);
       const [, C2, H2] = oklchOf(h);
       const sameHue = C > 0.02 && C2 > 0.02 && dHue(H, H2) < 4;
-      if (dE < 0.024 || (sameHue && dE < 0.032)) { BASE_NAMES[hex] = BASE_NAMES[h]; return; }
+      if (dE < 0.024 || (sameHue && dE < 0.032)) { BASE_NAMES[key] = BASE_NAMES[k]; return; }
     }
-    const p = colorNameParts(hex);
+    const p = colorNameParts(hex, brand);
     const base = p.fixed ? p.fixed : (p.family + '-' + p.tone + (p.aSuf || ''));
     let name = base, i = 2;
     while (usedNames.has(name)) name = base + '-' + (i++); // honest tone kept; suffix only on a real same-tone/different-hue clash
-    usedNames.add(name); BASE_NAMES[hex] = name; BASE_CANON[name] = hex; // record the canonical hex for this name
+    usedNames.add(name); BASE_NAMES[key] = name; BASE_CANON[name] = hex; // record the canonical hex for this name
   };
   // Unique base primitives actually referenced, as [name, canonicalHex] — one per NAME (dedupe
   // merges collapse to one). Sorted light→dark for a readable ramp in the export.
-  const baseGlobalList = usedHexes => {
+  const baseGlobalList = entries => {
     const seen = new Set(), out = [];
-    for (const h of usedHexes) { const name = BASE_NAMES[h] || ('c' + h.slice(1)); if (seen.has(name)) continue; seen.add(name); out.push([name, BASE_CANON[name] || h]); }
+    for (const [name, hex] of entries) { if (seen.has(name)) continue; seen.add(name); out.push([name, BASE_CANON[name] || hex]); }
     return out.sort((a, b) => a[1] < b[1] ? 1 : -1);
   };
-  for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
-  for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex);
+  // Off-scale roles derived from the user's PICKED colour that are CHROMATIC at the brand hue —
+  // the soft accent container and its on-colour — are "brand": flagged so their primitives get a
+  // `brand-` name and stay clear of the fixed status hues (a green/red accent → brand-green/brand-red,
+  // never colliding with success/danger green/red). The solid accent + hover/active are scale steps
+  // (never off-scale), and the solid accent's on-colour is white/black — none collide with a status
+  // hue, so none are brand-flagged (flagging white/black would only force a needless `-2` suffix).
+  const BRAND_OFFSCALE = new Set(['accentContainer', 'accentContainerText']);
+  const isBrand = k => BRAND_OFFSCALE.has(k);
+  for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex, isBrand(k));
+  for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex,  isBrand(k));
 
   if (format === 'css') {
     const gval = hex => cval(hex);
-    const baseUsed = new Map(); // hex → var name, for the base primitives actually referenced
-    const ref = e => {
+    const baseUsed = new Map(); // name → canonical hex, for the base primitives actually referenced
+    const ref = (e, brand) => {
       if (e.step !== null) return `var(--color-${e.step})`;
       const h = e.hex.toLowerCase();
-      const name = BASE_NAMES[h] || ('c' + h.slice(1));
-      baseUsed.set(h, name);
+      const name = BASE_NAMES[nameKey(h, brand)] || ('c' + h.slice(1));
+      baseUsed.set(name, BASE_CANON[name] || h);
       return `var(--color-${name})`;
     };
-    const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --${n}: ${ref(t[k])};`).join('\n');
+    const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --${n}: ${ref(t[k], isBrand(k))};`).join('\n');
     const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
-    const baseGlobals = baseGlobalList([...baseUsed.keys()]) // one line per NAME (canonical hex) — no duplicate --color-*
+    const baseGlobals = baseGlobalList([...baseUsed.entries()]) // one line per NAME (canonical hex) — no duplicate --color-*
       .map(([name, hex]) => `  --color-${name}: ${gval(hex)};  /* ${alt(hex)} */`).join('\n');
     const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
     return `/* Global tokens — base white/black + a tonal scale (50–950) stepped evenly in OKLab
@@ -4766,17 +4793,17 @@ ${darkLines}
   if (format === 'tailwind') {
     // Tailwind v4 @theme: the scale becomes global colour tokens, so you get
     // utilities like bg-brand-500 / text-brand-700; the semantic layer follows.
-    const baseUsed = new Map();
-    const ref = e => {
+    const baseUsed = new Map(); // name → canonical hex
+    const ref = (e, brand) => {
       if (e.step !== null) return `var(--color-brand-${e.step})`;
       const h = e.hex.toLowerCase();
-      const name = BASE_NAMES[h] || ('c' + h.slice(1));
-      baseUsed.set(h, name);
+      const name = BASE_NAMES[nameKey(h, brand)] || ('c' + h.slice(1));
+      baseUsed.set(name, BASE_CANON[name] || h);
       return `var(--color-${name})`; // Tailwind's own --color-white/--color-black namespace
     };
-    const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --color-${n}: ${ref(t[k])};`).join('\n');
+    const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --color-${n}: ${ref(t[k], isBrand(k))};`).join('\n');
     const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
-    const baseGlobals = baseGlobalList([...baseUsed.keys()]) // one line per NAME (canonical hex) — no duplicate --color-*
+    const baseGlobals = baseGlobalList([...baseUsed.entries()]) // one line per NAME (canonical hex) — no duplicate --color-*
       .map(([name, hex]) => `  --color-${name}: ${cval(hex)};  /* ${alt(hex)} */`).join('\n');
     const globals = scale.map(c => `  --color-brand-${c.step}: ${cval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
     return `@theme {
@@ -4864,23 +4891,28 @@ ${lines(dark)}
   // family: green-700 → base.green.700, red-muted-700 → base['red-muted'].700. Names without a
   // trailing tone (white, black, the translucent black-a33) stay leaf tokens directly under base.
   // So the alias path swaps the last "-<tone>" for ".<tone>".
-  const nestPath = name => { const m = name.match(/^(.+)-(\d+)$/); return m ? `${m[1]}.${m[2]}` : name; };
-  const baseUsed = new Map(); // hex → { name, lum } for every base primitive actually referenced
-  const themeRef = e => {
+  //   ACHROMATIC LEAVES — white / black, optionally translucent (-a33) and/or with a name-clash
+  //   disambiguation suffix (white-2) — are NEVER nested: their trailing "-2" is a disambiguator,
+  //   NOT a tonal step. Nesting it as `white.2` would collide with the `white` leaf token (which
+  //   has its own $value), producing an unresolvable {color.base.white.2} alias. Keep them flat.
+  const isLeafName = name => /^(?:white|black)(?:-a\d+)?(?:-\d+)?$/.test(name);
+  const nestPath = name => { if (isLeafName(name)) return name; const m = name.match(/^(.+)-(\d+)$/); return m ? `${m[1]}.${m[2]}` : name; };
+  const baseUsed = new Map(); // name → { hex, lum } for every base primitive actually referenced
+  const themeRef = (e, brand) => {
     if (e.step !== null) return { $value: `{color.scale.${e.step}}` };
     const hex = e.hex.toLowerCase();
-    const name = BASE_NAMES[hex] || ('c' + hex.slice(1)); // stable name for any non-white/black literal
-    baseUsed.set(hex, { name, lum: e.lum });
+    const name = BASE_NAMES[nameKey(hex, brand)] || ('c' + hex.slice(1)); // stable name for any non-white/black literal
+    if (!baseUsed.has(name)) baseUsed.set(name, { hex: BASE_CANON[name] || hex, lum: e.lum });
     return { $value: `{color.base.${nestPath(name)}}` };
   };
-  const themeGroup = t => Object.fromEntries(SCALE_SEM_ROLES.map(([n, k]) => [n, themeRef(t[k])]));
+  const themeGroup = t => Object.fromEntries(SCALE_SEM_ROLES.map(([n, k]) => [n, themeRef(t[k], isBrand(k))]));
   const lightGroup = themeGroup(light), darkGroup = themeGroup(dark); // populates baseUsed
   // Nest the primitives by hue family so color.base is navigable and each family can carry its own
   // metadata: base.green.{tones}, base['red-muted'].{tones}, plus leaf white/black/black-a33.
   const baseGroup = {};
-  for (const [name, hex] of baseGlobalList([...baseUsed.keys()])) { // one token per NAME (canonical hex) — dedupe merges collapse to one
-    const lum = (baseUsed.get(hex) || {}).lum;
-    const m = name.match(/^(.+)-(\d+)$/);
+  for (const [name, hex] of baseGlobalList([...baseUsed.entries()].map(([n, v]) => [n, v.hex]))) { // one token per NAME (canonical hex) — dedupe merges collapse to one
+    const lum = (baseUsed.get(name) || {}).lum;
+    const m = isLeafName(name) ? null : name.match(/^(.+)-(\d+)$/);
     if (m) { (baseGroup[m[1]] || (baseGroup[m[1]] = {}))[m[2]] = litToken(hex, lum); }
     else baseGroup[name] = litToken(hex, lum);
   }
@@ -4891,13 +4923,13 @@ ${lines(dark)}
     $description: `Global primitive tokens (color.scale.* tonal ramp and color.base.* colour-descriptive primitives) plus light and dark semantic themes (theme.*) that reference them by alias only, exported from the Relative Luminous Color Wheel (relative-luminous-color-wheel.vercel.app). ${fmtNote} Follows the W3C DTCG Format Module 2025.10 (first stable release); the object color's hex property is the spec's fallback for hex-only tools.`,
     color: {
       $type: 'color',
-      $description: 'Primitive colors, described by colour only (no role, no theme): color.scale is a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end. color.base holds off-scale primitives nested by hue family (color.base.green.700, color.base.blue.300; low-chroma tints under family-muted; leaf white/black). With the Text/BG (gradient) source the scale also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
+      $description: 'Primitive colors, described by colour only (no role, no theme): color.scale is a tonal scale (50–950) stepped evenly in OKLab perceptual lightness — NOT in WCAG relative luminance, whose steps compress toward the dark end. color.base holds off-scale primitives nested by hue family (color.base.green.700, color.base.blue.300; low-chroma tints under family-muted; leaf white/black). Primitives derived from YOUR picked colour (the accent and its soft container/on-colour) carry a brand- prefix (color.base.brand-green.700, color.base[\'brand-blue-muted\'].75) so a green or red accent never collides with the fixed status greens/reds (success/danger) that share the same hue family — brand-green and green stay distinct. With the Text/BG (gradient) source the scale also interpolates hue between the two seeds; single-source keeps one hue. The semantic theme tokens below reference these; nothing under theme.* hard-codes an absolute color.',
       base:  baseGroup,
       scale: scaleGroup,
     },
     theme: {
       $type: 'color',
-      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey). (6) `text` is the AAA body colour; `text-strong` is a higher-emphasis step (darker on light, lighter on dark) for headings / emphasised text.',
+      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`: 33% in light, 60% in dark — the dark bg needs a heavier veil to read as a backdrop); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey). (6) `text` is the AAA body colour; `text-strong` is a higher-emphasis step (darker on light, lighter on dark) for headings / emphasised text.',
       light: lightGroup,
       dark:  darkGroup,
     },
@@ -5512,7 +5544,8 @@ function buildComponentGallery(th, footerNote) {
     const behind = lpEl('div', 'lp-cg-overlay-behind');
     behind.append(lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'));
     [...behind.children].forEach((b, i) => { b.style.background = C(i ? muted : text); b.style.width = ['70%', '90%', '55%'][i]; });
-    // The scrim: 33.33% black. Black is CVD-invariant, so an rgba from its alpha is exact.
+    // The scrim: pure black at the theme's own alpha (33% light / 60% dark). Black is
+    // CVD-invariant, so an rgba from its alpha is exact.
     const scrimA = hexToRgba(th.scrim.hex)[3];
     const veil = lpEl('div', 'lp-cg-scrim'); veil.style.background = `rgba(0,0,0,${scrimA})`;
     // Dialog floating above the scrim.
