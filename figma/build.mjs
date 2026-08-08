@@ -15,7 +15,7 @@ const out = join(here, 'dist');
 
 // The plugin is versioned independently of the web app (which lives at 2.x). This is the
 // version shown in the plugin UI; bump it on each published plugin release.
-const PLUGIN_VERSION = '1.10.2';
+const PLUGIN_VERSION = '1.10.3';
 
 // 1. Build the web app (single JS chunk, single CSS). Force the font to inline as a data
 //    URI by raising the asset inline limit for this build (it's ~95 KB).
@@ -50,6 +50,10 @@ const shim = readFileSync(join(here, 'ui-shim.js'), 'utf8');
 // (e.g. re-inject the matched <script> tag and prematurely close the inline script). A function
 // return value is inserted verbatim.
 html = html
+  // The plugin runs offline (manifest networkAccess: "none"). Drop the web app's Vercel
+  // Analytics / Speed Insights loader so the plugin makes NO network requests — honouring the
+  // manifest claim and avoiding blocked-request console errors inside Figma's iframe.
+  .replace(/\s*<!-- Vercel Analytics[\s\S]*?<\/script>/i, () => '')
   .replace(/<link[^>]+rel="stylesheet"[^>]*>/i, () => `<style>${css}</style>`)
   .replace(/<script[^>]+type="module"[^>]*><\/script>/i, () => `<script type="module">\n${js}\n</script>`)
   .replace(/<head>/i, () => `<head>\n<!--__RLCW_INIT__-->\n<script>\n${shim}\n</script>`);

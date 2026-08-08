@@ -158,6 +158,23 @@ function saveToStorage(key, value) {
   if (_lsTimer === null) _lsTimer = setTimeout(flushStorage, 300);
 }
 
+// Safe localStorage reads/removes. Accessing storage can THROW (SecurityError) when it's blocked:
+// sandboxed iframes, third-party data/cookie restrictions, some private-mode browsers, and the
+// Figma plugin's iframe. An unguarded getItem/removeItem at startup would abort the whole module
+// and leave a blank screen; these wrappers return the fallback instead so the app always boots.
+// (setItem is already individually try-wrapped at each call site and via flushStorage.)
+function lsGet(key, fallback = null) {
+  try { const v = localStorage.getItem(key); return v == null ? fallback : v; } catch (e) { return fallback; }
+}
+function lsRemove(key) {
+  try { localStorage.removeItem(key); } catch (e) { /* storage blocked — nothing to remove */ }
+}
+// JSON.parse that never throws on corrupt / legacy stored data — returns the fallback instead of
+// aborting a restore block (so one bad key can't discard the reads that follow it).
+function safeParse(str, fallback) {
+  try { return JSON.parse(str); } catch (e) { return fallback; }
+}
+
 window.addEventListener('pagehide', flushStorage);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -701,8 +718,8 @@ function apcaLcForFont(size, weight) {
 // v2 beta: the font the APCA verdicts judge against (persisted). The
 // selectors live inside each tile (in the WCAG chips' slot), synchronized.
 const APCA_FONT_SIZES = [10, 12, 14, 15, 16, 18, 21, 24, 28, 32, 36, 42, 48, 60, 72, 96];
-let apcaFontSize = (() => { const v = parseFloat(localStorage.getItem('apca-font-px') ?? '16'); return APCA_FONT_SIZES.includes(v) ? v : 16; })();
-let apcaFontWeight = (() => { const v = parseInt(localStorage.getItem('apca-font-wght') ?? '400', 10); return APCA_FONT_WEIGHTS.includes(v) ? v : 400; })();
+let apcaFontSize = (() => { const v = parseFloat(lsGet('apca-font-px') ?? '16'); return APCA_FONT_SIZES.includes(v) ? v : 16; })();
+let apcaFontWeight = (() => { const v = parseInt(lsGet('apca-font-wght') ?? '400', 10); return APCA_FONT_WEIGHTS.includes(v) ? v : 400; })();
 // Bridge so the per-tile font selectors can refresh the "Type" APCA lock (its
 // wiring lives in the contrast-lock IIFE below). No-op until that IIFE assigns it.
 let syncApcaTypeControls = () => {};
@@ -1673,7 +1690,7 @@ let apcaLockTarget = 0;
 // picks which; 'mid' takes whichever of the two is nearer a mid-tone gray. The solver falls
 // back to whichever solution is reachable when only one is.
 let lockSide = 'mid'; // 'lighter' | 'mid' | 'darker'
-try { const _ls = localStorage.getItem('contrast-lock-side'); if (_ls === 'lighter' || _ls === 'darker' || _ls === 'mid') lockSide = _ls; } catch (e) {}
+try { const _ls = lsGet('contrast-lock-side'); if (_ls === 'lighter' || _ls === 'darker' || _ls === 'mid') lockSide = _ls; } catch (e) {}
 function apcaLockActive() { return contrastLockMode === 'apca'; }
 /** The target the current mode enforces (0 when the lock is off). */
 function activeContrastTarget() {
@@ -2911,7 +2928,7 @@ document.addEventListener('keydown', e => {
 {
   const stripHashCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('strip-hash-checkbox'));
   try {
-    const stored = localStorage.getItem('pref-strip-hash');
+    const stored = lsGet('pref-strip-hash');
     if (stored !== null) {
       // '1' = old opt-in to strip → new checkbox unchecked; '0' = include → checked
       stripHash = stored === '1';
@@ -3044,8 +3061,8 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
 
     // Restore saved underlay (default stays white).
     try {
-      const st = localStorage.getItem('underlay-rgb');
-      if (st) { const p = JSON.parse(st); if (Array.isArray(p) && p.length === 3) { underlayRgb[0] = clampB(p[0]); underlayRgb[1] = clampB(p[1]); underlayRgb[2] = clampB(p[2]); } }
+      const st = lsGet('underlay-rgb');
+      if (st) { const p = safeParse(st, null); if (Array.isArray(p) && p.length === 3) { underlayRgb[0] = clampB(p[0]); underlayRgb[1] = clampB(p[1]); underlayRgb[2] = clampB(p[2]); } }
     } catch (e) { console.warn('Failed to restore underlay color from storage; using white:', e); }
     applyMode('lum');
     reseed();
@@ -3056,7 +3073,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
 {
   const shareStateCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('share-state-checkbox'));
   try {
-    if (localStorage.getItem('pref-share-state') === '0') {
+    if (lsGet('pref-share-state') === '0') {
       shareState = false;
       shareStateCheckbox.checked = false;
     }
@@ -3070,7 +3087,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
 {
   const shareThemeCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('share-theme-checkbox'));
   try {
-    if (localStorage.getItem('pref-share-theme') === '0') {
+    if (lsGet('pref-share-theme') === '0') {
       shareTheme = false;
       shareThemeCheckbox.checked = false;
     }
@@ -3309,7 +3326,7 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     uiBrightnessSlider.min = String(minL);
     uiBrightnessSlider.max = String(maxL);
 
-    const saved = localStorage.getItem(`ui-ground-l-${theme}`);
+    const saved = lsGet(`ui-ground-l-${theme}`);
     const raw   = saved !== null ? +saved : themeDefaultL(theme);
     const val   = Math.max(minL, Math.min(maxL, raw));
     uiBrightnessSlider.value    = String(val);
@@ -3361,8 +3378,8 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
   };
   const urlHue = _qNum('uh', 0, 359);
   const urlSat = _qNum('us', 0, 200);
-  const savedHue = urlHue ?? +(localStorage.getItem('ui-hue') ?? 240);
-  const savedSat = urlSat ?? +(localStorage.getItem('ui-sat') ?? 0);
+  const savedHue = urlHue ?? +(lsGet('ui-hue') ?? 240);
+  const savedSat = urlSat ?? +(lsGet('ui-sat') ?? 0);
   uiHueSlider.value = String(savedHue);
   uiSatSlider.value = String(savedSat);
   setUnitVal(uiHueVal, savedHue, '°');
@@ -3412,9 +3429,9 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
     uiBrightnessSlider.value = String(themeDefaultL(theme));
     setUnitVal(uiBrightnessVal, themeDefaultL(theme), '%');
     try {
-      localStorage.removeItem('ui-hue');
-      localStorage.removeItem('ui-sat');
-      localStorage.removeItem(`ui-ground-l-${theme}`);
+      lsRemove('ui-hue');
+      lsRemove('ui-sat');
+      lsRemove(`ui-ground-l-${theme}`);
     } catch(e) {}
   });
 
@@ -3457,10 +3474,10 @@ let _syncUnderlayHex = null; // set below; lets the # opt-out re-render this fie
 // ─── Restore persisted selection state ────────────────────────────────────────
 
 try {
-  const sh = localStorage.getItem('sel-hue');
-  const ss = localStorage.getItem('sel-sat');
-  const sl = localStorage.getItem('sel-lum');
-  const sc = localStorage.getItem('sel-custom-color');
+  const sh = lsGet('sel-hue');
+  const ss = lsGet('sel-sat');
+  const sl = lsGet('sel-lum');
+  const sc = lsGet('sel-custom-color');
   if (sh !== null) selHue = parseFloat(sh);
   if (ss !== null) selSat = parseFloat(ss);
   if (sl !== null) {
@@ -3468,9 +3485,9 @@ try {
     lumSlider.value = String(Math.round(targetLum * 1000));
     lumValEl.value = targetLum.toFixed(3);
   }
-  const sa = localStorage.getItem('sel-alpha');
+  const sa = lsGet('sel-alpha');
   if (sa !== null) { const v = parseFloat(sa); if (v >= 0 && v <= 1) selAlpha = v; }
-  const sca = localStorage.getItem('custom-alpha');
+  const sca = lsGet('custom-alpha');
   if (sca !== null) { const v = parseFloat(sca); if (v >= 0 && v <= 1) cAlpha = v; }
   // legacy: keep reading sel-custom-color as fallback
   if (sc !== null && /^#[0-9a-fA-F]{6}$/i.test(sc)) {
@@ -3481,15 +3498,15 @@ try {
 
 // Mode-aware custom color restore
 try {
-  const m = localStorage.getItem('custom-mode');
+  const m = lsGet('custom-mode');
   if (m === 'color' || m === 'gray' || m === 'lum') customMode = m;
-  const cc = localStorage.getItem('custom-color-rgb');
-  if (cc) { const p = JSON.parse(cc); if (typeof p.r === 'number') customColorSaved = { r: p.r, g: p.g, b: p.b }; }
-  const cgv = localStorage.getItem('custom-gray-v');
+  const cc = lsGet('custom-color-rgb');
+  if (cc) { const p = safeParse(cc, {}); if (typeof p.r === 'number') customColorSaved = { r: p.r, g: p.g, b: p.b }; }
+  const cgv = lsGet('custom-gray-v');
   if (cgv !== null) { const v = parseInt(cgv); if (!isNaN(v)) customGraySaved = Math.max(0, Math.min(255, v)); }
-  const clv = localStorage.getItem('custom-lum-v');
+  const clv = lsGet('custom-lum-v');
   if (clv) {
-    const p = JSON.parse(clv);
+    const p = safeParse(clv, {});
     if (typeof p.lum === 'number') {
       customLumSaved = { lum: p.lum, hue: p.hue || 0, sat: p.sat || 1 };
       cuLum = customLumSaved.lum; cuHue = customLumSaved.hue; cuSat = customLumSaved.sat;
@@ -3745,7 +3762,7 @@ document.querySelectorAll('.preview-platform-btn').forEach(btn => {
 const EXPORT_COLOR_FMTS = ['oklch', 'hex'];
 let exportColorFmt = 'hex';
 try {
-  const v = localStorage.getItem('export-color-fmt');
+  const v = lsGet('export-color-fmt');
   if (EXPORT_COLOR_FMTS.includes(v)) exportColorFmt = v;
 } catch (e) {}
 
@@ -7840,7 +7857,7 @@ function capPaletteRoles(list) {
   return kept;
 }
 try {
-  const stored = JSON.parse(localStorage.getItem('palette-colors') || '[]');
+  const stored = safeParse(lsGet('palette-colors') || '[]', []);
   if (Array.isArray(stored)) {
     // Accept 6- AND 8-digit hex (the 8-digit #RRGGBBAA carries opacity), any case — matching
     // what addToPalette stores. The old 6-digit-lowercase-only test dropped every translucent
@@ -7873,7 +7890,7 @@ try {
 renderPalette();
 // Open state: explicit preference wins; otherwise open when colors exist
 try {
-  const po = localStorage.getItem('palette-open');
+  const po = lsGet('palette-open');
   paletteOpen = po !== null ? po === '1' : palette.length > 0;
 } catch (e) { paletteOpen = palette.length > 0; }
 applyPaletteOpen();

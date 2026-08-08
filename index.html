@@ -35,14 +35,22 @@
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
-  <!-- Vercel Analytics -->
-  <script defer src="/_vercel/insights/script.js"></script>
-
-  <!-- Vercel Speed Insights -->
+  <!-- Vercel Analytics & Speed Insights -->
   <script>
     window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    (function() {
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
+      var s1 = document.createElement('script');
+      s1.src = '/_vercel/insights/script.js';
+      s1.defer = true;
+      document.head.appendChild(s1);
+
+      var s2 = document.createElement('script');
+      s2.src = '/_vercel/speed-insights/script.js';
+      s2.defer = true;
+      document.head.appendChild(s2);
+    })();
   </script>
-  <script defer src="/_vercel/speed-insights/script.js"></script>
 
   <link rel="preload" href="/src/assets/fonts/NATS-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="icon" href="/favicon.ico" sizes="any">
