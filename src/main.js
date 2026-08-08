@@ -4689,6 +4689,10 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
   // light roles are named before dark for deterministic output.
   const BASE_NAMES = {};
   const usedNames = new Set();
+  // name → the ONE canonical hex that first claimed it. Dedupe merges several near-twin hexes onto
+  // a single name, so the primitive layer must emit ONE definition per NAME (using this canonical
+  // value) — not one per hex, which duplicated the same `--color-<name>` with different values.
+  const BASE_CANON = {};
   // Perceptual, HUE-AWARE dedupe. Two off-scale colours are "the same primitive" when they're
   // indistinguishable to the eye — but ΔE alone can't tell a genuine near-twin (same hue, trivially
   // different L) from two DIFFERENT hues that happen to sit at a similar ΔE. So merge when either:
@@ -4715,7 +4719,14 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
     const base = p.fixed ? p.fixed : (p.family + '-' + p.tone + (p.aSuf || ''));
     let name = base, i = 2;
     while (usedNames.has(name)) name = base + '-' + (i++); // honest tone kept; suffix only on a real same-tone/different-hue clash
-    usedNames.add(name); BASE_NAMES[hex] = name;
+    usedNames.add(name); BASE_NAMES[hex] = name; BASE_CANON[name] = hex; // record the canonical hex for this name
+  };
+  // Unique base primitives actually referenced, as [name, canonicalHex] — one per NAME (dedupe
+  // merges collapse to one). Sorted light→dark for a readable ramp in the export.
+  const baseGlobalList = usedHexes => {
+    const seen = new Set(), out = [];
+    for (const h of usedHexes) { const name = BASE_NAMES[h] || ('c' + h.slice(1)); if (seen.has(name)) continue; seen.add(name); out.push([name, BASE_CANON[name] || h]); }
+    return out.sort((a, b) => a[1] < b[1] ? 1 : -1);
   };
   for (const [, k] of SCALE_SEM_ROLES) if (light[k] && light[k].step === null) assign(light[k].hex);
   for (const [, k] of SCALE_SEM_ROLES) if (dark[k]  && dark[k].step === null)  assign(dark[k].hex);
@@ -4732,8 +4743,8 @@ function buildScaleExport(format, colorFmt, scale, light, dark) {
     };
     const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --${n}: ${ref(t[k])};`).join('\n');
     const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
-    const baseGlobals = [...baseUsed.entries()].sort((a, b) => a[0] < b[0] ? 1 : -1) // white → black
-      .map(([hex, name]) => `  --color-${name}: ${gval(hex)};  /* ${alt(hex)} */`).join('\n');
+    const baseGlobals = baseGlobalList([...baseUsed.keys()]) // one line per NAME (canonical hex) — no duplicate --color-*
+      .map(([name, hex]) => `  --color-${name}: ${gval(hex)};  /* ${alt(hex)} */`).join('\n');
     const globals = scale.map(c => `  --color-${c.step}: ${gval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
     return `/* Global tokens — base white/black + a tonal scale (50–950) stepped evenly in OKLab
    perceptual lightness (not in WCAG relative luminance), primitives. The light/dark semantic
@@ -4765,8 +4776,8 @@ ${darkLines}
     };
     const roleLines = t => SCALE_SEM_ROLES.map(([n, k]) => `  --color-${n}: ${ref(t[k])};`).join('\n');
     const lightLines = roleLines(light), darkLines = roleLines(dark); // populates baseUsed
-    const baseGlobals = [...baseUsed.entries()].sort((a, b) => a[0] < b[0] ? 1 : -1) // white → black
-      .map(([hex, name]) => `  --color-${name}: ${cval(hex)};  /* ${alt(hex)} */`).join('\n');
+    const baseGlobals = baseGlobalList([...baseUsed.keys()]) // one line per NAME (canonical hex) — no duplicate --color-*
+      .map(([name, hex]) => `  --color-${name}: ${cval(hex)};  /* ${alt(hex)} */`).join('\n');
     const globals = scale.map(c => `  --color-brand-${c.step}: ${cval(c.hex)};  /* ${alt(c.hex)} */`).join('\n');
     return `@theme {
   /* Global tokens — base white/black + tonal scale → utilities like bg-brand-500, text-brand-700. */
@@ -4867,7 +4878,8 @@ ${lines(dark)}
   // Nest the primitives by hue family so color.base is navigable and each family can carry its own
   // metadata: base.green.{tones}, base['red-muted'].{tones}, plus leaf white/black/black-a33.
   const baseGroup = {};
-  for (const [hex, { name, lum }] of [...baseUsed.entries()].sort((a, b) => b[1].lum - a[1].lum)) { // white → black
+  for (const [name, hex] of baseGlobalList([...baseUsed.keys()])) { // one token per NAME (canonical hex) — dedupe merges collapse to one
+    const lum = (baseUsed.get(hex) || {}).lum;
     const m = name.match(/^(.+)-(\d+)$/);
     if (m) { (baseGroup[m[1]] || (baseGroup[m[1]] = {}))[m[2]] = litToken(hex, lum); }
     else baseGroup[name] = litToken(hex, lum);
