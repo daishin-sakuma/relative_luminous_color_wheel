@@ -4534,14 +4534,17 @@ function accentRoles(scale, accIdx, dark) {
   };
 }
 
-// Scrim: a fixed translucent-black overlay for modal backdrops / drawer scrims, identical in
-// light and dark. 33.33% black — hex #00000055 (0x55/255 ≈ 0.3333); the export carries the alpha
-// through as an 8-digit hex / rgba / oklch(… / 0.333) and a DTCG $value with an `alpha` field.
-// Modal-backdrop scrim. Light: 33% black (#00000055) sits well over a light page. Dark: a much
-// heavier 60% black (#00000099) — 33% over the already-dark bg (L≈13%) barely darkened it, so the
-// modal never read as "lifted"; 60% sinks the backdrop clearly. Both stay pure black (CVD-invariant).
+// Modal-backdrop / drawer scrim — a fixed translucent-black overlay. Pure black (CVD-invariant:
+// no hue, and an rgba from its alpha is exact). The export carries the alpha through as 8-digit
+// hex / rgba / oklch(… / a) and a DTCG $value with an `alpha` field; the 6-digit hex fallback is
+// opaque, so hex-only tools render it solid.
+//   Light: 33.33% black — #00000055 (0x55/255). Sits well over a near-white page.
+//   Dark:  66.67% black — #000000AA (0xAA/255 = exactly 2× the light alpha). A 33% veil over the
+//          already-dark bg (L≈13%) barely darkened it, so the modal never read as "lifted"; the
+//          heavier alpha sinks the backdrop clearly. The effect (not the alpha) is what must match
+//          across themes, and a dark page needs more black to sink the same amount.
 const SCRIM_LIGHT = { step: null, hex: '#00000055', lum: 0 };
-const SCRIM_DARK  = { step: null, hex: '#00000099', lum: 0 };
+const SCRIM_DARK  = { step: null, hex: '#000000AA', lum: 0 };
 
 // Pick the accent's scale index: keep the preferred vivid mid step, but if it collides with the
 // text or muted step (so the accent fill would be the SAME colour as body / secondary text — a
@@ -4957,7 +4960,7 @@ ${lines(dark)}
     },
     theme: {
       $type: 'color',
-      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`: 33% in light, 60% in dark — the dark bg needs a heavier veil to read as a backdrop); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey). (6) `text` is the AAA body colour; `text-strong` is a higher-emphasis step (darker on light, lighter on dark) for headings / emphasised text.',
+      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`: 33% in light, ~67% in dark — the already-dark bg needs a heavier veil to sink the same amount); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey). (6) `text` is the AAA body colour; `text-strong` is a higher-emphasis step (darker on light, lighter on dark) for headings / emphasised text.',
       light: lightGroup,
       dark:  darkGroup,
     },
@@ -5572,7 +5575,7 @@ function buildComponentGallery(th, footerNote) {
     const behind = lpEl('div', 'lp-cg-overlay-behind');
     behind.append(lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'), lpEl('div', 'lp-cg-obar'));
     [...behind.children].forEach((b, i) => { b.style.background = C(i ? muted : text); b.style.width = ['70%', '90%', '55%'][i]; });
-    // The scrim: pure black at the theme's own alpha (33% light / 60% dark). Black is
+    // The scrim: pure black at the theme's own alpha (33% light / 67% dark). Black is
     // CVD-invariant, so an rgba from its alpha is exact.
     const scrimA = hexToRgba(th.scrim.hex)[3];
     const veil = lpEl('div', 'lp-cg-scrim'); veil.style.background = `rgba(0,0,0,${scrimA})`;
