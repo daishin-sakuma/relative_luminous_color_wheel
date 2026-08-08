@@ -4549,7 +4549,9 @@ function deriveTheme(scale, dark) {
       dark: false, bg, surface, surface2, border: scale[2], // border (200) = subtle divider
       borderStrong: pickByContrast(scale, bg.lum, 3, false), // ≥ 3:1 vs bg — WCAG 1.4.11 UI boundary
       scrim: SCRIM,
-      text, muted,
+      // `text` is the AAA body colour (lightest step clearing 7:1); `text-strong` is a darker
+      // on-ramp step for emphasis / headings — more contrast than text, still a color.scale alias.
+      text, textStrong: scale[scale.length - 2], muted,
       accent: acc.accent, accentText: acc.accentText,
       ...accentRoles(scale, accIdx, false),
       ...stateRoles(false, surface2.lum), // status fg solved to clear AA on all surfaces
@@ -4566,7 +4568,8 @@ function deriveTheme(scale, dark) {
     dark: true, bg, surface, surface2, border: scale[scale.length - 4], // border (700) = subtle divider
     borderStrong: pickByContrast(scale, bg.lum, 3, true),    // ≥ 3:1 vs bg — WCAG 1.4.11 UI boundary
     scrim: SCRIM,
-    text, muted,
+    // `text-strong`: a lighter on-ramp step than `text` for emphasis / headings on the dark bg.
+    text, textStrong: scale[0], muted,
     accent: acc.accent, accentText: acc.accentText,
     ...accentRoles(scale, accIdx, true),
     ...stateRoles(true, surface2.lum), // status fg solved to clear AA on all surfaces
@@ -4598,7 +4601,7 @@ let _scaleExportColorFmt = 'hex'; // 'oklch' | 'hex' — HEX (most universal) by
 // container fill + on-container.
 const SCALE_SEM_ROLES = [
   ['bg', 'bg'], ['surface', 'surface'], ['surface-raised', 'surface2'], ['border', 'border'], ['border-strong', 'borderStrong'], ['scrim', 'scrim'],
-  ['text', 'text'], ['muted', 'muted'],
+  ['text', 'text'], ['text-strong', 'textStrong'], ['muted', 'muted'],
   ['accent', 'accent'], ['accent-foreground', 'accentText'],
   ['accent-hover', 'accentHover'], ['accent-active', 'accentActive'],
   ['accent-container', 'accentContainer'], ['accent-container-foreground', 'accentContainerText'],
@@ -4882,7 +4885,7 @@ ${lines(dark)}
     },
     theme: {
       $type: 'color',
-      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey).',
+      $description: 'Semantic role tokens for the light and dark themes. Each value is an alias to a color.scale or color.base primitive (colors live only in the primitive layer). DTCG has no built-in theming: light and dark are parallel role groups sharing the same primitives — pick one at build time (a 2025.10 sets/resolutionOrder resolver would be a separate document; it is not embedded here). Usage notes: (1) `border` is a subtle ~2:1 divider — use `border-strong` (≥3:1) for meaningful UI boundaries like input outlines (WCAG 1.4.11). (2) `scrim` is translucent (see its `alpha`); its 6-digit `hex` fallback is opaque, so hex-only tools render it solid — read `alpha`. (3) In dark, `muted` meets WCAG AAA but sits near APCA Lc −52; for small secondary text in dark mode prefer `text`. (4) accent `-hover`/`-active` are adjacent steps on a single-hue ramp, so they can share a luminance with nearby `text`/`muted` — distinguish interactive states with more than colour (underline, weight, motion). (5) The scale carries the seed colour’s hue (a brand ramp, not a neutral grey). (6) `text` is the AAA body colour; `text-strong` is a higher-emphasis step (darker on light, lighter on dark) for headings / emphasised text.',
       light: lightGroup,
       dark:  darkGroup,
     },
