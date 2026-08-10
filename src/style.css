@@ -1963,26 +1963,41 @@ body.palette-open .palette-toggle { opacity: 1; color: var(--text); }
 @keyframes about-modal-fade { from { opacity: 0; } }
 @keyframes about-modal-pop { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
 .about-modal-panel .about-body { max-width: none; padding-top: 0; }
-.about-modal-close {
+/* Minimal close button — shared by the What-is-this modal and the ? cheat-sheet. A thin,
+   CSS-drawn × in the muted colour that simply brightens on hover; no filled hit-area box
+   (that read as heavy against the app's restrained dark chrome). */
+.about-modal-close, .kbd-help-close {
   position: absolute;
-  top: 0.7rem;
-  right: 0.9rem;
+  top: 0.55rem;
+  right: 0.7rem;
   z-index: var(--z-base);
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
   background: none;
   border: none;
-  border-radius: var(--r-lg);
+  border-radius: var(--r-sm);
   color: var(--muted);
-  font-size: var(--fs-2xl);
-  line-height: var(--lh-tight);
+  font-size: 0;                 /* hide the literal × glyph; the strokes below draw a thin one */
   cursor: pointer;
-  transition: color var(--dur-base), background var(--dur-base);
+  transition: color var(--dur-base) ease;
 }
-@media (hover: hover) { .about-modal-close:hover { color: var(--text); background: var(--border); } }
+.about-modal-close::before, .about-modal-close::after,
+.kbd-help-close::before,     .kbd-help-close::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.72rem;
+  height: 1px;
+  background: currentColor;
+}
+.about-modal-close::before, .kbd-help-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+.about-modal-close::after,  .kbd-help-close::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+@media (hover: hover) {
+  .about-modal-close:hover, .kbd-help-close:hover { color: var(--text); }
+}
+.about-modal-close:focus-visible, .kbd-help-close:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 body.about-modal-open { overflow: hidden; }
 
 /* ── Footer ─────────────────────────────────────────────────────────────────── */
@@ -2225,15 +2240,7 @@ body.about-modal-open { overflow: hidden; }
   gap: var(--space-8); padding: 1.2rem 3rem 1rem 1.6rem; border-bottom: 1px solid var(--border);
 }
 .kbd-help-title { margin: 0; font-size: var(--fs-xl); font-weight: 600; line-height: var(--lh-tight); color: var(--text); }
-.kbd-help-close {
-  position: absolute; top: 0.7rem; right: 0.9rem; width: 2rem; height: 2rem;
-  display: flex; align-items: center; justify-content: center;
-  background: none; border: 0; border-radius: var(--r-lg); color: var(--muted);
-  font-size: var(--fs-2xl); line-height: var(--lh-tight); cursor: pointer;
-  transition: color var(--dur-base), background var(--dur-base);
-}
-@media (hover: hover) { .kbd-help-close:hover { color: var(--text); background: var(--border); } }
-.kbd-help-close:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+/* .kbd-help-close shares the minimal close-button style defined with .about-modal-close above. */
 .kbd-help-list {
   margin: 0; overflow-y: auto; overscroll-behavior: contain; min-height: 0;
   display: flex; flex-direction: column; gap: var(--space-7); padding: 1.2rem 1.6rem 1.4rem;
