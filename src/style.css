@@ -2201,8 +2201,9 @@ body.about-modal-open { overflow: hidden; }
 .lp-states { display: flex; gap: var(--space-5); margin-top: var(--space-8); }
 .lp-state-chip { font-size: var(--fs-2xs); font-weight: 600; padding: var(--space-3) var(--space-8); border-radius: var(--r-md); letter-spacing: var(--ls-1); }
 
-/* ── Component gallery (Layout preview → Components view) ────────────────────── */
-.lp-view-modes { margin: var(--space-8) 0 var(--space-3); }
+/* ── Component gallery (folded into the Layout preview, below the page mock) ──── */
+/* Sub-label separating the page mock from the components gallery in the same scroll. */
+.lp-view-sublabel { margin: var(--space-10) 0 var(--space-3); }
 .lp-gallery { padding: var(--space-3) 0 0; }
 .lp-cg-sec { padding: var(--space-10) var(--space-11); border-top: 1px solid rgba(128,128,128,0.14); }
 .lp-cg-sec:first-child { border-top: 0; }
