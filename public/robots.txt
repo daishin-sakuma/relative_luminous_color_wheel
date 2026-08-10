@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://relative-luminous-color-wheel.vercel.app/sitemap.xml
