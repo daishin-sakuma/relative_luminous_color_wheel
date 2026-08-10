@@ -2221,15 +2221,24 @@ body.about-modal-open { overflow: hidden; }
 .lp-states { display: flex; gap: var(--space-5); margin-top: var(--space-8); }
 .lp-state-chip { font-size: var(--fs-2xs); font-weight: 600; padding: var(--space-3) var(--space-8); border-radius: var(--r-md); letter-spacing: var(--ls-1); }
 
-/* ── Keyboard-shortcut cheat-sheet (opened with ?) — mirrors the About modal shell ── */
+/* ── Keyboard-shortcut cheat-sheet (opened with ?) — matches the About ("What is this?") modal:
+      same --ground shell, header rule and title scale, the same fade-in backdrop + pop panel, and
+      a SMOOTH backdrop blur — the dark tint AND the blur ramp up together over --dur-slow instead
+      of the blur snapping on. ── */
 .kbd-help {
   position: fixed; inset: 0; z-index: calc(var(--z-modal) + 20);
   display: flex; align-items: center; justify-content: center; padding: var(--space-14);
-  opacity: 0; visibility: hidden; transition: opacity var(--dur-slow) ease, visibility 0s linear var(--dur-slow);
+  visibility: hidden; transition: visibility 0s linear var(--dur-slow);
 }
-.kbd-help.show { opacity: 1; visibility: visible; transition: opacity var(--dur-slow) ease; }
+.kbd-help.show { visibility: visible; transition: visibility 0s; }
 .kbd-help-backdrop {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55);
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0);
+  -webkit-backdrop-filter: blur(0px); backdrop-filter: blur(0px);
+  transition: background var(--dur-slow) ease, -webkit-backdrop-filter var(--dur-slow) ease, backdrop-filter var(--dur-slow) ease;
+}
+.kbd-help.show .kbd-help-backdrop {
+  background: rgba(0, 0, 0, 0.55);
   -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
 }
 .kbd-help-panel {
@@ -2237,18 +2246,20 @@ body.about-modal-open { overflow: hidden; }
   width: 100%; max-width: 30rem; max-height: 84vh; overflow: hidden;
   background: var(--ground); border: 1px solid var(--border);
   border-radius: var(--r-xl); box-shadow: var(--shadow-xl);
-  transform: translateY(8px) scale(0.99); transition: transform var(--dur-slow) ease;
+  opacity: 0; transform: translateY(8px) scale(0.99);
+  transition: opacity var(--dur-slow) ease, transform var(--dur-slow) ease;
 }
-.kbd-help.show .kbd-help-panel { transform: none; }
+.kbd-help.show .kbd-help-panel { opacity: 1; transform: none; }
+/* Header mirrors .about-modal-head: title + bottom rule; the close button floats absolute
+   top-right of the panel (right padding clears it), exactly like the About modal. */
 .kbd-help-head {
-  flex: 0 0 auto; display: flex; align-items: baseline; justify-content: space-between;
-  gap: var(--space-8); padding: 1.2rem 3rem 1rem 1.6rem; border-bottom: 1px solid var(--border);
+  flex: 0 0 auto; padding: 1.5rem 3.4rem 1.1rem 2.2rem; border-bottom: 1px solid var(--border);
 }
-.kbd-help-title { margin: 0; font-size: var(--fs-xl); font-weight: 600; line-height: var(--lh-tight); color: var(--text); }
+.kbd-help-title { margin: 0; font-size: var(--fs-2xl); font-weight: 600; line-height: var(--lh-tight); color: var(--text); }
 /* .kbd-help-close shares the minimal close-button style defined with .about-modal-close above. */
 .kbd-help-list {
   margin: 0; overflow-y: auto; overscroll-behavior: contain; min-height: 0;
-  display: flex; flex-direction: column; gap: var(--space-7); padding: 1.2rem 1.6rem 1.4rem;
+  display: flex; flex-direction: column; gap: var(--space-7); padding: 1.6rem 2.2rem 2.2rem;
 }
 .kbd-help-row { display: grid; grid-template-columns: 8rem 1fr; gap: var(--space-9); align-items: center; }
 .kbd-help-row dt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
@@ -2262,6 +2273,21 @@ body.about-modal-open { overflow: hidden; }
   border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--surface2); color: var(--text);
 }
+/* Colour-vision (V) snackbar — a minimal bottom-centre pill naming the current CVD mode. Uppercase
+   letter-spaced like the app's other labels; chrome-themed so it rides the simulation itself. */
+.cvd-snack {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-13));
+  transform: translate(-50%, 0.4rem); z-index: calc(var(--z-modal) + 5);
+  padding: var(--space-5) var(--space-10);
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 999px;
+  font-size: var(--fs-2xs); letter-spacing: var(--ls-4); text-transform: uppercase; white-space: nowrap;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--dur-base) ease, transform var(--dur-base) ease, visibility var(--dur-base);
+}
+.cvd-snack.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+
 /* Focusable wheel (arrow-key control) — show a ring only for keyboard focus. */
 #wheel:focus { outline: none; }
 #wheel:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; border-radius: 50%; }
