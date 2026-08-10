@@ -6816,7 +6816,17 @@ function buildChipEditor() {
   _ceRefs.alphaVals.forEach(v => {
     v.addEventListener('change', () => { const n = parseFloat(String(v.value).replace(/[^0-9.\-]/g, '')); onAlpha((Number.isFinite(n) ? n : 100) / 100); });
     v.addEventListener('focus', () => v.select());
-    v.addEventListener('keydown', e => { if (e.key === 'Enter') v.blur(); });
+    v.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Step opacity like every other value field: ±1% (Shift = ±10%), clamped 0–100.
+        e.preventDefault();
+        const cur = parseFloat(String(v.value).replace(/[^0-9.\-]/g, ''));
+        const base = Number.isFinite(cur) ? cur : 100;
+        const next = Math.max(0, Math.min(100, Math.round(base + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1))));
+        onAlpha(next / 100);
+        v.value = next + '%'; // field is focused, so syncChipEditorAlpha skips it — reflect the step here
+      } else if (e.key === 'Enter') { v.blur(); }
+    });
   });
   // Render above the display size for a smooth downsample, but cap the buffer:
   // Lum mode rebuilds the whole wheel (per-pixel lightness search) whenever the
@@ -7852,6 +7862,26 @@ document.addEventListener('keydown', e => {
   if (k === 'y' || e.shiftKey) redoPalette(); else undoPalette();
 });
 
+// Transient snackbar for the colour-vision (V) shortcut. The CVD control lives in the settings
+// panel, so cycling it from the keyboard gives no on-screen cue of the mode you landed on — this
+// names it briefly. Minimal chrome-themed pill, bottom-centre, auto-dismissed; role=status also
+// announces the change to screen readers.
+const CVD_SNACK_LABEL = { '': 'Normal vision', protan: 'Protanopia · red-blind', deutan: 'Deuteranopia · green-blind', tritan: 'Tritanopia · blue-blind' };
+let _cvdSnackEl = null, _cvdSnackTimer = null;
+function showCvdSnack(text) {
+  if (!_cvdSnackEl) {
+    _cvdSnackEl = document.createElement('div');
+    _cvdSnackEl.className = 'cvd-snack';
+    _cvdSnackEl.setAttribute('role', 'status');
+    _cvdSnackEl.setAttribute('aria-live', 'polite');
+    document.body.appendChild(_cvdSnackEl);
+  }
+  _cvdSnackEl.textContent = text;
+  _cvdSnackEl.classList.add('show');
+  if (_cvdSnackTimer) clearTimeout(_cvdSnackTimer);
+  _cvdSnackTimer = setTimeout(() => { if (_cvdSnackEl) _cvdSnackEl.classList.remove('show'); }, 1300);
+}
+
 // ─── Global keyboard shortcuts (single-key + Escape) + the ? cheat-sheet ──────
 // Single-key shortcuts are IGNORED while a text field is focused (so typing hex / names
 // isn't hijacked) and when Cmd/Ctrl/Alt is held (reserved for the browser and the undo
@@ -7941,11 +7971,14 @@ document.addEventListener('keydown', e => {
     const inText = !!el && (el.tagName === 'TEXTAREA' || el.isContentEditable ||
       (el.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'submit', 'color'].includes(/** @type {HTMLInputElement} */(el).type)));
     if (inText) return;
-    if (_helpOpen) { if (e.key === '?') { toggleShortcutHelp(); e.preventDefault(); } return; } // cheat-sheet up: only ? / Esc
+    // Commands still run while the ? cheat-sheet is open. Ones that reveal/act on another surface
+    // (pin → opens the palette sidebar, [ → toggles it) close the sheet first so the result is
+    // visible; in-place toggles (theme, CVD, lock metric/target, eyedropper) leave it open so the
+    // list stays available. hideShortcutHelp() is a no-op when the sheet is already closed.
     switch (e.key) {
       case '?': toggleShortcutHelp(); break;
-      case 'p': clickSel('#pin-selected'); break;
-      case 'P': clickSel('#pin-custom'); break;
+      case 'p': hideShortcutHelp(); clickSel('#pin-selected'); break;
+      case 'P': hideShortcutHelp(); clickSel('#pin-custom'); break;
       case 'd': case 'D': {
         const dark = (document.documentElement.dataset.theme || 'dark') === 'dark';
         clickSel(dark ? '#theme-btn-light' : '#theme-btn-dark'); break;
@@ -7954,9 +7987,10 @@ document.addEventListener('keydown', e => {
       case 'v': case 'V': {
         const btns = [...document.querySelectorAll('[data-cvd]')];
         if (btns.length) { const i = btns.findIndex(b => b.classList.contains('active')); btns[(Math.max(0, i) + 1) % btns.length].click(); }
+        showCvdSnack(CVD_SNACK_LABEL[currentCvd] || 'Normal vision'); // name the mode we landed on
         break;
       }
-      case '[': setPaletteOpen(!paletteOpen); break;
+      case '[': hideShortcutHelp(); setPaletteOpen(!paletteOpen); break;
       case 'l': case 'L': clickSel('#contrast-lock-mode .contrast-lock-btn:not(.active)'); break;
       case '0': case '1': case '2': case '3': case '4': {
         const modeBtn = document.querySelector('#contrast-lock-mode [data-lockmode="wcag2"]');
