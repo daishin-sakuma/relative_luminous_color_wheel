@@ -7974,6 +7974,17 @@ document.addEventListener('keydown', e => {
   });
 }
 
+// Segmented-control buttons (contrast-lock, CVD/theme/export tabs, layout-preview tabs) must not
+// KEEP DOM focus after a MOUSE click. Otherwise the next keypress flips the focus modality to
+// "keyboard" and the still-focused button lights up with a :focus-visible ring — a stray outline
+// left on a tab the user already switched away from (e.g. after a keyboard tab shortcut). Suppress
+// focus-on-mousedown for these controls; the click still fires, and keyboard Tab focus (with its
+// ring) is unaffected.
+document.addEventListener('mousedown', e => {
+  const el = /** @type {Element} */ (e.target);
+  if (el && el.closest && el.closest('.contrast-lock-btn, .settings-theme-btn, .lp-mode-btn')) e.preventDefault();
+}, true);
+
 // Wheel keyboard control: focus the wheel and use the arrow keys to adjust hue (←/→) and
 // saturation (↑/↓); Shift makes each step ×10. Drives the same hue/sat sliders the pointer
 // path uses, so the selection state and every readout update identically. Hue wraps 0↔359.
