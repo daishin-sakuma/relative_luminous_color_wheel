@@ -6275,37 +6275,6 @@ function updatePaletteHistoryButtons() {
   if (r) r.disabled = _palRedo.length === 0;
 }
 
-// Snackbar/toast: a transient "<message> · Undo" confirmation after a destructive palette action
-// (delete a colour / clear all), so a mis-tap is recoverable in context — not only via the sidebar
-// Undo button. Undo runs the same history step as Cmd/Ctrl+Z. One shared element, re-used/re-timed;
-// styled with the chrome theme vars so it follows the UI theme and the colour-vision simulation.
-let _toastEl = null, _toastMsgEl = null, _toastTimer = null;
-function hideUndoToast() {
-  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
-  if (_toastEl) _toastEl.classList.remove('show');
-}
-function showUndoToast(message) {
-  if (!_toastEl) {
-    _toastEl = document.createElement('div');
-    _toastEl.className = 'palette-toast';
-    _toastEl.setAttribute('role', 'status');
-    _toastEl.setAttribute('aria-live', 'polite');
-    _toastMsgEl = document.createElement('span');
-    _toastMsgEl.className = 'palette-toast-msg';
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'palette-toast-undo';
-    btn.textContent = 'Undo';
-    btn.addEventListener('click', () => { hideUndoToast(); undoPalette(); });
-    _toastEl.append(_toastMsgEl, btn);
-    document.body.appendChild(_toastEl);
-  }
-  _toastMsgEl.textContent = message;
-  _toastEl.classList.add('show');
-  if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(hideUndoToast, 5000);
-}
-
 function addToPalette(hex, role) {
   const commit = () => {
     hex = hex.toLowerCase();
@@ -6331,7 +6300,6 @@ function removeFromPalette(index) {
     palette.splice(index, 1);
     savePalette();
     renderPalette();
-    showUndoToast('Color deleted');
   };
   if (_ceIdx !== null) closeChipEditor(true, commit);
   else commit();
@@ -7840,7 +7808,6 @@ document.getElementById('palette-clear').addEventListener('click', () => {
   palette = [];
   savePalette();
   renderPalette();
-  showUndoToast('Palette cleared');
 });
 
 document.getElementById('palette-undo').addEventListener('click', undoPalette);
