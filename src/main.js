@@ -4292,10 +4292,11 @@ function setupHoverPopper(wrap, btn, panel, onOpen) {
 }
 // Closer for the Layout-preview popper — used to hand off to the sidebar after saving a theme
 // to the palette on narrow (modal) widths, where the popper covers the screen.
-let _closeLayoutPopper = null;
+let _closeLayoutPopper = null, _closeSettingsPopper = null;
 {
   const sBtn = document.getElementById('settings-btn');
-  setupHoverPopper(sBtn && sBtn.closest('.settings-wrap'), sBtn, document.getElementById('settings-panel'));
+  const sp = setupHoverPopper(sBtn && sBtn.closest('.settings-wrap'), sBtn, document.getElementById('settings-panel'));
+  _closeSettingsPopper = sp && sp.close;
   const lBtn = document.getElementById('layout-btn');
   const lp = setupHoverPopper(lBtn && lBtn.closest('.layout-wrap'), lBtn, document.getElementById('layout-panel'), renderLayoutPreview);
   _closeLayoutPopper = lp && lp.close;
@@ -7828,6 +7829,144 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   if (k === 'y' || e.shiftKey) redoPalette(); else undoPalette();
 });
+
+// ─── Global keyboard shortcuts (single-key + Escape) + the ? cheat-sheet ──────
+// Single-key shortcuts are IGNORED while a text field is focused (so typing hex / names
+// isn't hijacked) and when Cmd/Ctrl/Alt is held (reserved for the browser and the undo
+// combo above). Escape always runs. Press ? for the in-app list.
+{
+  const MOD = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '') ? '⌘' : 'Ctrl';
+  const SHORTCUTS = [
+    [`${MOD} Z`,   'Undo palette change'],
+    [`${MOD} ⇧ Z`, 'Redo palette change'],
+    ['Esc',        'Close the open panel / dialog'],
+    ['?',          'Show / hide this cheat-sheet'],
+    ['P',          'Pin the current text colour to the palette'],
+    ['⇧ P',        'Pin the current background colour'],
+    ['D',          'Toggle dark / light appearance'],
+    ['I',          'Pick a colour with the eyedropper'],
+    ['L',          'Toggle the WCAG / APCA lock metric'],
+    ['0 – 4',      'Set the contrast-lock target (0 = off)'],
+    ['V',          'Cycle colour-vision simulation'],
+    ['[',          'Toggle the palette sidebar'],
+    ['← → ↑ ↓',    'Wheel focused: hue (←→) & saturation (↑↓); ⇧ for ×10'],
+    ['⇧ ↑ ↓',      'On a slider / value field: step ×10'],
+  ];
+  let _helpEl = null, _helpOpen = false, _helpPrevFocus = null;
+  function buildHelp() {
+    const root = document.createElement('div');
+    root.className = 'kbd-help';
+    root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Keyboard shortcuts');
+    const bd = document.createElement('div'); bd.className = 'kbd-help-backdrop'; bd.addEventListener('click', hideShortcutHelp);
+    const panel = document.createElement('div'); panel.className = 'kbd-help-panel';
+    const head = document.createElement('div'); head.className = 'kbd-help-head';
+    const h = document.createElement('h2'); h.className = 'kbd-help-title'; h.textContent = 'Keyboard shortcuts';
+    const close = document.createElement('button');
+    close.type = 'button'; close.className = 'kbd-help-close'; close.setAttribute('aria-label', 'Close'); close.textContent = '×';
+    close.addEventListener('click', hideShortcutHelp);
+    head.append(h, close);
+    const dl = document.createElement('dl'); dl.className = 'kbd-help-list';
+    for (const [keys, desc] of SHORTCUTS) {
+      const row = document.createElement('div'); row.className = 'kbd-help-row';
+      const dt = document.createElement('dt');
+      keys.split(' ').forEach(part => { const k = document.createElement('kbd'); k.textContent = part; dt.appendChild(k); });
+      const dd = document.createElement('dd'); dd.textContent = desc;
+      row.append(dt, dd); dl.appendChild(row);
+    }
+    panel.append(head, dl); root.append(bd, panel);
+    document.body.appendChild(root);
+    return root;
+  }
+  function hideShortcutHelp() {
+    if (!_helpOpen) return;
+    _helpOpen = false;
+    if (_helpEl) _helpEl.classList.remove('show');
+    if (_helpPrevFocus && _helpPrevFocus.focus) { try { _helpPrevFocus.focus(); } catch (e) {} }
+  }
+  function toggleShortcutHelp() {
+    if (_helpOpen) { hideShortcutHelp(); return; }
+    if (!_helpEl) _helpEl = buildHelp();
+    _helpPrevFocus = document.activeElement;
+    _helpOpen = true; _helpEl.classList.add('show');
+    const c = _helpEl.querySelector('.kbd-help-close'); if (c) c.focus();
+  }
+
+  const _settingsWrap = document.getElementById('settings-btn') && document.getElementById('settings-btn').closest('.settings-wrap');
+  const _layoutWrap   = document.getElementById('layout-btn')   && document.getElementById('layout-btn').closest('.layout-wrap');
+  const isPopOpen = wrap => !!wrap && wrap.classList.contains('settings-open');
+  const clickSel  = sel => { const b = document.querySelector(sel); if (b) b.click(); };
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('about-modal');
+      if (modal && !modal.hidden) return;                     // About modal: its own Escape handler
+      if (_scaleImportEl) return;                             // Scale-import popper: its own Escape handler
+      if (_helpOpen)                { hideShortcutHelp();                          e.preventDefault(); return; }
+      if (_ceIdx !== null)          { closeChipEditor();                           e.preventDefault(); return; }
+      if (isPopOpen(_layoutWrap))   { _closeLayoutPopper && _closeLayoutPopper();  e.preventDefault(); return; }
+      if (isPopOpen(_settingsWrap)) { _closeSettingsPopper && _closeSettingsPopper(); e.preventDefault(); return; }
+      if (paletteOpen)              { setPaletteOpen(false);                       e.preventDefault(); return; }
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;           // reserved for the browser / undo combo
+    const el = document.activeElement;
+    const inText = !!el && (el.tagName === 'TEXTAREA' || el.isContentEditable ||
+      (el.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'submit', 'color'].includes(/** @type {HTMLInputElement} */(el).type)));
+    if (inText) return;
+    if (_helpOpen) { if (e.key === '?') { toggleShortcutHelp(); e.preventDefault(); } return; } // cheat-sheet up: only ? / Esc
+    switch (e.key) {
+      case '?': toggleShortcutHelp(); break;
+      case 'p': clickSel('#pin-selected'); break;
+      case 'P': clickSel('#pin-custom'); break;
+      case 'd': case 'D': {
+        const dark = (document.documentElement.dataset.theme || 'dark') === 'dark';
+        clickSel(dark ? '#theme-btn-light' : '#theme-btn-dark'); break;
+      }
+      case 'i': case 'I': clickSel('#swatch-eyedropper'); break;
+      case 'v': case 'V': {
+        const btns = [...document.querySelectorAll('[data-cvd]')];
+        if (btns.length) { const i = btns.findIndex(b => b.classList.contains('active')); btns[(Math.max(0, i) + 1) % btns.length].click(); }
+        break;
+      }
+      case '[': setPaletteOpen(!paletteOpen); break;
+      case 'l': case 'L': clickSel('#contrast-lock-mode .contrast-lock-btn:not(.active)'); break;
+      case '0': case '1': case '2': case '3': case '4': {
+        const modeBtn = document.querySelector('#contrast-lock-mode [data-lockmode="wcag2"]');
+        const wcag = !!(modeBtn && modeBtn.classList.contains('active'));
+        const grp = document.getElementById(wcag ? 'contrast-lock-btns-wcag2' : 'contrast-lock-btns-apca');
+        if (!grp) return;
+        const btns = [...grp.querySelectorAll('.contrast-lock-btn')].filter(b => b.dataset.apcaTarget !== 'type');
+        const btn = btns[+e.key];
+        if (!btn) return;
+        btn.click(); break;
+      }
+      default: return;                                        // not ours — leave the event alone
+    }
+    e.preventDefault();
+  });
+}
+
+// Wheel keyboard control: focus the wheel and use the arrow keys to adjust hue (←/→) and
+// saturation (↑/↓); Shift makes each step ×10. Drives the same hue/sat sliders the pointer
+// path uses, so the selection state and every readout update identically. Hue wraps 0↔359.
+if (wheelCanvas) {
+  wheelCanvas.tabIndex = 0;
+  wheelCanvas.setAttribute('aria-label', 'Colour wheel — arrow keys adjust hue (left/right) and saturation (up/down); hold Shift for ×10 steps');
+  wheelCanvas.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const d = (e.key === 'ArrowRight' ? 1 : -1) * step;
+      const h = ((parseFloat(hueSlider.value) + d) % 360 + 360) % 360;
+      hueSlider.value = String(h); hueSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      const d = (e.key === 'ArrowUp' ? 1 : -1) * step;
+      const s = Math.max(0, Math.min(100, parseFloat(satSlider.value) + d));
+      satSlider.value = String(s); satSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    } else return;
+    e.preventDefault();
+  });
+}
 
 // Restore: localStorage first, then share-URL override.
 // Legacy entries (plain hex strings / unprefixed URL tokens) predate the
