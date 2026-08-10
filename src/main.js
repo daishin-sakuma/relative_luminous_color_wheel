@@ -7869,7 +7869,13 @@ document.addEventListener('keydown', e => {
     for (const [keys, desc] of SHORTCUTS) {
       const row = document.createElement('div'); row.className = 'kbd-help-row';
       const dt = document.createElement('dt');
-      keys.split(' ').forEach(part => { const k = document.createElement('kbd'); k.textContent = part; dt.appendChild(k); });
+      const SEP = new Set(['–', '/', '…', '&', '+', 'or', 'then']); // rendered as plain separators, not keycaps
+      keys.split(' ').forEach(part => {
+        const node = document.createElement(SEP.has(part) ? 'span' : 'kbd');
+        if (SEP.has(part)) node.className = 'kbd-help-sep';
+        node.textContent = part;
+        dt.appendChild(node);
+      });
       const dd = document.createElement('dd'); dd.textContent = desc;
       row.append(dt, dd); dl.appendChild(row);
     }

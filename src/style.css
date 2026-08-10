@@ -2201,40 +2201,54 @@ body.about-modal-open { overflow: hidden; }
 .lp-states { display: flex; gap: var(--space-5); margin-top: var(--space-8); }
 .lp-state-chip { font-size: var(--fs-2xs); font-weight: 600; padding: var(--space-3) var(--space-8); border-radius: var(--r-md); letter-spacing: var(--ls-1); }
 
-/* ── Keyboard-shortcut cheat-sheet (opened with ?) ────────────────────────────── */
+/* ── Keyboard-shortcut cheat-sheet (opened with ?) — mirrors the About modal shell ── */
 .kbd-help {
   position: fixed; inset: 0; z-index: calc(var(--z-modal) + 20);
-  display: flex; align-items: center; justify-content: center;
-  opacity: 0; visibility: hidden; transition: opacity var(--dur-fast) ease, visibility var(--dur-fast);
+  display: flex; align-items: center; justify-content: center; padding: var(--space-14);
+  opacity: 0; visibility: hidden; transition: opacity var(--dur-slow) ease, visibility 0s linear var(--dur-slow);
 }
-.kbd-help.show { opacity: 1; visibility: visible; }
-.kbd-help-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); }
+.kbd-help.show { opacity: 1; visibility: visible; transition: opacity var(--dur-slow) ease; }
+.kbd-help-backdrop {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
 .kbd-help-panel {
-  position: relative; z-index: 1; width: min(28rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 3rem); overflow-y: auto;
-  background: var(--surface2); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--r-lg);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-  padding: var(--space-11);
-  transform: translateY(0.5rem); transition: transform var(--dur-fast) ease;
+  position: relative; display: flex; flex-direction: column;
+  width: 100%; max-width: 30rem; max-height: 84vh; overflow: hidden;
+  background: var(--ground); border: 1px solid var(--border);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-xl);
+  transform: translateY(8px) scale(0.99); transition: transform var(--dur-slow) ease;
 }
-.kbd-help.show .kbd-help-panel { transform: translateY(0); }
-.kbd-help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-10); }
-.kbd-help-title { font-size: var(--fs-md); font-weight: 700; margin: 0; }
+.kbd-help.show .kbd-help-panel { transform: none; }
+.kbd-help-head {
+  flex: 0 0 auto; display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-8); padding: 1.2rem 3rem 1rem 1.6rem; border-bottom: 1px solid var(--border);
+}
+.kbd-help-title { margin: 0; font-size: var(--fs-xl); font-weight: 600; line-height: var(--lh-tight); color: var(--text); }
 .kbd-help-close {
-  flex: 0 0 auto; font-size: var(--fs-lg); line-height: 1; cursor: pointer;
-  background: none; border: 0; color: var(--muted); padding: var(--space-3) var(--space-7); border-radius: var(--r-md);
+  position: absolute; top: 0.7rem; right: 0.9rem; width: 2rem; height: 2rem;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-radius: var(--r-lg); color: var(--muted);
+  font-size: var(--fs-2xl); line-height: var(--lh-tight); cursor: pointer;
+  transition: color var(--dur-base), background var(--dur-base);
 }
-.kbd-help-close:hover { color: var(--text); background: var(--surface); }
+@media (hover: hover) { .kbd-help-close:hover { color: var(--text); background: var(--border); } }
 .kbd-help-close:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-.kbd-help-list { margin: 0; display: flex; flex-direction: column; gap: var(--space-6); }
-.kbd-help-row { display: grid; grid-template-columns: 8.5rem 1fr; gap: var(--space-9); align-items: baseline; }
-.kbd-help-row dt { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.kbd-help-list {
+  margin: 0; overflow-y: auto; overscroll-behavior: contain; min-height: 0;
+  display: flex; flex-direction: column; gap: var(--space-7); padding: 1.2rem 1.6rem 1.4rem;
+}
+.kbd-help-row { display: grid; grid-template-columns: 8rem 1fr; gap: var(--space-9); align-items: center; }
+.kbd-help-row dt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 .kbd-help-row dd { margin: 0; font-size: var(--fs-xs); color: var(--muted); }
+.kbd-help-sep { color: var(--muted); font-size: var(--fs-2xs); }
+/* Keycaps: match the .preview-badge chip look, but in a mono face so ⌘ ⇧ ← → ↑ ↓ render
+   (the app's display font, NATS, has no arrow/symbol glyphs). */
 .kbd-help kbd {
-  font: 600 var(--fs-2xs)/1.6 inherit; min-width: 1.4em; text-align: center;
-  padding: 0.05rem var(--space-5); border-radius: var(--r-md);
-  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  font-family: ui-monospace, monospace; font-size: var(--fs-2xs); line-height: 1.5;
+  min-width: 1.6em; text-align: center; padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface2); color: var(--text);
 }
 /* Focusable wheel (arrow-key control) — show a ring only for keyboard focus. */
 #wheel:focus { outline: none; }
