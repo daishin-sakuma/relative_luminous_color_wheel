@@ -5030,25 +5030,17 @@ function renderLayoutPreview() {
   else renderPaletteLayout();
 }
 
-// Which face of the theme each preview shows: a marketing 'page', or a systematic
+// A theme preview shows BOTH faces in one scroll: the marketing 'page' mock, then the systematic
 // 'components' gallery (buttons / inputs / badges / table across default·hover·active·disabled).
-let _lpThemeView = 'page';
-
-function themeViewToggle() {
-  const wrap = lpEl('div', 'lp-modes lp-view-modes');
-  for (const [v, label] of [['page', 'Page'], ['components', 'Components']]) {
-    const btn = lpEl('button', 'lp-mode-btn' + (_lpThemeView === v ? ' active' : ''), label);
-    btn.type = 'button';
-    btn.addEventListener('click', () => { if (_lpThemeView !== v) { _lpThemeView = v; renderLayoutPreview(); } });
-    wrap.appendChild(btn);
-  }
-  return wrap;
-}
-
-// Dispatch to the current theme view. Both faces are driven entirely by `th`'s role colours, so
-// they stay consistent with the tokens the app exports.
+// These used to sit behind a Page/Components tab, but the tab was easy to miss — folding the
+// gallery into the page guarantees the component coverage is always seen. Both faces are driven
+// entirely by `th`'s role colours, so they stay consistent with the tokens the app exports.
 function buildThemeView(th, footerNote) {
-  return _lpThemeView === 'components' ? buildComponentGallery(th, footerNote) : buildThemeMock(th, footerNote);
+  const wrap = lpEl('div', 'lp-theme-view');
+  wrap.appendChild(buildThemeMock(th, footerNote));
+  wrap.appendChild(lpEl('div', 'lp-theme-name lp-view-sublabel', 'Components'));
+  wrap.appendChild(buildComponentGallery(th, footerNote));
+  return wrap;
 }
 
 // ── Contrast audit (shared by both Layout preview modes) ──────────────────────
@@ -5220,7 +5212,6 @@ function renderPaletteLayout() {
       'Showing the current picker pair. Pin colours — or save a theme from Scales — to preview your palette used by role here.'));
   }
 
-  layoutPreviewEl.appendChild(themeViewToggle());
   layoutPreviewEl.appendChild(buildThemeView(th, saved ? '© 2026 Aurora — your palette' : '© 2026 Aurora — live pair'));
 
   // Coverage bar — EVERY saved colour, labelled by its NAME (or rank) + hex, so nothing the
@@ -5278,8 +5269,7 @@ function renderThemeLayout() {
     strip.appendChild(sw);
   });
   layoutPreviewEl.appendChild(strip);
-  // Page ⇄ Components view toggle, then each theme dressed in the chosen face.
-  layoutPreviewEl.appendChild(themeViewToggle());
+  // Each theme dressed in a real screen: the page mock + the components gallery, stacked.
   layoutPreviewEl.appendChild(themedScreen('Light', light));
   layoutPreviewEl.appendChild(themedScreen('Dark',  dark));
   // Full export as GLOBAL tokens, laid out like the sidebar palette export: a
