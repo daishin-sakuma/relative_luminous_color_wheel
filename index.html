@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accessible Color Picker &amp; WCAG / APCA Contrast Checker — Luminance Color Wheel</title>
+  <title>Relative Luminous Color Picker | WCAG 2.2 / APCA Based Color Wheel</title>
 
   <!-- SEO -->
-  <meta name="description" content="Free accessible color picker and WCAG 2.2 contrast checker. Lock WCAG or APCA contrast with official APCA usage levels and font-size/weight verdicts (or reverse-lock to the Lc a chosen font size and weight needs), explore luminance-stable hues, and edit accessible palettes inline. Set per-color opacity and check contrast on the composited (alpha-blended) result — translucent colors are blended over their background, or a configurable page underlay, before the ratio and Lc are measured, and the WCAG and APCA locks hold the visible contrast. Generate a full accessible color system — a luminance-keyed tonal scale (50–950) plus ready-made light and dark themes with Material-3-style semantic roles (surfaces, text, muted, accent with hover/active and a soft container pair, and success/warning/danger/info status colors with containers) whose contrasts are guaranteed by construction. Preview them on a real page mock or a component gallery (buttons, inputs, badges and tables across default/hover/active/disabled), and export CSS, a Tailwind v4 theme, a ready-to-paste shadcn/ui theme, or tool-ready W3C design tokens (DTCG Format Module 2025.10 object color with a hex fallback that Style Dictionary and Tokens Studio parse directly) with alpha. Full-app color vision simulation, optimized for iOS/Safari, Android &amp; Desktop.">
+  <meta name="description" content="Free accessible color picker and WCAG 2.2 / APCA contrast checker. Lock a contrast ratio and explore luminance-stable hues so the contrast never breaks, check opacity-aware (composited) contrast, then build accessible palettes and light/dark themes and export CSS, Tailwind v4, shadcn/ui or W3C design tokens — accessible by construction, right in your browser.">
   <meta name="keywords" content="color scheme picker, color palette picker, color scheme generator, color palette generator, accessible color scheme, accessible color palette, accessible color generator, UI color picker, theme color picker, color palette for designers, web design color scheme, accessible theme colors, design system color palette, dark mode color picker, dark mode contrast checker, WCAG color palette, color wheel, color picker, relative luminance color wheel, luminance color wheel, WCAG 2.2, WCAG 2.1 AA, WCAG contrast checker, WCAG contrast ratio checker, contrast checker, color contrast tool, contrast lock, target contrast color picker, accessible color picker, contrast ratio, equal luminance, HSL color picker, hex color picker, color contrast, accessibility, color accessibility tool, ADA color contrast, Section 508 color contrast, European Accessibility Act, accessible by construction, relative luminance calculator, color blindness simulator, protanopia deuteranopia tritanopia simulation, APCA contrast, APCA contrast checker, APCA color picker, APCA Lc, APCA font size, APCA font size checker, APCA usage levels, APCA minimum font size, perceptual contrast, design tokens export, W3C design tokens, DTCG design tokens, Tailwind colors, Tailwind v4 theme, oklch color, oklch palette generator, oklch converter, hex color export, oklch color export, css custom properties export, palette undo redo, color palette history, color scale generator, tonal color palette, 50-950 color scale, light and dark theme generator, dark mode palette generator, accessible design system generator, semantic color tokens, APCA reverse lookup, lock contrast to font size, color opacity, alpha channel, transparent color contrast, semi-transparent color, translucent color contrast checker, opacity contrast checker, alpha compositing, rgba contrast, 8-digit hex, hex8 color, rgba color picker, opacity color picker, contrast over background, Style Dictionary, Style Dictionary tokens, Tokens Studio, Cobalt design tokens, design token interoperability, portable design tokens, design tokens JSON, hex color tokens, W3C DTCG format, DTCG object color, color tokens for Figma, shadcn, shadcn ui, shadcn theme, shadcn theme generator, shadcn ui colors, Material 3 color system, Material Design 3 color roles, semantic color roles, container color, on-color, surface elevation, surface container, status colors, success warning danger info colors, accent hover active states, interaction state colors, component preview, UI component gallery, button states preview, hover active disabled states, design system generator, color system generator, light and dark theme tokens">
   <meta name="author" content="Daishin Sakuma">
   <meta name="robots" content="index, follow">
@@ -20,8 +20,8 @@
   <meta property="og:type"         content="website">
   <meta property="og:site_name"    content="Relative Luminous Color Wheel">
   <meta property="og:locale"       content="en_US">
-  <meta property="og:title"        content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta property="og:description"  content="Lock WCAG or APCA contrast, explore luminance-stable hues, set per-color opacity and check contrast on the composited (alpha-blended) result, and generate a tonal scale (50–950) plus ready-made light and dark themes with Material-3-style semantic roles (surfaces, accent + container, hover/active, status colors) — contrast guaranteed by construction. Preview on a real page mock or a component gallery, full-app color vision simulation, and CSS / Tailwind / shadcn/ui / design-token export.">
+  <meta property="og:title"        content="Relative Luminous Color Picker | WCAG 2.2 / APCA Based Color Wheel">
+  <meta property="og:description"  content="Free accessible color picker and WCAG 2.2 / APCA contrast checker. Lock a contrast ratio and explore luminance-stable hues so contrast never breaks, check opacity-aware contrast, and export accessible palettes, light/dark themes and design tokens (CSS, Tailwind v4, shadcn/ui, W3C DTCG) — accessible by construction.">
   <meta property="og:image"        content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta property="og:image:type"   content="image/png">
   <meta property="og:image:width"  content="1200">
@@ -30,8 +30,8 @@
 
   <!-- Twitter / X Card -->
   <meta name="twitter:card"        content="summary_large_image">
-  <meta name="twitter:title"       content="Relative Luminous Color Wheel — Accessible Color Picker with Contrast Lock">
-  <meta name="twitter:description" content="Lock WCAG or APCA contrast, explore luminance-stable hues, set per-color opacity and check contrast on the composited (alpha-blended) result, and generate a tonal scale (50–950) plus ready-made light and dark themes with Material-3-style semantic roles (surfaces, accent + container, hover/active, status colors) — contrast guaranteed by construction. Preview on a real page mock or a component gallery, full-app color vision simulation, and CSS / Tailwind / shadcn/ui / design-token export.">
+  <meta name="twitter:title"       content="Relative Luminous Color Picker | WCAG 2.2 / APCA Based Color Wheel">
+  <meta name="twitter:description" content="Free accessible color picker and WCAG 2.2 / APCA contrast checker. Lock a contrast ratio and explore luminance-stable hues so contrast never breaks, check opacity-aware contrast, and export accessible palettes, light/dark themes and design tokens (CSS, Tailwind v4, shadcn/ui, W3C DTCG) — accessible by construction.">
   <meta name="twitter:image"       content="https://relative-luminous-color-wheel.vercel.app/ogp.png">
   <meta name="twitter:image:alt"   content="Relative Luminous Color Wheel — a color picker where every hue on the wheel shares the same WCAG 2.2 luminance, with WCAG and APCA contrast locking">
 
@@ -95,6 +95,7 @@
     "@context": "https://schema.org",
     "@type": "WebApplication",
     "name": "Relative Luminous Color Wheel",
+    "alternateName": "Accessible Color Picker & WCAG 2.2 / APCA Contrast Checker",
     "url": "https://relative-luminous-color-wheel.vercel.app/",
     "description": "Free accessible color picker and WCAG 2.2 contrast checker with a contrast lock: hold a WCAG 2.2 ratio (3:1, 4.5:1, 7:1) — or an experimental APCA Lc target — while exploring hue and saturation, because every color on the wheel shares one relative luminance, so the contrast never breaks. Set opacity on any color and the contrast is measured on the composited result: a translucent color is alpha-blended over its background (a see-through background blends over a configurable page underlay) before its WCAG ratio and APCA Lc are computed, and both locks hold this visible contrast. Generate a luminance-keyed tonal scale (50–950) and ready-made light and dark themes with Material-3-style semantic roles — surfaces (background, surface, surface-2, border), text and muted, an accent with hover/active states and a soft container pair, and success/warning/danger/info status colors each with a container fill and on-color — whose contrasts are guaranteed by construction. Preview a theme as a realistic page mock or as a component gallery (buttons, inputs, badges and tables across default/hover/active/disabled), edit palettes inline, reorder with drag and drop, and export CSS, a Tailwind v4 theme, a ready-to-paste shadcn/ui theme, or standards-compatible W3C design tokens (DTCG Format Module 2025.10 object color — colorSpace, components and a hex fallback that Style Dictionary, Tokens Studio and Cobalt parse directly) with an alpha channel.",
     "applicationCategory": "DesignApplication",
@@ -138,6 +139,46 @@
       "name": "Daishin Sakuma"
     },
     "image": "https://relative-luminous-color-wheel.vercel.app/ogp.png"
+  }
+  </script>
+
+  <!-- FAQ structured data — mirrors the visible "What is this?" Q&A -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I check color contrast for WCAG 2.2 AA and AAA?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Pick two colors and read the live ratio with AA/AAA badges — 4.5:1 for normal text, 3:1 for large text and UI components, 7:1 for AAA — against white, black, or a custom color. Set a target and the contrast lock holds it while you explore." }
+      },
+      {
+        "@type": "Question",
+        "name": "What is APCA, and how does it differ from WCAG 2.2 contrast?",
+        "acceptedAnswer": { "@type": "Answer", "text": "APCA (the WCAG 3 working-draft method) scores perceptual lightness contrast (Lc) and factors in font size and weight. This tool shows APCA Lc beside every WCAG 2.2 ratio, with the official usage levels and minimum font sizes. WCAG 2.2 stays the normative standard." }
+      },
+      {
+        "@type": "Question",
+        "name": "Which contrast ratio do I need?",
+        "acceptedAnswer": { "@type": "Answer", "text": "WCAG 2.2 AA requires 4.5:1 for normal text and 3:1 for large text and UI components; AAA requires 7:1. Lock any of these and the wheel keeps every reachable hue at or above it." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I check contrast for semi-transparent (opacity) colors?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. Set opacity on any color and contrast is measured on the composited (alpha-blended) result — over its background or a configurable page underlay — so the ratio and APCA Lc reflect what is actually visible." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I simulate color blindness?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes — protanopia, deuteranopia and tritanopia are simulated across the entire interface, including the wheel, palette, generated themes and previews." }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I export my palette or theme to CSS, Tailwind, shadcn or design tokens?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Generate a tonal scale (50–950) plus light and dark themes, then export CSS custom properties, a Tailwind v4 theme, a ready-to-paste shadcn/ui theme, or W3C design tokens (DTCG JSON) — in OKLCH or hex, with alpha." }
+      }
+    ]
   }
   </script>
 
@@ -704,21 +745,35 @@
 
 <section class="about">
   <details>
-    <summary><h2>What is this? — a color wheel with locked WCAG &amp; APCA contrast</h2></summary>
+    <summary><h2>What is this? — an accessible color picker &amp; WCAG 2.2 / APCA contrast checker</h2></summary>
     <div class="about-body">
       <p>
-        A free, private color picker and <strong>WCAG 2.2 / APCA contrast checker</strong>. Every
-        color on the wheel shares one relative luminance, so once you lock a contrast target the
-        pair can't fall below it — accessible color <strong>by construction</strong>, not by
+        <strong>Relative Luminous Color Picker</strong> is a free, private <strong>accessible color
+        picker</strong> and <strong>WCAG 2.2 / APCA contrast checker</strong> built on a luminance-locked
+        color wheel. Every color on the wheel shares one relative luminance, so once you lock a contrast
+        target the pair can't fall below it — accessible color <strong>by construction</strong>, not by
         trial and error.
       </p>
       <ul>
-        <li>Lock a WCAG ratio (3:1 / 4.5:1 / 7:1) or an APCA Lc target; the untouched side re-pins itself as you move around the wheel.</li>
-        <li>Check any pair against white, black, or a custom color — AA/AAA badges plus APCA Lc and font-size verdicts. Opacity-aware: contrast is measured on the composited result.</li>
-        <li>Pin colors to a palette, then generate a tonal scale (50–950) and ready-made light &amp; dark themes with semantic roles (surfaces, accent, status colors).</li>
-        <li>Preview a theme as a page mock or a component gallery, and simulate protanopia / deuteranopia / tritanopia across the whole UI.</li>
-        <li>Export CSS, Tailwind v4, a shadcn/ui theme, or W3C design tokens (DTCG JSON); share your exact state via a URL.</li>
+        <li>Lock a WCAG 2.2 ratio (3:1 / 4.5:1 / 7:1) or an experimental APCA Lc target; the untouched side re-pins itself as you explore hue and saturation.</li>
+        <li>Check any pair against white, black, or a custom color — AA/AAA badges plus APCA Lc and font-size verdicts. Opacity-aware: contrast is measured on the composited (alpha-blended) result.</li>
+        <li>Build an accessible palette, then generate an OKLCH tonal scale (50–950) and ready-made light &amp; dark themes with Material-3-style semantic roles (surfaces, accent, status colors).</li>
+        <li>Preview a theme on a realistic page mock and component gallery, and simulate protanopia / deuteranopia / tritanopia (color blindness) across the whole UI.</li>
+        <li>Export CSS variables, a Tailwind v4 theme, a shadcn/ui theme, or W3C design tokens (DTCG JSON) — OKLCH or hex, with alpha; share your exact state via a URL.</li>
       </ul>
+      <h3>Common questions</h3>
+      <p><strong>How do I check color contrast for WCAG 2.2 AA and AAA?</strong><br>
+        Pick two colors and read the live ratio with AA/AAA badges — 4.5:1 for normal text, 3:1 for large text and UI components, 7:1 for AAA — against white, black, or a custom color. Set a target and the contrast lock holds it while you explore.</p>
+      <p><strong>What is APCA, and how does it differ from WCAG 2.2 contrast?</strong><br>
+        APCA (the WCAG 3 working-draft method) scores perceptual lightness contrast (Lc) and factors in font size and weight. This tool shows APCA Lc beside every WCAG 2.2 ratio, with the official usage levels and minimum font sizes. WCAG 2.2 stays the normative standard.</p>
+      <p><strong>Which contrast ratio do I need?</strong><br>
+        WCAG 2.2 AA requires 4.5:1 for normal text and 3:1 for large text and UI components; AAA requires 7:1. Lock any of these and the wheel keeps every reachable hue at or above it.</p>
+      <p><strong>Can I check contrast for semi-transparent (opacity) colors?</strong><br>
+        Yes. Set opacity on any color and contrast is measured on the composited (alpha-blended) result — over its background or a configurable page underlay — so the ratio and APCA Lc reflect what is actually visible.</p>
+      <p><strong>Can I simulate color blindness?</strong><br>
+        Yes — protanopia, deuteranopia and tritanopia are simulated across the entire interface, including the wheel, palette, generated themes and previews.</p>
+      <p><strong>How do I export my palette or theme to CSS, Tailwind, shadcn or design tokens?</strong><br>
+        Generate a tonal scale (50–950) plus light and dark themes, then export CSS custom properties, a Tailwind v4 theme, a ready-to-paste shadcn/ui theme, or W3C design tokens (DTCG JSON) — in OKLCH or hex, with alpha.</p>
       <p>Keyboard shortcuts: press <strong>?</strong> at any time to open the full list.</p>
       <p class="about-fineprint">
         WCAG 2.1/2.2 AA is the level referenced by the ADA and the European Accessibility Act; APCA
