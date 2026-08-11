@@ -5162,51 +5162,45 @@ function renderPaletteLayout() {
   // 'success'/'warning'/'danger'/'info'→their status roles. Unmatched roles fall back to the
   // first colour of that role, then the live picker pair — so a hand-pinned palette still previews.
   const wrap = hex => ({ hex, lum: relativeLuminance(...hexToRgb(hex)) });
-  const byName = (role, ...names) => {
-    for (const nm of names) {
-      const e = palette.find(x => x.role === role && (x.name || '').toLowerCase() === nm);
-      if (e) return e.hex;
-    }
-    return null;
-  };
-  const firstOf = role => { const e = palette.find(x => x.role === role); return e ? e.hex : null; };
-  // Missing roles resolve WITHIN the palette; the only non-palette colour we ever allow is the
-  // main picker's colour for a group that's EMPTY — an empty Text palette borrows the picker's
-  // TEXT colour, an empty Background palette borrows the picker's BG colour (per the user's rule).
-  // `bestFgOn` picks the most-contrasting TEXT colour already saved to sit on `overHex`, and only
-  // falls back to the picker's TEXT colour when the Text palette has no entries at all.
   const lumOf = hex => relativeLuminance(...hexToRgb(hex));
+  // `bestFgOn` picks the most-contrasting saved TEXT colour to sit on `overHex` (falling back to the
+  // picker's TEXT colour when the Text palette is empty) — used only to keep derived on-colours
+  // legible, never to place a colour by name.
   const bestFgOn = overHex => {
     let best = null, bestC = -1;
     for (const e of palette) if (e.role === 'fg') { const cc = contrastRatio(lumOf(e.hex), lumOf(overHex)); if (cc > bestC) { bestC = cc; best = e.hex; } }
     return best || liveText;
   };
 
-  const textHex   = byName('fg', 'body', 'text') || firstOf('fg') || liveText; // empty Text → picker TEXT
-  const bgHex     = byName('bg', 'page', 'bg', 'background') || firstOf('bg') || liveBg; // empty BG → picker BG
-  const accentHex = byName('bg', 'accent') || firstOf('bg') || liveBg;
-  const th = {
-    bg:         wrap(bgHex),
-    surface:    wrap(byName('bg', 'surface') || bgHex),
-    border:     wrap(byName('bg', 'border') || byName('fg', 'muted') || textHex),
-    text:       wrap(textHex),
-    muted:      wrap(byName('fg', 'muted') || textHex),
-    accent:     wrap(accentHex),
-    accentText: wrap(byName('fg', 'on-accent', 'onaccent', 'accent-foreground') || bestFgOn(accentHex)),
-  };
-  // Optional roles — only set when the palette actually carries them, so the mock shows the
-  // surface-2 panel / filled containers / hover-active chips exactly when those colours exist.
-  const opt = (key, role, ...names) => { const h = byName(role, ...names); if (h) th[key] = wrap(h); };
-  opt('surface2', 'bg', 'surface-raised', 'surface-2', 'surface2'); // 'surface-2' kept for older saved palettes
-  opt('accentContainer', 'bg', 'accent-container');
-  opt('accentContainerText', 'fg', 'on-accent-container');
-  opt('accentHover', 'bg', 'accent-hover');
-  opt('accentActive', 'bg', 'accent-active');
-  for (const s of Object.keys(STATE_HUES)) {
-    opt(s, 'fg', s);
-    opt(s + 'Container', 'bg', s + '-container');
-    opt(s + 'OnContainer', 'fg', 'on-' + s + '-container');
-  }
+  // Dress the mock from the palette by PINNED ORDER, not by name: users name swatches however they
+  // like, so order is the reliable signal. The order below mirrors exactly what "Save theme to
+  // palette" writes — so a saved theme previews as itself, and a hand-pinned palette dresses the
+  // mock predictably. Roles past the pinned count fall back within the palette (then the live
+  // picker pair when a group is empty). On-colours and any short-palette gaps stay contrast-derived.
+  const STATES = Object.keys(STATE_HUES); // success, warning, danger, info
+  const fg = palette.filter(e => e.role === 'fg').map(e => e.hex); // ordered Text colours
+  const bg = palette.filter(e => e.role === 'bg').map(e => e.hex); // ordered Background colours
+  const FG_ORDER = ['text', 'muted', 'accentText', 'accentContainerText',
+    ...STATES.flatMap(s => [s, s + 'OnContainer'])];
+  const BG_ORDER = ['bg', 'surface', 'surface2', 'border', 'accent', 'accentContainer',
+    ...STATES.map(s => s + 'Container')];
+  const th = {};
+  BG_ORDER.forEach((role, i) => { if (bg[i]) th[role] = wrap(bg[i]); });
+  FG_ORDER.forEach((role, i) => { if (fg[i]) th[role] = wrap(fg[i]); });
+  // Required roles must always resolve; an empty Text group borrows the picker's TEXT colour, an
+  // empty Background group the picker's BG colour.
+  const textHex = (th.text && th.text.hex) || liveText;
+  const bgHex   = (th.bg && th.bg.hex) || liveBg;
+  th.bg         = wrap(bgHex);
+  th.text       = wrap(textHex);
+  th.surface    = th.surface    || wrap(bgHex);
+  th.muted      = th.muted      || wrap(textHex);
+  th.accent     = th.accent     || wrap(bg[bg.length - 1] || bgHex);
+  th.accentText = th.accentText || wrap(bestFgOn(th.accent.hex));
+  th.border     = th.border     || wrap((th.muted && th.muted.hex) || textHex);
+  // Any container filled without an explicit on-colour gets a contrast-derived one so text stays legible.
+  [['accentContainer', 'accentContainerText'], ...STATES.map(s => [s + 'Container', s + 'OnContainer'])]
+    .forEach(([cKey, onKey]) => { if (th[cKey] && !th[onKey]) th[onKey] = wrap(bestFgOn(th[cKey].hex)); });
 
   if (!saved) {
     layoutPreviewEl.appendChild(lpEl('div', 'lp-hint',
@@ -7938,10 +7932,22 @@ function showCvdSnack(text) {
       if (modal && !modal.hidden) return;                     // About modal: its own Escape handler
       if (_scaleImportEl) return;                             // Scale-import popper: its own Escape handler
       if (_helpOpen)                { hideShortcutHelp();                          e.preventDefault(); return; }
-      if (_ceIdx !== null)          { closeChipEditor();                           e.preventDefault(); return; }
+      if (_ceIdx !== null)          { cancelChipEditor();                          e.preventDefault(); return; } // Esc = discard edits
       if (isPopOpen(_layoutWrap))   { _closeLayoutPopper && _closeLayoutPopper();  e.preventDefault(); return; }
       if (isPopOpen(_settingsWrap)) { _closeSettingsPopper && _closeSettingsPopper(); e.preventDefault(); return; }
       if (paletteOpen)              { setPaletteOpen(false);                       e.preventDefault(); return; }
+      return;
+    }
+    // Chip re-editor: Enter confirms and closes (like Done) — UNLESS a text field (hex / name /
+    // value) is being edited, where Enter commits that field, or focus is on a button/link/select
+    // that Enter should activate itself (Done, Cancel, the mode tabs, the compare dropdown).
+    if (e.key === 'Enter' && _ceIdx !== null) {
+      const t = /** @type {HTMLElement} */ (document.activeElement);
+      const tag = t && t.tagName;
+      const inField = !!t && (tag === 'TEXTAREA' || t.isContentEditable ||
+        (tag === 'INPUT' && !['range', 'checkbox', 'radio'].includes(/** @type {HTMLInputElement} */(t).type)));
+      const isControl = tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || (t && t.getAttribute && t.getAttribute('role') === 'button');
+      if (!inField && !isControl) { closeChipEditor(); e.preventDefault(); } // Done: confirm + close
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;           // reserved for the browser / undo combo
