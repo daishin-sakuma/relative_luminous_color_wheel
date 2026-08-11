@@ -84,9 +84,12 @@
   --surface:  hsl(var(--ui-hue), calc(var(--ui-sat) * 19%), calc((var(--ui-ground-l) + 3) * 1%));
   --surface2: hsl(var(--ui-hue), calc(var(--ui-sat) * 18%), calc((var(--ui-ground-l) + 6) * 1%));
   --border:   hsl(var(--ui-hue), calc(var(--ui-sat) * 21%), calc((var(--ui-ground-l) + 10) * 1%));
-  --text:     hsl(var(--ui-hue), calc(var(--ui-sat) * 16%), 91%);
-  --muted:    hsl(var(--ui-hue), calc(var(--ui-sat) * 18%), 41%);
-  --accent:   hsl(var(--ui-hue), calc(var(--ui-sat) * 16%), 91%);
+  /* Text/muted track the ground lightness so they never sink into a brightened background: as the
+     Preferences "background lightness" slider (--ui-ground-l) rises, text and muted rise with it,
+     keeping a readable gap. clamp() pins the defaults exactly (text 91%, muted 41% at ground 7). */
+  --text:     hsl(var(--ui-hue), calc(var(--ui-sat) * 16%), clamp(91%, calc((var(--ui-ground-l) + 84) * 1%), 98%));
+  --muted:    hsl(var(--ui-hue), calc(var(--ui-sat) * 18%), clamp(41%, calc((var(--ui-ground-l) + 34) * 1%), 82%));
+  --accent:   hsl(var(--ui-hue), calc(var(--ui-sat) * 16%), clamp(91%, calc((var(--ui-ground-l) + 84) * 1%), 98%));
   --pass:        #5dde8a;
   --pass-border: rgba(93,222,138,0.28);
   --pass-bg:     rgba(93,222,138,0.08);
@@ -99,9 +102,11 @@
   --surface:  hsl(var(--ui-hue), calc(var(--ui-sat) * 31%), calc((var(--ui-ground-l) - 3) * 1%));
   --surface2: hsl(var(--ui-hue), calc(var(--ui-sat) * 29%), calc((var(--ui-ground-l) - 6) * 1%));
   --border:   hsl(var(--ui-hue), calc(var(--ui-sat) * 30%), calc((var(--ui-ground-l) - 14) * 1%));
-  --text:     hsl(var(--ui-hue), calc(var(--ui-sat) * 38%), 12%);
-  --muted:    hsl(var(--ui-hue), calc(var(--ui-sat) * 21%), 59%);
-  --accent:   hsl(var(--ui-hue), calc(var(--ui-sat) * 38%), 12%);
+  /* Same principle for light: as --ui-ground-l drops, text/muted darken with it to keep contrast.
+     clamp() pins the defaults exactly (text 12%, muted 59% at ground 97). */
+  --text:     hsl(var(--ui-hue), calc(var(--ui-sat) * 38%), clamp(8%, calc((var(--ui-ground-l) - 85) * 1%), 14%));
+  --muted:    hsl(var(--ui-hue), calc(var(--ui-sat) * 21%), clamp(30%, calc((var(--ui-ground-l) - 38) * 1%), 62%));
+  --accent:   hsl(var(--ui-hue), calc(var(--ui-sat) * 38%), clamp(8%, calc((var(--ui-ground-l) - 85) * 1%), 14%));
   --pass:        #1a7a42;
   --pass-border: rgba(26,122,66,0.3);
   --pass-bg:     rgba(26,122,66,0.08);
