@@ -4019,7 +4019,7 @@ function downloadExport(format) {
   const content = document.getElementById('about-modal-content');
   if (details && summary && body && modal && content) {
     const wide = window.matchMedia('(min-width: 861px)'); // match the app's desktop/mobile breakpoint
-    let lastFocus = null;
+    let lastFocus = null, openViaKeyboard = false;
 
     // Mark every sibling of the modal inert while it's open, so keyboard/AT focus
     // can't wander behind it (a focus trap without a manual key loop — the modern
@@ -4042,13 +4042,18 @@ function downloadExport(format) {
       document.body.classList.remove('about-modal-open');
       setBackgroundInert(false);
       details.appendChild(body);     // return the node to <details>
-      if (lastFocus && lastFocus.focus) lastFocus.focus();
-      else summary.focus();
+      // Return focus to the trigger ONLY for keyboard opens. Restoring it after a MOUSE open
+      // leaves the summary focused, and the next keypress (e.g. [) flips :focus-visible on, drawing
+      // a stray ring around the "What is this?" bar. Mouse opens just drop focus to the body.
+      if (openViaKeyboard) { if (lastFocus && lastFocus.focus) lastFocus.focus(); else summary.focus(); }
+      else if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      openViaKeyboard = false;
     };
 
     summary.addEventListener('click', e => {
       if (!wide.matches) return;     // narrow: let <details> toggle inline
       e.preventDefault();
+      openViaKeyboard = e.detail === 0; // Enter/Space activation synthesises a click with detail 0
       openModal();
     });
     modal.addEventListener('click', e => {
