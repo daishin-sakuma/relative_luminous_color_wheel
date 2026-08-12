@@ -4354,6 +4354,12 @@ function maxChromaInGamut(L, H) {
 // colours across the ramp (default); 'text'/'bg' use just that one.
 let _scaleSource = 'gradient';
 
+// Opt-out for the achromatic-seed behaviour. ON (default) = a pure black/white — or any
+// zero-chroma — text/bg seed builds a neutral grayscale ramp, exactly as before. OFF = such a
+// seed instead borrows the chroma/hue implied by the wheel's current Hue & Saturation, so the
+// scale is tinted even from a #000/#fff endpoint. Default ON keeps results identical to today.
+let _scaleIgnoreHS = true;
+
 // Shortest circular interpolation between two hues (degrees).
 function lerpHue(a, b, t) {
   const d = (((b - a) % 360) + 540) % 360 - 180;
@@ -4383,8 +4389,17 @@ function buildScaleFrom(chromaHueAt) {
 function currentScale() {
   const textRgb = selectedRgbBiased();
   const bgRgb = [cR, cG, cB];
-  const [, cT, hT]  = rgbToOklch(...textRgb);
-  const [, cB2, hB2] = rgbToOklch(...bgRgb);
+  let [, cT, hT]  = rgbToOklch(...textRgb);
+  let [, cB2, hB2] = rgbToOklch(...bgRgb);
+  // When "Ignore Hue & Saturation" is OFF, a pure black/white (or otherwise achromatic) seed no
+  // longer collapses the ramp to grey: it borrows the chroma and hue of the wheel's current Hue &
+  // Saturation sliders (sampled at a vivid mid-lightness), so the scale carries that tint. selSat 0
+  // gives zero reference chroma, so a fully desaturated wheel still yields a grey scale.
+  if (!_scaleIgnoreHS) {
+    const [, cRef, hRef] = rgbToOklch(...hslToRgb(selHue, selSat, 0.5));
+    if (cT  < 2e-3) { cT  = cRef; hT  = hRef; }
+    if (cB2 < 2e-3) { cB2 = cRef; hB2 = hRef; }
+  }
   if (_scaleSource === 'text') return buildScaleFrom(() => [cT, hT]);
   if (_scaleSource === 'bg')   return buildScaleFrom(() => [cB2, hB2]);
   // gradient: the lighter seed anchors the light end, the darker the dark end, so the ramp stays
@@ -4410,6 +4425,25 @@ function scaleSourceToggle(onChange) {
     wrap.appendChild(b);
   }
   return wrap;
+}
+
+// Labelled On/Off segment for _scaleIgnoreHS, reusing the source-toggle styling. `onChange`
+// re-renders the surface. On (default) reproduces today's behaviour exactly.
+function scaleIgnoreHSToggle(onChange) {
+  const row = lpEl('div', 'sg-hs');
+  row.appendChild(lpEl('span', 'sg-hs-label', 'Ignore Hue & Saturation'));
+  const seg = lpEl('div', 'lp-modes sg-hs-seg');
+  for (const [on, label, tip] of [
+    [true,  'On',  'Default: a pure black or white text/background seed builds a neutral grayscale scale.'],
+    [false, 'Off', 'Tint the scale with the current Hue & Saturation even when the seed is pure black or white.'],
+  ]) {
+    const b = lpEl('button', 'lp-mode-btn' + (_scaleIgnoreHS === on ? ' active' : ''), label);
+    b.type = 'button'; b.title = tip;
+    b.addEventListener('click', () => { if (_scaleIgnoreHS !== on) { _scaleIgnoreHS = on; onChange(); } });
+    seg.appendChild(b);
+  }
+  row.appendChild(seg);
+  return row;
 }
 
 // A seed readout reflecting the current source (two swatches for the gradient).
@@ -5255,6 +5289,7 @@ function renderThemeLayout() {
   const dark  = deriveTheme(scale, true);
   // Generator controls (source + seed) folded in from the old standalone popper.
   layoutPreviewEl.appendChild(scaleSourceToggle(renderLayoutPreview));
+  layoutPreviewEl.appendChild(scaleIgnoreHSToggle(renderLayoutPreview));
   layoutPreviewEl.appendChild(scaleSeedLine());
   layoutPreviewEl.appendChild(lpEl('div', 'lp-theme-name', 'Scale — click a swatch to copy'));
   const strip = lpEl('div', 'lp-theme-scale');
