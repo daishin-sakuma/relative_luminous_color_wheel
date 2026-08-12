@@ -4392,13 +4392,17 @@ function currentScale() {
   let [, cT, hT]  = rgbToOklch(...textRgb);
   let [, cB2, hB2] = rgbToOklch(...bgRgb);
   // When "Ignore Hue & Saturation" is OFF, a pure black/white (or otherwise achromatic) seed no
-  // longer collapses the ramp to grey: it borrows the chroma and hue of the wheel's current Hue &
-  // Saturation sliders (sampled at a vivid mid-lightness), so the scale carries that tint. selSat 0
-  // gives zero reference chroma, so a fully desaturated wheel still yields a grey scale.
+  // longer collapses the ramp to grey. Each achromatic seed borrows the chroma/hue implied by ITS
+  // OWN picker's Hue & Saturation sliders — so a white/black picker whose colour only went extreme
+  // because its Lum/Lightness slider bottomed/maxed out still tints in the direction its own H/S
+  // point. The wheel drives Text (selHue/selSat); the custom panel drives BG (cH/cS in Colour mode,
+  // cuHue/cuSat in Lum mode; Gray mode has no hue so it stays neutral). Sat 0 → zero reference
+  // chroma, so a fully desaturated picker still yields a grey ramp.
   if (!_scaleIgnoreHS) {
-    const [, cRef, hRef] = rgbToOklch(...hslToRgb(selHue, selSat, 0.5));
-    if (cT  < 2e-3) { cT  = cRef; hT  = hRef; }
-    if (cB2 < 2e-3) { cB2 = cRef; hB2 = hRef; }
+    const tintCH = (hue, sat) => { const [, c, h] = rgbToOklch(...hslToRgb(hue, sat, 0.5)); return [c, h]; };
+    const bgHS = customMode === 'lum' ? [cuHue, cuSat] : customMode === 'gray' ? [0, 0] : [cH, cS];
+    if (cT  < 2e-3) { [cT,  hT ] = tintCH(selHue, selSat); }
+    if (cB2 < 2e-3) { [cB2, hB2] = tintCH(bgHS[0], bgHS[1]); }
   }
   if (_scaleSource === 'text') return buildScaleFrom(() => [cT, hT]);
   if (_scaleSource === 'bg')   return buildScaleFrom(() => [cB2, hB2]);
@@ -4427,22 +4431,23 @@ function scaleSourceToggle(onChange) {
   return wrap;
 }
 
-// Labelled On/Off segment for _scaleIgnoreHS, reusing the source-toggle styling. `onChange`
-// re-renders the surface. On (default) reproduces today's behaviour exactly.
+// _scaleIgnoreHS control, rendered as the same toggle switch used by the Preferences rows
+// ("Theme in share link" etc.). `onChange` re-renders the surface. Checked (default) = ignore =
+// today's neutral-grayscale behaviour; unchecked tints an achromatic seed with its picker's H/S.
 function scaleIgnoreHSToggle(onChange) {
   const row = lpEl('div', 'sg-hs');
   row.appendChild(lpEl('span', 'sg-hs-label', 'Ignore Hue & Saturation'));
-  const seg = lpEl('div', 'lp-modes sg-hs-seg');
-  for (const [on, label, tip] of [
-    [true,  'On',  'Default: a pure black or white text/background seed builds a neutral grayscale scale.'],
-    [false, 'Off', 'Tint the scale with the current Hue & Saturation even when the seed is pure black or white.'],
-  ]) {
-    const b = lpEl('button', 'lp-mode-btn' + (_scaleIgnoreHS === on ? ' active' : ''), label);
-    b.type = 'button'; b.title = tip;
-    b.addEventListener('click', () => { if (_scaleIgnoreHS !== on) { _scaleIgnoreHS = on; onChange(); } });
-    seg.appendChild(b);
-  }
-  row.appendChild(seg);
+  const label = lpEl('label', 'toggle-switch');
+  label.title = 'On (default): a pure black or white picker builds a neutral grayscale scale. Off: tint the scale with that picker’s own Hue & Saturation even when its colour is pure black or white.';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = _scaleIgnoreHS;
+  input.setAttribute('aria-label', 'Ignore Hue & Saturation when generating the scale');
+  input.addEventListener('change', () => { _scaleIgnoreHS = input.checked; onChange(); });
+  const track = lpEl('span', 'toggle-track');
+  track.appendChild(lpEl('span', 'toggle-thumb'));
+  label.append(input, track);
+  row.appendChild(label);
   return row;
 }
 
