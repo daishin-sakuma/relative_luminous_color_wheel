@@ -2490,9 +2490,8 @@ body.about-modal-open { overflow: hidden; }
   }
 }
 
-.sg-hs { display: flex; align-items: center; justify-content: space-between; gap: var(--space-7); }
+.sg-hs { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
 .sg-hs-label { font-size: var(--fs-sm); color: var(--muted); }
-.sg-hs-seg { flex: 0 0 auto; }
 .sg-seed { display: flex; align-items: center; gap: var(--space-7); font-size: var(--fs-sm); color: var(--muted); }
 .sg-seed-dot { width: 1rem; height: 1rem; border-radius: var(--r-sm); border: 1px solid var(--border); flex: none; }
 .sg-seed-txt { font-variant-numeric: tabular-nums; }
